@@ -5,96 +5,123 @@ description: Save the prototype you are working on into Prototype Studio as a ne
 
 # /push
 
-Save the current prototype into Prototype Studio.
+Save the prototype in the current folder into Prototype Studio.
 
 You are being asked to do the whole thing: work out what changed, write it
 up honestly, put the files where they belong, and push. The person should
 not have to tell you what they have been doing — you were there.
 
-## 1. Work out what you are pushing
+**You are almost certainly not in the studio repository.** Prototypes live
+in their own folders. Everything below addresses the studio by absolute
+path, and nothing is ever committed in the current directory.
 
-**The file.** A single self-contained HTML file. If the prototype is spread
-across files, inline the CSS and JS into one file first and use that; do not
-push something that will render broken when served on its own.
+## 1. Find the studio
 
-**Which studio.** These commands run in the Prototype Studio repository. If
-the prototype lives in a different folder, note the file's absolute path —
-you will pass it to the script from inside the studio repo.
+Read `~/.claude/prototype-studio.json`:
 
-**Whether it already exists.** Check `registry/prototypes/` for a folder
-matching the prototype's name. If it is there, this is a new version of it,
-so reuse the exact same `--name` and `--slug`. If it is not, this is v0.1
-and you also need `--team`.
+```json
+{ "path": "/Users/luke/Claude/proto" }
+```
 
-**Which team**, for a new prototype only. Read `registry/teams.json` for the
-options. If it is genuinely ambiguous, ask — it is one short question and
-getting it wrong means moving it later.
+Call that path `$STUDIO` from here on. If the file is missing or the path
+does not exist, ask where the studio repository is, then write the file so
+this never has to be asked again.
 
-## 2. Write the notes
+Make sure it is current before writing anything:
 
-This is the part that matters, and the part only you can do. The version
-notes are what someone reads in six weeks to understand why the prototype
-looks the way it does.
+```
+git -C "$STUDIO" pull --rebase
+```
+
+If that fails because of local changes in the studio, stop and say so
+rather than pushing on top of a mess.
+
+## 2. Work out what you are pushing
+
+**The file.** One self-contained HTML file. If the prototype is spread
+across several files, inline the CSS and JS into a single file first and
+push that — never push something that renders broken when served alone.
+Write the combined file somewhere temporary; do not leave build artefacts in
+the person's prototype folder.
+
+**Whether it already exists.** Look in `$STUDIO/registry/prototypes/` for a
+folder matching this prototype. If it is there, this is a new version:
+reuse the exact same `--name` and pass `--slug <folder name>`. If not, this
+is v0.1 and you also need `--team`.
+
+**Which team**, for a new prototype only. Read `$STUDIO/registry/teams.json`
+for the options. If it is genuinely ambiguous, ask — one short question
+beats filing it wrongly.
+
+## 3. Write the notes
+
+This is the part that matters, and the part only you can do. These notes are
+what someone reads in six weeks to understand why the prototype looks the
+way it does.
 
 - `--title` — a short headline for this version, a handful of words.
   "Tighter results layout", not "Update".
 - `--changes` — what is new or different. Two or three sentences, or a few
   short lines. Say what changed and, where it is not obvious, what it was
   trying to fix.
-- `--description` — only for a new prototype, or when the prototype's
-  purpose has genuinely shifted. One sentence on what the thing is.
+- `--description` — only for a new prototype, or when its purpose has
+  genuinely shifted. One sentence on what the thing is.
 
 Write from what actually happened in this session. Do not invent a rationale
-you were not given, and do not pad it — "First pass at the results screen"
-is a complete and honest note. Never write commit-style noise like "various
-improvements" or "update styles".
+you were not given, and do not pad — "First pass at the results screen" is a
+complete and honest note. Never write commit-style noise like "various
+improvements".
 
-## 3. Save it
+## 4. Save it
 
-From the Prototype Studio repository:
+Run from the studio, whatever directory you are in:
 
 ```
-npm run proto:add -- \
-  --file <absolute path to the html> \
+cd "$STUDIO" && npm run proto:add -- \
+  --file "<absolute path to the html>" \
   --name "<prototype name>" \
   --team <team-slug> \
   --title "<headline>" \
   --changes "<what changed>"
 ```
 
-Optional: `--slug` to match an existing folder, `--project <slug>` to file
-it, `--description` for a new prototype.
+Add `--slug <folder>` for an existing prototype, `--project <slug>` to file
+it, `--description` for a new one.
 
 The script works out the next version number, copies the file to
 `public/p/<slug>/<version>/`, and writes the registry records. Every version
-keeps its own copy, so older ones stay viewable — never overwrite one.
+keeps its own copy of the files, so older ones stay viewable — never
+overwrite or delete one.
 
-## 4. Check, commit, push
-
-```
-npm run registry:check
-```
-
-If that fails, fix the registry before committing; a broken registry breaks
-the studio for everyone.
-
-Then commit and push. Use the prototype and version in the message:
+## 5. Check, commit, push
 
 ```
-prototype(quiz-results): v0.2 tighter results layout
+cd "$STUDIO" && npm run registry:check
 ```
 
-The commit is what attributes the version to the person pushing it, so let
-it be authored normally — do not amend the author.
+Fix anything it reports before committing; a broken registry breaks the
+studio for everyone.
 
-## 5. Tell them where it went
+Then, still addressing the studio explicitly:
 
-One short line: the version number, and that it is live once the deploy
-finishes, about a minute. Nothing more.
+```
+git -C "$STUDIO" add registry public/p
+git -C "$STUDIO" commit -m "prototype(<slug>): <version> <headline>"
+git -C "$STUDIO" push
+```
+
+Commit only `registry/` and `public/p/` — never sweep up unrelated changes
+in the studio. The commit is what attributes the version to the person
+pushing it, so let it be authored normally.
+
+## 6. Tell them where it went
+
+One line: the version number, and that it is live once the deploy finishes,
+about a minute. Nothing more.
 
 ## Never
 
-- Never edit or delete a saved version. Versions are immutable; if something
-  is wrong, push another one.
+- Never run git in the prototype folder. It may be its own repository.
+- Never edit or delete a saved version. If something is wrong, push another.
 - Never reuse a version number.
 - Never push files without registry records, or records without files.

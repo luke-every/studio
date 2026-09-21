@@ -19,30 +19,40 @@ Settings inside the app reports all three, and says what to fix.
 
 ## Two ways work gets in
 
-**From Claude Code — the normal way.** Build an HTML prototype, then:
+**From Claude Code — the normal way.** Prototypes are built in their own
+folders, not in this repository, so `/push` is installed once per machine
+rather than living in the repo:
 
 ```
-npm run proto:add -- \
-  --file ./quiz-results.html \
-  --name "Quiz results" \
-  --team acquisition \
-  --project quiz-rework \
-  --exploration editorial \
-  --description "Editorial result page"
+npm run skill:install
 ```
 
-That copies the file to `public/p/<slug>/<exploration>/` and writes the
-registry records beside it. Commit and push; it is live after the deploy.
-Because *you* make the commit, the version is attributed to you — this is
-where real authorship comes from, and why the studio needs no login.
+That copies the skill to `~/.claude/skills/push/` and records where the
+studio is in `~/.claude/prototype-studio.json`. From then on, `/push` works
+in any Claude Code session, in any folder.
 
-Running it again with the same name saves the next version (v0.2, v0.3…) and
-makes it the current direction.
+Typing `/push` while working on a prototype makes Claude work out what
+changed, write it up, save the version and push it. Under the hood it runs:
+
+```
+npm run proto:add -- --file <path> --name "Quiz results" --team acquisition \
+  --title "Tighter results layout" --changes "Cut the second card."
+```
+
+which copies the file to `public/p/<slug>/<version>/` and writes the
+registry records. Each version keeps its own copy, so older ones stay
+viewable. Because *you* make the commit, the version is attributed to you —
+this is where real authorship comes from, and why the studio needs no login.
+
+Re-run `npm run skill:install` after pulling changes to the skill.
 
 **By hand in the app.** *Add prototype* on any team page takes an HTML file,
 a name, a team and a "Created by". The file is committed with the studio's
 token and served the same way. This is the only place the studio asks who you
 are, because it is the only place it cannot tell.
+
+It currently only creates a prototype's first version. Adding a *later*
+version from the web interface is not built yet — that is `/push`'s job.
 
 ## Prototypes are files, not links
 
@@ -84,6 +94,7 @@ npm run registry:check   # validate the registry without starting the app
 | `registry/` | teams, projects, prototypes, versions — what everything means |
 | `public/p/<slug>/<exploration>/` | the prototypes themselves |
 | `scripts/add-prototype.ts` | the Claude Code route in |
+| `.claude/skills/push/` | the /push skill, installed per machine |
 | `src/lib/registry/read.ts` | reads the registry from this deployment |
 | `src/lib/registry/write.ts` | applies one change and commits it |
 | `src/lib/registry/github.ts` | the only place that talks to the GitHub API |
