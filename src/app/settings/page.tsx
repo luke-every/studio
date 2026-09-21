@@ -4,6 +4,14 @@ import { checkAccess } from "@/lib/registry/github";
 import { avatarUrl } from "@/lib/registry/people";
 
 /**
+ * Settings has to be rendered per request. It reports the live state of the
+ * deployment — which variables are set, whether GitHub actually answers —
+ * and a prerendered copy of that is worse than useless: it would report how
+ * things stood when the build ran.
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * Settings.
  *
  * A status page, not a form. Everything is set once in Vercel; this exists
@@ -37,7 +45,7 @@ export default async function SettingsPage() {
             ? "Detected from this deployment."
             : source === "environment"
               ? "Set by REGISTRY_REPO."
-              : "Set REGISTRY_REPO to owner/name, or deploy on Vercel where it is detected automatically."
+              : "Set REGISTRY_REPO to owner/name in Vercel. It is normally detected from the deployment, but only when Vercel is exposing its system environment variables."
         }
       />
 
