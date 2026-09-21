@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { FocusPlaceholder, MotionFocusLayer } from "@/components/motion";
 import { useStudio } from "@/lib/data/studio-store";
-import { PreviewSurface } from "@/components/ui/preview-surface";
+import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import type { Exploration, Prototype } from "@/lib/registry/types";
 import { formatUpdated, statusLabel } from "@/lib/format";
 
@@ -72,18 +72,17 @@ export function PrototypeDetail({
         </div>
       </header>
 
-      {/* The live prototype, as a device on a surface. In focus mode this
-       * same screen is what fills the layer. */}
+      {/* The prototype itself, at its own size — no phone frame, nothing
+       * cropped. That shape belongs to thumbnails. */}
       <section className="mt-10">
-        <div className="relative flex justify-center rounded-[var(--r-lg)] border border-border bg-surface-inset py-10">
+        <div className="relative">
           {focused ? (
-            <FocusPlaceholder className="h-[26rem] aspect-device" />
+            <FocusPlaceholder className="h-[min(72dvh,46rem)] w-full" />
           ) : (
-            <PreviewSurface
-              preview={exploration.preview}
-              size="lg"
-              interactive
-              className="h-[26rem]"
+            <PrototypeFrame
+              url={exploration.preview.url}
+              title={prototype.name}
+              className="h-[min(72dvh,46rem)] w-full"
             />
           )}
 
@@ -147,12 +146,11 @@ export function PrototypeDetail({
         onClose={() => setFocused(false)}
         label={`${prototype.name} — focus mode`}
       >
-        <PreviewSurface
-          preview={exploration.preview}
-          size="lg"
-          lifted
-          interactive
-          className="h-[min(82dvh,44rem)]"
+        <PrototypeFrame
+          url={exploration.preview.url}
+          title={prototype.name}
+          bleed
+          className="h-[min(92dvh,100%)] w-full max-w-[var(--bp-xl)]"
         />
       </MotionFocusLayer>
 

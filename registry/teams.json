@@ -8,28 +8,20 @@
       "status": "active",
       "created": {
         "by": {
-          "login": "luke",
+          "login": "luke-every",
           "name": "Luke"
         },
-        "at": "2026-05-30"
+        "at": "2026-09-21"
       },
       "archived": false,
       "lead": {
-        "login": "luke",
+        "login": "luke-every",
         "name": "Luke"
       },
       "members": [
         {
-          "login": "luke",
+          "login": "luke-every",
           "name": "Luke"
-        },
-        {
-          "login": "mira",
-          "name": "Mira"
-        },
-        {
-          "login": "sarah",
-          "name": "Sarah"
         }
       ]
     },
@@ -41,24 +33,20 @@
       "status": "active",
       "created": {
         "by": {
-          "login": "sarah",
-          "name": "Sarah"
+          "login": "luke-every",
+          "name": "Luke"
         },
-        "at": "2026-04-11"
+        "at": "2026-09-21"
       },
       "archived": false,
       "lead": {
-        "login": "sarah",
-        "name": "Sarah"
+        "login": "luke-every",
+        "name": "Luke"
       },
       "members": [
         {
-          "login": "sarah",
-          "name": "Sarah"
-        },
-        {
-          "login": "tom",
-          "name": "Tom"
+          "login": "luke-every",
+          "name": "Luke"
         }
       ]
     },
@@ -70,80 +58,23 @@
       "status": "active",
       "created": {
         "by": {
-          "login": "mira",
-          "name": "Mira"
+          "login": "luke-every",
+          "name": "Luke"
         },
-        "at": "2026-08-02"
+        "at": "2026-09-21"
       },
       "archived": false,
       "lead": {
-        "login": "mira",
-        "name": "Mira"
+        "login": "luke-every",
+        "name": "Luke"
       },
       "members": [
         {
-          "login": "mira",
-          "name": "Mira"
-        },
-        {
-          "login": "tom",
-          "name": "Tom"
-        },
-        {
-          "login": "luke",
+          "login": "luke-every",
           "name": "Luke"
         }
       ]
     }
   ],
-  "projects": [
-    {
-      "slug": "quiz-rework",
-      "teamSlug": "acquisition",
-      "name": "Quiz rework",
-      "created": {
-        "by": {
-          "login": "luke",
-          "name": "Luke"
-        },
-        "at": "2026-08-14"
-      }
-    },
-    {
-      "slug": "product-page",
-      "teamSlug": "acquisition",
-      "name": "Product page",
-      "created": {
-        "by": {
-          "login": "luke",
-          "name": "Luke"
-        },
-        "at": "2026-07-21"
-      }
-    },
-    {
-      "slug": "leaving-well",
-      "teamSlug": "retention",
-      "name": "Leaving well",
-      "created": {
-        "by": {
-          "login": "luke",
-          "name": "Luke"
-        },
-        "at": "2026-08-02"
-      }
-    },
-    {
-      "slug": "saying-something",
-      "teamSlug": "retention",
-      "name": "Saying something",
-      "created": {
-        "by": {
-          "login": "luke",
-          "name": "Luke"
-        },
-        "at": "2026-06-30"
-      }
-    }
-  ]
+  "projects": []
 }
