@@ -10,8 +10,8 @@ import {
   type ReactNode,
 } from "react";
 
-import type { Prototype } from "./data/types";
-import type { TeamSummary } from "./data/teams";
+import type { Prototype } from "./registry/types";
+import type { TeamSummary } from "./registry/select";
 
 /**
  * Search is one piece of state for the whole studio, not a widget on a page.

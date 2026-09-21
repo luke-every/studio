@@ -1,0 +1,19 @@
+{
+  "id": "pdp-nutrition-main-v0.4",
+  "prototypeSlug": "pdp-nutrition",
+  "explorationId": "main",
+  "version": "v0.4",
+  "title": "Four up front",
+  "summary": "Protein, fibre, sugar and calories shown inline under the price.",
+  "why": "Four seconds is not reading. It is looking for something specific.",
+  "authorId": "sarah",
+  "createdAt": "2026-09-17",
+  "preview": {
+    "tint": [
+      "#e9e8e3",
+      "#8a8781"
+    ],
+    "caption": "Four numbers"
+  },
+  "deployment": null
+}

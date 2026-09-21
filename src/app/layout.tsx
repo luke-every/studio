@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
 import { AppShell } from "@/components/shell/app-shell";
-import { MotionProvider } from "@/lib/motion";
+import { CurrentUserProvider } from "@/lib/current-user";
 import { StudioProvider } from "@/lib/data/studio-store";
+import { MotionProvider } from "@/lib/motion";
+import { getRegistrySnapshot } from "@/lib/registry";
 import { SearchProvider } from "@/lib/search-store";
 import { ThemeProvider, ThemeScript } from "@/lib/theme";
 
@@ -20,25 +22,30 @@ export const metadata: Metadata = {
   description: "Explore what we're making.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+/**
+ * The registry is read once here, on the server, and handed to the client as
+ * a snapshot. This is the only place the application touches the data source,
+ * which is what keeps swapping that source a contained change.
+ */
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const snapshot = await getRegistrySnapshot();
+
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${inter.variable} h-full antialiased`}
-    >
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} h-full antialiased`}>
       <head>
         <ThemeScript />
       </head>
       <body className="min-h-full">
         <ThemeProvider>
-          <StudioProvider>
-            <SearchProvider>
-              <MotionProvider>
-                <AppShell>{children}</AppShell>
-              </MotionProvider>
-            </SearchProvider>
-          </StudioProvider>
+          <CurrentUserProvider users={snapshot.users}>
+            <StudioProvider snapshot={snapshot}>
+              <SearchProvider>
+                <MotionProvider>
+                  <AppShell>{children}</AppShell>
+                </MotionProvider>
+              </SearchProvider>
+            </StudioProvider>
+          </CurrentUserProvider>
         </ThemeProvider>
       </body>
     </html>

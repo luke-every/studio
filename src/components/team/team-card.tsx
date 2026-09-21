@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { TeamThumbnail } from "@/components/team/team-thumbnail";
-import type { TeamSummary } from "@/lib/data/teams";
+import type { TeamSummary } from "@/lib/registry/select";
 import { formatUpdated } from "@/lib/format";
 import type { ViewMode } from "@/lib/use-view-mode";
 

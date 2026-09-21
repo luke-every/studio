@@ -1,4 +1,4 @@
-import type { PrototypeStatus, TeamStatus } from "./data/types";
+import type { PrototypeStatus, TeamStatus } from "./registry/types";
 
 export const statusLabel: Record<PrototypeStatus, string> = {
   exploring: "Exploring",

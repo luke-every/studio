@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import { MotionModal } from "@/components/motion";
 import { ProjectTile } from "@/components/project/project-tile";
 import { useStudio } from "@/lib/data/studio-store";
-import { prototypesInProject } from "@/lib/data/teams";
+import { prototypesInProject } from "@/lib/registry/select";
 
 /**
  * The projects inside a team.

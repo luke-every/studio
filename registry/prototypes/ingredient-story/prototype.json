@@ -1,0 +1,54 @@
+{
+  "slug": "ingredient-story",
+  "teamSlug": "acquisition",
+  "projectSlug": "product-page",
+  "name": "Ingredient story",
+  "description": "Where a product came from, told on the product page without turning it into a brochure.",
+  "designQuestion": "How much origin story earns its place next to a buy button?",
+  "context": "The brand team writes beautiful origin copy that nobody reads, because it lives at the bottom of the page behind a tab.",
+  "ownerId": "mira",
+  "collaboratorIds": [
+    "luke"
+  ],
+  "status": "exploring",
+  "tags": [
+    "storytelling",
+    "pdp"
+  ],
+  "preview": {
+    "tint": [
+      "#e7e0cc",
+      "#8a7c4e"
+    ],
+    "caption": "Origin, told in three beats"
+  },
+  "explorations": [
+    {
+      "id": "three-beats",
+      "title": "Three beats",
+      "premise": "Grower, process, result. Three short moments, interleaved with the product imagery.",
+      "authorId": "mira",
+      "status": "selected",
+      "branch": "explore/three-beats",
+      "preview": {
+        "tint": [
+          "#e7e0cc",
+          "#8a7c4e"
+        ],
+        "caption": "Three beats"
+      }
+    }
+  ],
+  "selected": {
+    "explorationId": "three-beats",
+    "versionId": "ingredient-story-three-beats-v0.2",
+    "by": "mira",
+    "at": "2026-09-12"
+  },
+  "created": {
+    "by": "mira",
+    "at": "2026-09-12"
+  },
+  "updatedAt": "2026-09-12",
+  "archived": false
+}

@@ -1,0 +1,19 @@
+{
+  "id": "quiz-results-editorial-v0.8",
+  "prototypeSlug": "quiz-results",
+  "explorationId": "editorial",
+  "version": "v0.8",
+  "title": "Editorial recommendation hierarchy",
+  "summary": "The primary recommendation now owns the first screen; alternatives moved below the fold as a quiet row.",
+  "why": "People were comparing before they had understood the first suggestion. Removing the comparison from view forces the recommendation to stand on its own.",
+  "authorId": "luke",
+  "createdAt": "2026-09-18",
+  "preview": {
+    "tint": [
+      "#f3d9c4",
+      "#c4633d"
+    ],
+    "caption": "v0.8"
+  },
+  "deployment": null
+}

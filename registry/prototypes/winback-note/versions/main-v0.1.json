@@ -1,0 +1,19 @@
+{
+  "id": "winback-note-main-v0.1",
+  "prototypeSlug": "winback-note",
+  "explorationId": "main",
+  "version": "v0.1",
+  "title": "Say what changed",
+  "summary": "The note leads with what has changed since they left.",
+  "why": "A discount says we want them back. Saying what changed gives them a reason to come.",
+  "authorId": "tom",
+  "createdAt": "2026-07-22",
+  "preview": {
+    "tint": [
+      "#e6e5e1",
+      "#8d8a84"
+    ],
+    "caption": "Three months later"
+  },
+  "deployment": null
+}

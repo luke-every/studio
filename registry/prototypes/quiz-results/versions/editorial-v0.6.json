@@ -1,0 +1,19 @@
+{
+  "id": "quiz-results-editorial-v0.6",
+  "prototypeSlug": "quiz-results",
+  "explorationId": "editorial",
+  "version": "v0.6",
+  "title": "Three cards, equal weight",
+  "summary": "The original layout: three recommendations shown side by side.",
+  "why": "The starting point we are arguing with. Equal weight turned out to mean no weight at all.",
+  "authorId": "luke",
+  "createdAt": "2026-09-02",
+  "preview": {
+    "tint": [
+      "#e9dccd",
+      "#8d8376"
+    ],
+    "caption": "v0.6"
+  },
+  "deployment": null
+}

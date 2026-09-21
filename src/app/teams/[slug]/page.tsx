@@ -7,7 +7,7 @@ import { ProjectStrip } from "@/components/project/project-strip";
 import { PrototypeTile } from "@/components/prototype/prototype-tile";
 import { Collection } from "@/components/ui/collection";
 import { ViewSwitcher } from "@/components/ui/view-switcher";
-import { prototypesInTeam } from "@/lib/data/teams";
+import { prototypesInTeam } from "@/lib/registry/select";
 import { useStudio } from "@/lib/data/studio-store";
 import { matchesPrototype, useSearch } from "@/lib/search-store";
 import { useViewMode } from "@/lib/use-view-mode";
@@ -15,14 +15,14 @@ import { useViewMode } from "@/lib/use-view-mode";
 /** A team, and the prototypes inside it. */
 export default function TeamPage() {
   const params = useParams<{ slug: string }>();
-  const { teams, prototypes } = useStudio();
+  const { teams, prototypes, opened } = useStudio();
   const [mode, setMode] = useViewMode("prototypes");
   const { query } = useSearch();
 
   const team = teams.find((candidate) => candidate.slug === params.slug);
   if (!team) notFound();
 
-  const contents = prototypesInTeam(team.slug, prototypes).filter((prototype) =>
+  const contents = prototypesInTeam(team.slug, prototypes, opened).filter((prototype) =>
     matchesPrototype(prototype, query),
   );
 

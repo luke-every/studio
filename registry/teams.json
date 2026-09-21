@@ -1,0 +1,95 @@
+{
+  "teams": [
+    {
+      "slug": "acquisition",
+      "name": "Acquisition",
+      "remit": "Arriving and deciding",
+      "description": "Everything between landing on us for the first time and understanding what we would send you.",
+      "status": "active",
+      "leadId": "luke",
+      "memberIds": [
+        "luke",
+        "mira",
+        "sarah"
+      ],
+      "created": {
+        "by": "luke",
+        "at": "2026-05-30"
+      },
+      "archived": false
+    },
+    {
+      "slug": "retention",
+      "name": "Retention",
+      "remit": "Staying, pausing, coming back",
+      "description": "The long middle of the relationship. Changing a plan, taking a break, and everything we send when nobody asked.",
+      "status": "active",
+      "leadId": "sarah",
+      "memberIds": [
+        "sarah",
+        "tom"
+      ],
+      "created": {
+        "by": "sarah",
+        "at": "2026-04-11"
+      },
+      "archived": false
+    },
+    {
+      "slug": "playground",
+      "name": "Playground",
+      "remit": "No brief, no promises",
+      "description": "Work with nothing riding on it. Some of it becomes real. Most of it is here to settle an argument.",
+      "status": "active",
+      "leadId": "mira",
+      "memberIds": [
+        "mira",
+        "tom",
+        "luke"
+      ],
+      "created": {
+        "by": "mira",
+        "at": "2026-08-02"
+      },
+      "archived": false
+    }
+  ],
+  "projects": [
+    {
+      "slug": "quiz-rework",
+      "teamSlug": "acquisition",
+      "name": "Quiz rework",
+      "created": {
+        "by": "luke",
+        "at": "2026-08-14"
+      }
+    },
+    {
+      "slug": "product-page",
+      "teamSlug": "acquisition",
+      "name": "Product page",
+      "created": {
+        "by": "luke",
+        "at": "2026-07-21"
+      }
+    },
+    {
+      "slug": "leaving-well",
+      "teamSlug": "retention",
+      "name": "Leaving well",
+      "created": {
+        "by": "luke",
+        "at": "2026-08-02"
+      }
+    },
+    {
+      "slug": "saying-something",
+      "teamSlug": "retention",
+      "name": "Saying something",
+      "created": {
+        "by": "luke",
+        "at": "2026-06-30"
+      }
+    }
+  ]
+}

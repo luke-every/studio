@@ -1,4 +1,4 @@
-import type { PreviewSource } from "@/lib/data/types";
+import type { PreviewSource } from "@/lib/registry/types";
 
 /**
  * A team has no artwork of its own — it is represented by what is inside it.

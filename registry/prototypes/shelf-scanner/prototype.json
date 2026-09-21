@@ -1,0 +1,52 @@
+{
+  "slug": "shelf-scanner",
+  "teamSlug": "playground",
+  "projectSlug": null,
+  "name": "Shelf scanner",
+  "description": "Point a phone at a shelf and get told what is worth eating.",
+  "designQuestion": "Is this a product, or just a good demo?",
+  "context": "Built in a week to see whether the camera framing felt natural. It does. Everything after that is unresolved.",
+  "ownerId": "mira",
+  "collaboratorIds": [],
+  "status": "exploring",
+  "tags": [
+    "camera",
+    "experiment"
+  ],
+  "preview": {
+    "tint": [
+      "#dfe3e6",
+      "#6d7a84"
+    ],
+    "caption": "Camera, live"
+  },
+  "explorations": [
+    {
+      "id": "main",
+      "title": "Hold and hover",
+      "premise": "No shutter button. Hold the phone up and results appear as you move.",
+      "authorId": "mira",
+      "status": "selected",
+      "branch": "explore/main",
+      "preview": {
+        "tint": [
+          "#dfe3e6",
+          "#6d7a84"
+        ],
+        "caption": "Camera, live"
+      }
+    }
+  ],
+  "selected": {
+    "explorationId": "main",
+    "versionId": "shelf-scanner-main-v0.2",
+    "by": "mira",
+    "at": "2026-09-20"
+  },
+  "created": {
+    "by": "mira",
+    "at": "2026-09-20"
+  },
+  "updatedAt": "2026-09-20",
+  "archived": false
+}

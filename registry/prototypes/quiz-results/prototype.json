@@ -1,0 +1,70 @@
+{
+  "slug": "quiz-results",
+  "teamSlug": "acquisition",
+  "projectSlug": "quiz-rework",
+  "name": "Quiz results",
+  "description": "What someone sees the moment the quiz finishes — and whether it feels like a recommendation or a receipt.",
+  "designQuestion": "Can the results page feel like advice from someone who knows food, rather than an algorithm's output?",
+  "context": "Two thirds of people who finish the quiz never scroll past the first recommendation. We assumed that was a content problem; the session replays suggest it is a hierarchy problem.",
+  "ownerId": "luke",
+  "collaboratorIds": [
+    "sarah",
+    "mira"
+  ],
+  "status": "in-review",
+  "tags": [
+    "onboarding",
+    "recommendation"
+  ],
+  "preview": {
+    "tint": [
+      "#f3d9c4",
+      "#c4633d"
+    ],
+    "caption": "Results, editorial layout"
+  },
+  "explorations": [
+    {
+      "id": "editorial",
+      "title": "Editorial recommendation",
+      "premise": "Lead with one confident recommendation, written like a person wrote it, and let everything else be secondary.",
+      "authorId": "luke",
+      "status": "selected",
+      "branch": "explore/editorial",
+      "preview": {
+        "tint": [
+          "#f3d9c4",
+          "#c4633d"
+        ],
+        "caption": "One recommendation, in full"
+      }
+    },
+    {
+      "id": "comparison-first",
+      "title": "Comparison-first",
+      "premise": "Assume people want to choose, not be told. Put the comparison up front and make the differences legible.",
+      "authorId": "sarah",
+      "status": "active",
+      "branch": "explore/comparison-first",
+      "preview": {
+        "tint": [
+          "#dfe4d2",
+          "#5f7a52"
+        ],
+        "caption": "Side-by-side comparison"
+      }
+    }
+  ],
+  "selected": {
+    "explorationId": "editorial",
+    "versionId": "quiz-results-editorial-v0.8",
+    "by": "luke",
+    "at": "2026-09-18"
+  },
+  "created": {
+    "by": "luke",
+    "at": "2026-09-08"
+  },
+  "updatedAt": "2026-09-18",
+  "archived": false
+}

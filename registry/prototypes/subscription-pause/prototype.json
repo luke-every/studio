@@ -1,0 +1,54 @@
+{
+  "slug": "subscription-pause",
+  "teamSlug": "retention",
+  "projectSlug": "leaving-well",
+  "name": "Pausing a subscription",
+  "description": "The moment someone wants to stop for a while. Making it easy without making it thoughtless.",
+  "designQuestion": "Can pausing feel generous rather than defensive, and still leave people likely to come back?",
+  "context": "Support handles roughly forty pause requests a week by hand. Every one of them is a conversation we could have had in the product.",
+  "ownerId": "sarah",
+  "collaboratorIds": [
+    "tom"
+  ],
+  "status": "exploring",
+  "tags": [
+    "retention",
+    "account"
+  ],
+  "preview": {
+    "tint": [
+      "#e6ddf0",
+      "#7a6b96"
+    ],
+    "caption": "Pause, with a return date"
+  },
+  "explorations": [
+    {
+      "id": "return-date",
+      "title": "Pick a return date",
+      "premise": "A pause with a date attached is a plan. A pause without one is a slow cancellation.",
+      "authorId": "sarah",
+      "status": "selected",
+      "branch": "explore/return-date",
+      "preview": {
+        "tint": [
+          "#e6ddf0",
+          "#7a6b96"
+        ],
+        "caption": "Return date picker"
+      }
+    }
+  ],
+  "selected": {
+    "explorationId": "return-date",
+    "versionId": "subscription-pause-return-date-v0.4",
+    "by": "sarah",
+    "at": "2026-09-16"
+  },
+  "created": {
+    "by": "sarah",
+    "at": "2026-09-09"
+  },
+  "updatedAt": "2026-09-16",
+  "archived": false
+}

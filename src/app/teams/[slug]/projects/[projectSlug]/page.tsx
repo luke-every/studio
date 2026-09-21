@@ -7,7 +7,7 @@ import { PrototypeTile } from "@/components/prototype/prototype-tile";
 import { Collection } from "@/components/ui/collection";
 import { ViewSwitcher } from "@/components/ui/view-switcher";
 import { useStudio } from "@/lib/data/studio-store";
-import { prototypesInProject } from "@/lib/data/teams";
+import { prototypesInProject } from "@/lib/registry/select";
 import { formatUpdated } from "@/lib/format";
 import { matchesPrototype, useSearch } from "@/lib/search-store";
 import { useViewMode } from "@/lib/use-view-mode";
@@ -15,7 +15,7 @@ import { useViewMode } from "@/lib/use-view-mode";
 /** A project folder: the prototypes filed into it, most recently opened first. */
 export default function ProjectPage() {
   const params = useParams<{ slug: string; projectSlug: string }>();
-  const { teams, projects, prototypes } = useStudio();
+  const { teams, projects, prototypes, opened } = useStudio();
   const [mode, setMode] = useViewMode("prototypes");
   const { query } = useSearch();
 
@@ -25,7 +25,7 @@ export default function ProjectPage() {
   );
   if (!team || !project) notFound();
 
-  const contents = prototypesInProject(project.slug, prototypes).filter((prototype) =>
+  const contents = prototypesInProject(project.slug, prototypes, opened).filter((prototype) =>
     matchesPrototype(prototype, query),
   );
 

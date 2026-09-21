@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { PreviewSurface } from "@/components/ui/preview-surface";
 import { formatUpdated } from "@/lib/format";
-import type { Prototype } from "@/lib/data/types";
+import type { Prototype } from "@/lib/registry/types";
 
 /**
  * Recent work, as a shortcut rather than a destination.

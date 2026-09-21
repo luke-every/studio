@@ -7,7 +7,7 @@ import { TeamCard } from "@/components/team/team-card";
 import { Collection } from "@/components/ui/collection";
 import { PageHeader } from "@/components/ui/page-header";
 import { ViewSwitcher } from "@/components/ui/view-switcher";
-import { latestPrototypes } from "@/lib/data/teams";
+import { latestPrototypes } from "@/lib/registry/select";
 import { useStudio } from "@/lib/data/studio-store";
 import { matchesPrototype, matchesTeam, useSearch } from "@/lib/search-store";
 import { useViewMode } from "@/lib/use-view-mode";

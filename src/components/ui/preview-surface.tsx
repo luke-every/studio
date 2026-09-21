@@ -3,7 +3,7 @@
 import { motion as m } from "motion/react";
 
 import { MOTION_ENABLED, motionRegister } from "@/lib/motion";
-import type { PreviewSource } from "@/lib/data/types";
+import type { PreviewSource } from "@/lib/registry/types";
 
 type Size = "sm" | "md" | "lg";
 

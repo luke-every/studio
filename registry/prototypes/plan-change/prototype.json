@@ -1,0 +1,51 @@
+{
+  "slug": "plan-change",
+  "teamSlug": "retention",
+  "projectSlug": "leaving-well",
+  "name": "Changing a plan",
+  "description": "Moving up, down or sideways without talking to anyone.",
+  "designQuestion": "Can a plan change be reversible enough that nobody fears making it?",
+  "context": "Plan changes are the second most common support request after pauses.",
+  "ownerId": "tom",
+  "collaboratorIds": [],
+  "status": "exploring",
+  "tags": [
+    "account"
+  ],
+  "preview": {
+    "tint": [
+      "#e7e6e2",
+      "#86837c"
+    ],
+    "caption": "Before and after"
+  },
+  "explorations": [
+    {
+      "id": "main",
+      "title": "Show the next delivery",
+      "premise": "Every plan change is really a question about the next box. Answer that first.",
+      "authorId": "tom",
+      "status": "selected",
+      "branch": "explore/main",
+      "preview": {
+        "tint": [
+          "#e7e6e2",
+          "#86837c"
+        ],
+        "caption": "Before and after"
+      }
+    }
+  ],
+  "selected": {
+    "explorationId": "main",
+    "versionId": "plan-change-main-v0.2",
+    "by": "tom",
+    "at": "2026-09-10"
+  },
+  "created": {
+    "by": "tom",
+    "at": "2026-09-10"
+  },
+  "updatedAt": "2026-09-10",
+  "archived": false
+}

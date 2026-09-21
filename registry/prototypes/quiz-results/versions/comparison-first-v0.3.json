@@ -1,0 +1,19 @@
+{
+  "id": "quiz-results-comparison-first-v0.3",
+  "prototypeSlug": "quiz-results",
+  "explorationId": "comparison-first",
+  "version": "v0.3",
+  "title": "Difference-led comparison",
+  "summary": "Only the attributes that actually differ between the three results are shown.",
+  "why": "A full comparison table was unreadable. Showing sameness is wasted space; showing difference is the whole point.",
+  "authorId": "sarah",
+  "createdAt": "2026-09-15",
+  "preview": {
+    "tint": [
+      "#dfe4d2",
+      "#5f7a52"
+    ],
+    "caption": "v0.3"
+  },
+  "deployment": null
+}

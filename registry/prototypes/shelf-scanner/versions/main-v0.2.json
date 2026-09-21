@@ -1,0 +1,19 @@
+{
+  "id": "shelf-scanner-main-v0.2",
+  "prototypeSlug": "shelf-scanner",
+  "explorationId": "main",
+  "version": "v0.2",
+  "title": "Hold and hover",
+  "summary": "Results resolve continuously instead of on a capture.",
+  "why": "A shutter turns browsing into a task. Hovering keeps it browsing.",
+  "authorId": "mira",
+  "createdAt": "2026-09-20",
+  "preview": {
+    "tint": [
+      "#dfe3e6",
+      "#6d7a84"
+    ],
+    "caption": "Camera, live"
+  },
+  "deployment": null
+}

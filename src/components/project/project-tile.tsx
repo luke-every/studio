@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { TeamThumbnail } from "@/components/team/team-thumbnail";
-import type { PreviewSource } from "@/lib/data/types";
+import type { PreviewSource } from "@/lib/registry/types";
 
 /**
  * A folder inside a team, shown the way a team is shown on home — the screens

@@ -1,0 +1,19 @@
+{
+  "id": "quiz-results-comparison-first-v0.2",
+  "prototypeSlug": "quiz-results",
+  "explorationId": "comparison-first",
+  "version": "v0.2",
+  "title": "Full attribute table",
+  "summary": "Everything about every result, in a grid.",
+  "why": "Worth building to prove how much of it nobody reads.",
+  "authorId": "sarah",
+  "createdAt": "2026-09-08",
+  "preview": {
+    "tint": [
+      "#e4e1d4",
+      "#8d8376"
+    ],
+    "caption": "v0.2"
+  },
+  "deployment": null
+}

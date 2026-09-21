@@ -1,0 +1,19 @@
+{
+  "id": "quiz-results-editorial-v0.7",
+  "prototypeSlug": "quiz-results",
+  "explorationId": "editorial",
+  "version": "v0.7",
+  "title": "Reasoning made visible",
+  "summary": "Added a short line under the recommendation explaining which answers led to it.",
+  "why": "Testers kept asking why they got what they got. Saying it out loud costs one line and buys a lot of trust.",
+  "authorId": "mira",
+  "createdAt": "2026-09-11",
+  "preview": {
+    "tint": [
+      "#efd7cb",
+      "#b2543d"
+    ],
+    "caption": "v0.7"
+  },
+  "deployment": null
+}

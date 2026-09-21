@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { ThemeSwitcher } from "@/components/theme/theme-switcher";
+
+import { UserSwitcher } from "./user-switcher";
 import { useStudio } from "@/lib/data/studio-store";
 
 import { HomeIcon, TeamDot } from "./nav-icons";
@@ -45,7 +47,7 @@ function NavLink({
  */
 export function SideNav() {
   const pathname = usePathname();
-  const { teams } = useStudio();
+  const { teams, hasUnsavedChanges } = useStudio();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -96,8 +98,15 @@ export function SideNav() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-divider px-2.5 pt-4">
-        <span className="text-xs text-foreground-subtle">Luke</span>
+      {hasUnsavedChanges ? (
+        <p className="rounded-[var(--r-sm)] bg-surface-hover px-2.5 py-2 text-xs leading-[var(--leading-normal)] text-foreground-subtle">
+          Changes you have made are only in this browser. Saving them for
+          everyone comes next.
+        </p>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-2 border-t border-divider px-1.5 pt-3">
+        <UserSwitcher />
         <ThemeSwitcher />
       </div>
     </nav>

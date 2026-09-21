@@ -6,7 +6,7 @@ import { FileIntoProject } from "@/components/prototype/file-into-project";
 import { PreviewSurface } from "@/components/ui/preview-surface";
 import { useStudio } from "@/lib/data/studio-store";
 import { formatUpdated, statusLabel } from "@/lib/format";
-import type { Prototype } from "@/lib/data/types";
+import type { Prototype } from "@/lib/registry/types";
 import type { ViewMode } from "@/lib/use-view-mode";
 
 const statusTone: Record<Prototype["status"], string> = {

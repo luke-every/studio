@@ -1,0 +1,19 @@
+{
+  "id": "kitchen-timer-main-v0.1",
+  "prototypeSlug": "kitchen-timer",
+  "explorationId": "main",
+  "version": "v0.1",
+  "title": "One dish at a time",
+  "summary": "A single timer tied to the current recipe, with no list and no history.",
+  "why": "The moment it becomes a timer app, we are competing with the phone's own. We are not going to win that.",
+  "authorId": "tom",
+  "createdAt": "2026-09-13",
+  "preview": {
+    "tint": [
+      "#e6e2dc",
+      "#8b8177"
+    ],
+    "caption": "Twelve minutes"
+  },
+  "deployment": null
+}
