@@ -59,22 +59,24 @@ export function NewTeamTile({ mode }: { mode: ViewMode }) {
 }
 
 function NewTeamDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { addTeam } = useStudio();
+  const { addTeam, saving } = useStudio();
   const router = useRouter();
   const [name, setName] = useState("");
   const [remit, setRemit] = useState("");
   const [description, setDescription] = useState("");
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
 
-    const team = addTeam({ name, remit, description });
+    const slug = await addTeam({ name, remit, description });
+    if (!slug) return; // The failure is shown in the nav; keep what was typed.
+
     setName("");
     setRemit("");
     setDescription("");
     onClose();
-    router.push(`/teams/${team.slug}`);
+    router.push(`/teams/${slug}`);
   };
 
   return (
@@ -112,10 +114,10 @@ function NewTeamDialog({ open, onClose }: { open: boolean; onClose: () => void }
           </button>
           <button
             type="submit"
-            disabled={!name.trim()}
+            disabled={!name.trim() || saving}
             className="rounded-[var(--r-sm)] bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-40"
           >
-            Create team
+            {saving ? "Creating…" : "Create team"}
           </button>
         </div>
       </form>

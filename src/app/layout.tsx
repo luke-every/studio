@@ -5,7 +5,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { CurrentUserProvider } from "@/lib/current-user";
 import { StudioProvider } from "@/lib/data/studio-store";
 import { MotionProvider } from "@/lib/motion";
-import { getRegistrySnapshot } from "@/lib/registry";
+import { getRegistrySnapshot, isWritable } from "@/lib/registry";
 import { SearchProvider } from "@/lib/search-store";
 import { ThemeProvider, ThemeScript } from "@/lib/theme";
 
@@ -29,6 +29,7 @@ export const metadata: Metadata = {
  */
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const snapshot = await getRegistrySnapshot();
+  const writable = isWritable();
 
   return (
     <html lang="en" suppressHydrationWarning className={`${inter.variable} h-full antialiased`}>
@@ -38,7 +39,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full">
         <ThemeProvider>
           <CurrentUserProvider users={snapshot.users}>
-            <StudioProvider snapshot={snapshot}>
+            <StudioProvider snapshot={snapshot} writable={writable}>
               <SearchProvider>
                 <MotionProvider>
                   <AppShell>{children}</AppShell>

@@ -47,7 +47,7 @@ function NavLink({
  */
 export function SideNav() {
   const pathname = usePathname();
-  const { teams, hasUnsavedChanges } = useStudio();
+  const { teams, writable, error, dismissError } = useStudio();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -98,10 +98,19 @@ export function SideNav() {
         </div>
       </div>
 
-      {hasUnsavedChanges ? (
+      {error ? (
+        <button
+          type="button"
+          onClick={dismissError}
+          className="rounded-[var(--r-sm)] border border-border bg-surface-hover px-2.5 py-2 text-left text-xs leading-[var(--leading-normal)] text-foreground"
+        >
+          {error}
+          <span className="mt-1 block text-foreground-subtle">Tap to dismiss</span>
+        </button>
+      ) : !writable ? (
         <p className="rounded-[var(--r-sm)] bg-surface-hover px-2.5 py-2 text-xs leading-[var(--leading-normal)] text-foreground-subtle">
-          Changes you have made are only in this browser. Saving them for
-          everyone comes next.
+          Reading from the registry files. Changes cannot be saved until the
+          database is connected.
         </p>
       ) : null}
 

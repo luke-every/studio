@@ -184,7 +184,8 @@ adding features:
 8. **The Hub is not the source of truth.** Critical state never lives only in
    UI state.
 9. **Keep storage replaceable.** Components talk to `src/lib/registry`, never
-   to files. Only `load.ts` knows the format.
+   to a store. Only the store implementations know where data lives:
+   `supabase-store.ts` when configured, `file-store.ts` otherwise.
 10. **Keep infrastructure out of the UX.** Branches, SHAs, deployment ids
     appear only where they are genuinely useful.
 11. **Per-person state stays client-side.** Recently opened, view mode,
@@ -192,6 +193,12 @@ adding features:
 12. **Every automation must be recoverable.** Never record a version whose
     underlying commit does not exist; report what succeeded and what failed.
 13. **Prefer boring infrastructure.** Complexity is earned by a requirement.
+14. **One store, not two.** Everything lives in Supabase. Splitting records
+    across a database and the repository would buy a nicer audit trail and
+    cost referential integrity, which is a bad trade for a team this size.
+
+Setup is in `docs/deploying.md`. Without the environment variables the
+studio runs read-only from `registry/`, and says so in the nav.
 
 ---
 

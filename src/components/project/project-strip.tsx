@@ -85,13 +85,16 @@ function NewProjectDialog({
   open: boolean;
   onClose: () => void;
 }) {
-  const { addProject } = useStudio();
+  const { addProject, saving } = useStudio();
   const [name, setName] = useState("");
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
-    addProject({ teamSlug, name });
+
+    const slug = await addProject({ teamSlug, name });
+    if (!slug) return; // The failure is shown in the nav; keep what was typed.
+
     setName("");
     onClose();
   };
@@ -127,10 +130,10 @@ function NewProjectDialog({
           </button>
           <button
             type="submit"
-            disabled={!name.trim()}
+            disabled={!name.trim() || saving}
             className="rounded-[var(--r-sm)] bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-40"
           >
-            Create project
+            {saving ? "Creating…" : "Create project"}
           </button>
         </div>
       </form>
