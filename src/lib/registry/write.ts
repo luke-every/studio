@@ -9,6 +9,7 @@ import {
   writeRegistryDocument,
   type RegistryDocument,
 } from "./blob";
+import { readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
 import type { PrototypeRecord, VersionRecord } from "./schema";
 
@@ -55,7 +56,9 @@ async function load(): Promise<RegistryDocument> {
       "No storage is connected, so nothing can be saved. Connect a Blob store in Vercel.",
     );
   }
-  return readRegistryDocument();
+  // First write into a fresh store starts from the seed, so the teams that
+  // ship with the studio exist without anybody running a migration.
+  return (await readRegistryDocument()) ?? readSeed();
 }
 
 async function save(document: RegistryDocument) {

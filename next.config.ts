@@ -1,10 +1,14 @@
 import type { NextConfig } from "next";
 
-/**
- * Nothing to configure. Prototypes live in Blob and are served from its own
- * CDN, so there is no static content to trace into the bundle and no rewrite
- * to give a prototype a clean URL.
- */
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  /**
+   * The seed registry in `registry/` is read at runtime whenever the store
+   * is empty or unconfigured, so its files have to be traced into the
+   * deployed bundle. Without this the studio silently has no teams.
+   */
+  outputFileTracingIncludes: {
+    "/**": ["./registry/**/*.json"],
+  },
+};
 
 export default nextConfig;

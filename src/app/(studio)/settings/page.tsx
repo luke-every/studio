@@ -36,7 +36,7 @@ export default async function SettingsPage() {
         title="Storage"
         state={store ? "ok" : "todo"}
         value={store ? `Connected · ${prototypes.length} prototypes` : "Not connected"}
-        note="A Vercel Blob store holds the registry and every prototype's files. Connect one under Storage in Vercel and it sets BLOB_READ_WRITE_TOKEN for you."
+        note="A Vercel Blob store holds the registry and every prototype's files. Connect one under Storage in Vercel and it sets BLOB_READ_WRITE_TOKEN for you. Until then the studio shows the teams it ships with and nothing can be saved."
       />
 
       <Row

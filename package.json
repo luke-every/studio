@@ -7,8 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "skill:install": "tsx scripts/install-skill.ts",
-    "registry:migrate": "tsx scripts/migrate-to-blob.ts"
+    "skill:install": "tsx scripts/install-skill.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

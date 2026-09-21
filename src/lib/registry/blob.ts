@@ -60,9 +60,11 @@ async function registryUrl(): Promise<string | null> {
  * Cached by tag rather than by time: a write revalidates it, so a change
  * shows up in seconds without every page view costing a fetch.
  */
-export async function readRegistryDocument(): Promise<RegistryDocument> {
+export async function readRegistryDocument(): Promise<RegistryDocument | null> {
   const url = await registryUrl();
-  if (!url) return EMPTY_REGISTRY;
+  // Nothing written yet. The caller falls back to the seed, which is how a
+  // fresh store gets its teams without a migration step.
+  if (!url) return null;
 
   const response = await fetch(url, {
     next: { tags: ["registry"], revalidate: 300 },

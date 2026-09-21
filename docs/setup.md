@@ -20,15 +20,12 @@ holds the application and nothing else.
 
 Settings inside the app reports whether each is working.
 
-## Moving the old content across
+## Nothing to migrate
 
-Only needed once, if prototypes were committed to the repository before:
-
-```
-BLOB_READ_WRITE_TOKEN=... npm run registry:migrate
-```
-
-It reads `registry/` and `public/p/` and writes them to the store.
+The teams in `registry/teams.json` are a seed. A fresh store has nothing in
+it, so the studio reads that seed until the first save — at which point the
+teams are written into the store along with whatever was saved. There is no
+migration step.
 
 ## Installing /push
 

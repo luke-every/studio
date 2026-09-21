@@ -1,11 +1,6 @@
 import "server-only";
 
-import {
-  EMPTY_REGISTRY,
-  isBlobConfigured,
-  readRegistryDocument,
-  type RegistryDocument,
-} from "./blob";
+import { isBlobConfigured, readRegistryDocument, type RegistryDocument } from "./blob";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
 import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
 
@@ -21,7 +16,15 @@ import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Te
  * than one that will not start.
  */
 
-async function fromFiles(): Promise<RegistryDocument> {
+/**
+ * The seed.
+ *
+ * The teams that ship with the repository. Used when the store has nothing
+ * in it yet — which is how a fresh studio comes up with somewhere to put a
+ * prototype, rather than refusing the first push for want of a team — and
+ * when there is no store at all, so the interface can be worked on locally.
+ */
+export async function readSeed(): Promise<RegistryDocument> {
   const { readFile, readdir } = await import("node:fs/promises");
   const { join } = await import("node:path");
   const root = join(process.cwd(), "registry");
@@ -50,9 +53,9 @@ async function fromFiles(): Promise<RegistryDocument> {
 }
 
 export async function loadRegistry(): Promise<RegistryDocument> {
-  const raw = isBlobConfigured()
-    ? await readRegistryDocument().catch(() => EMPTY_REGISTRY)
-    : await fromFiles().catch(() => EMPTY_REGISTRY);
+  // An empty studio and a broken one look identical to somebody using it,
+  // so a read that fails is thrown rather than quietly returning nothing.
+  const raw = isBlobConfigured() ? ((await readRegistryDocument()) ?? (await readSeed())) : await readSeed();
 
   const document: RegistryDocument = {
     teams: raw.teams.map((team) => teamsFileSchema.shape.teams.element.parse(team)),
