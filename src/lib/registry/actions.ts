@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/session";
 
 import * as registry from "./write";
 
@@ -23,13 +23,16 @@ export type WriteResult<T = unknown> =
   | ({ ok: true } & T)
   | { ok: false; error: string };
 
-const SIGNED_OUT = "Sign in with GitHub to make changes.";
+const SIGNED_OUT =
+  "Connect your GitHub account in Settings to make changes.";
 
 async function attempt<T>(
-  work: (session: NonNullable<Awaited<ReturnType<typeof getSession>>>) => Promise<T>,
+  work: (session: NonNullable<Awaited<ReturnType<typeof getVerifiedSession>>>) => Promise<T>,
   paths: string[],
 ): Promise<WriteResult<{ value: T }>> {
-  const session = await getSession();
+  // Identity comes from GitHub, not from the cookie, so nothing can be
+  // committed under someone else's name.
+  const session = await getVerifiedSession();
   if (!session) return { ok: false, error: SIGNED_OUT };
 
   try {

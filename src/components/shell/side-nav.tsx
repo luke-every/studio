@@ -117,8 +117,8 @@ export function SideNav() {
         </p>
       ) : !canWrite ? (
         <p className="rounded-[var(--r-sm)] bg-surface-hover px-2.5 py-2 text-xs leading-[var(--leading-normal)] text-foreground-subtle">
-          Signed out — you can look at everything, but changes need a GitHub
-          account so they can be attributed.
+          Not connected — you can look at everything. Connect GitHub in
+          Settings to make changes.
         </p>
       ) : null}
 

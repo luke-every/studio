@@ -18,11 +18,11 @@ export function ViewerBadge() {
   if (!viewer) {
     return (
       <Link
-        href="/api/auth/signin"
+        href="/settings"
         className="flex items-center gap-1.5 rounded-[var(--r-sm)] px-1.5 py-1 text-xs text-foreground-muted hover:bg-surface-hover hover:text-foreground"
       >
         <GitHubMark />
-        Sign in
+        Connect
       </Link>
     );
   }

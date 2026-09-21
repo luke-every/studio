@@ -183,9 +183,8 @@ adding features:
 7. **Never delete design history.** Archive.
 8. **The Hub is not the source of truth.** Critical state never lives only in
    UI state.
-9. **Keep storage replaceable.** Components talk to `src/lib/registry`, never
-   to a store. Only the store implementations know where data lives:
-   `supabase-store.ts` when configured, `file-store.ts` otherwise.
+9. **Keep storage replaceable.** Components talk to `src/lib/registry`.
+   Only `read.ts`, `write.ts` and `github.ts` know where data lives.
 10. **Keep infrastructure out of the UX.** Branches, SHAs, deployment ids
     appear only where they are genuinely useful.
 11. **Per-person state stays client-side.** Recently opened, view mode,
@@ -193,12 +192,17 @@ adding features:
 12. **Every automation must be recoverable.** Never record a version whose
     underlying commit does not exist; report what succeeded and what failed.
 13. **Prefer boring infrastructure.** Complexity is earned by a requirement.
-14. **One store, not two.** Everything lives in Supabase. Splitting records
-    across a database and the repository would buy a nicer audit trail and
-    cost referential integrity, which is a bad trade for a team this size.
+14. **GitHub and Vercel, nothing else.** The registry is files in the repo,
+    written as commits by the person making the change. No database. Do not
+    introduce another service without asking.
 
-Setup is in `docs/deploying.md`. Without the environment variables the
-studio runs read-only from `registry/`, and says so in the nav.
+15. **Setup happens in the app.** No environment variables, no config
+    files. Anything that needs configuring belongs in Settings, and
+    anything missing must be reported there in plain language. If a new
+    feature needs a secret, it is stored per-person or committed to the
+    registry — never added to the deployment.
+
+Setup is in `docs/setup.md`.
 
 ---
 

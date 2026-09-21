@@ -1,7 +1,8 @@
 import "server-only";
 
-import { readRepoConfig } from "@/lib/auth/config";
 import type { Session } from "@/lib/auth/session";
+
+import { getSettings } from "./settings";
 
 /**
  * Writing the registry back to GitHub.
@@ -29,11 +30,11 @@ type FileWrite = {
   sha?: string;
 };
 
-function target() {
-  const { repo, branch } = readRepoConfig();
+async function target() {
+  const { repo, branch } = await getSettings();
   if (!repo) {
     throw new GitHubError(
-      "No repository is configured, so changes cannot be saved. Set REGISTRY_REPO in Settings.",
+      "No repository is set, so there is nowhere to save. Set one in Settings.",
     );
   }
   return { repo, branch };
@@ -71,7 +72,7 @@ export async function readFile(
   session: Session,
   path: string,
 ): Promise<{ text: string; sha: string } | null> {
-  const { repo, branch } = target();
+  const { repo, branch } = await target();
   const response = await call(
     session,
     `/repos/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(branch)}`,
@@ -96,7 +97,7 @@ export async function readJsonFile<T>(
 
 /** Commit one file. The commit is authored by the signed-in person. */
 export async function writeFile(session: Session, message: string, file: FileWrite) {
-  const { repo, branch } = target();
+  const { repo, branch } = await target();
 
   const response = await call(session, `/repos/${repo}/contents/${encodeURI(file.path)}`, {
     method: "PUT",
@@ -121,7 +122,7 @@ export async function writeBinaryFile(
   path: string,
   bytes: ArrayBuffer,
 ) {
-  const { repo, branch } = target();
+  const { repo, branch } = await target();
 
   const existing = await readFile(session, path).catch(() => null);
   const response = await call(session, `/repos/${repo}/contents/${encodeURI(path)}`, {
@@ -142,8 +143,8 @@ export async function writeBinaryFile(
 
 /** Whether the signed-in person can actually write to the configured repo. */
 export async function checkAccess(session: Session) {
-  const { repo, branch } = readRepoConfig();
-  if (!repo) return { ok: false as const, reason: "No repository configured." };
+  const { repo, branch } = await getSettings();
+  if (!repo) return { ok: false as const, reason: "No repository set." };
 
   const response = await call(session, `/repos/${repo}`);
   if (!response.ok) {
