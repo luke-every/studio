@@ -1,6 +1,10 @@
+"use client";
+
 import Link from "next/link";
 
+import { FileIntoProject } from "@/components/prototype/file-into-project";
 import { PreviewSurface } from "@/components/ui/preview-surface";
+import { useStudio } from "@/lib/data/studio-store";
 import { formatUpdated, statusLabel } from "@/lib/format";
 import type { Prototype } from "@/lib/data/types";
 import type { ViewMode } from "@/lib/use-view-mode";
@@ -16,17 +20,32 @@ const statusTone: Record<Prototype["status"], string> = {
 export function PrototypeTile({
   prototype,
   mode,
+  filing = true,
 }: {
   prototype: Prototype;
   mode: ViewMode;
+  /** Whether the file-into-project control is offered here. */
+  filing?: boolean;
 }) {
   const grid = mode === "grid";
+  const { projects } = useStudio();
+  const project = projects.find((candidate) => candidate.slug === prototype.projectSlug);
 
   return (
-    <article>
+    <article className="group relative">
+      {filing ? (
+        <div className="absolute right-1.5 top-1.5 z-[var(--z-raised)]">
+          <FileIntoProject
+            prototypeSlug={prototype.slug}
+            teamSlug={prototype.teamSlug}
+            currentProjectSlug={prototype.projectSlug}
+          />
+        </div>
+      ) : null}
+
       <Link
         href={`/prototypes/${prototype.slug}`}
-        className={`group flex gap-4 ${
+        className={`flex gap-4 ${
           grid ? "flex-col" : "flex-row items-center border-b border-divider py-3"
         }`}
       >
@@ -65,6 +84,12 @@ export function PrototypeTile({
             </span>
             <span aria-hidden>·</span>
             <span>{formatUpdated(prototype.updatedAt)}</span>
+            {project ? (
+              <>
+                <span aria-hidden>·</span>
+                <span className="truncate">{project.name}</span>
+              </>
+            ) : null}
           </div>
         </div>
       </Link>

@@ -46,10 +46,22 @@ export const seedTeams: Team[] = [
   },
 ];
 
+/** When someone last opened a prototype, falling back to its last change. */
+export function lastOpened(prototype: Prototype) {
+  return prototype.lastOpenedAt ?? prototype.updatedAt;
+}
+
+/** Everything in a team, most recently opened first. */
 export function prototypesInTeam(teamSlug: string, all: Prototype[] = prototypes) {
   return all
     .filter((prototype) => prototype.teamSlug === teamSlug && !prototype.archived)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .sort((a, b) => lastOpened(b).localeCompare(lastOpened(a)));
+}
+
+export function prototypesInProject(projectSlug: string, all: Prototype[] = prototypes) {
+  return all
+    .filter((prototype) => prototype.projectSlug === projectSlug && !prototype.archived)
+    .sort((a, b) => lastOpened(b).localeCompare(lastOpened(a)));
 }
 
 /** The most recently touched prototypes across every team. */

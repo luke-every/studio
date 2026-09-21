@@ -132,9 +132,16 @@ without touching a component.
 Teams are the top level. Prototypes belong to exactly one team, and a
 prototype has explorations, which have versions.
 
+Inside a team, **projects are folders**: a way to keep related work together
+when several people circle one problem. Filing is optional, and a project is
+a view onto the team's work rather than a partition of it — the team page
+always lists every prototype in the team, filed or not.
+
 - `/` — recent prototypes as a quiet horizontal strip, then the teams grid.
   The strip must stay lower in the hierarchy than the teams beneath it.
-- `/teams/[slug]` — the prototypes inside a team.
+- `/teams/[slug]` — a row of project folders, then every prototype in the
+  team, most recently opened first.
+- `/teams/[slug]/projects/[projectSlug]` — the prototypes filed into one.
 - `/prototypes` — everything, newest first.
 - `/prototypes/[slug]` — a single prototype.
 

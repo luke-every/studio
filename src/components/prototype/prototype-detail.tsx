@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { FocusPlaceholder, MotionFocusLayer } from "@/components/motion";
 import { useStudio } from "@/lib/data/studio-store";
@@ -25,8 +25,12 @@ export function PrototypeDetail({
   exploration: Exploration;
 }) {
   const [focused, setFocused] = useState(false);
-  const { teams } = useStudio();
+  const { teams, markOpened } = useStudio();
   const current = exploration.versions[0];
+  useEffect(() => {
+    markOpened(prototype.slug);
+  }, [markOpened, prototype.slug]);
+
   const teamName =
     teams.find((team) => team.slug === prototype.teamSlug)?.name ?? "Team";
 

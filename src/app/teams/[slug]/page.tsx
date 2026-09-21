@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
 
+import { ProjectStrip } from "@/components/project/project-strip";
 import { PrototypeTile } from "@/components/prototype/prototype-tile";
 import { TeamThumbnail } from "@/components/team/team-thumbnail";
 import { Collection } from "@/components/ui/collection";
@@ -59,7 +60,14 @@ export default function TeamPage() {
         {team.description}
       </p>
 
-      <div className="mt-10 border-t border-divider pt-7">
+      <div className="mt-9">
+        <ProjectStrip teamSlug={team.slug} />
+      </div>
+
+      <div className="mt-11 border-t border-divider pt-7">
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <h2 className="text-eyebrow">All prototypes</h2>
+        </div>
         {contents.length > 0 ? (
           <Collection mode={mode}>
             {contents.map((prototype) => (

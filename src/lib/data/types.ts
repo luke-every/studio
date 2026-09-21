@@ -72,10 +72,26 @@ export type Team = {
   archived: boolean;
 };
 
+/**
+ * A project is a folder inside a team: a way to keep related work together
+ * when several people are circling the same problem from different angles.
+ * A prototype may sit in one project, or in none.
+ */
+export type Project = {
+  slug: string;
+  teamSlug: string;
+  name: string;
+  createdAt: string;
+};
+
 export type Prototype = {
   slug: string;
   /** The team this prototype belongs to. */
   teamSlug: string;
+  /** The project inside that team, when it has been filed into one. */
+  projectSlug?: string | null;
+  /** When someone last opened it. Falls back to updatedAt when unknown. */
+  lastOpenedAt?: string;
   name: string;
   description: string;
   /** The question this prototype exists to answer. */
