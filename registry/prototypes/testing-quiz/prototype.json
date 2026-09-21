@@ -1,0 +1,63 @@
+{
+  "slug": "testing-quiz",
+  "teamSlug": "acquisition",
+  "projectSlug": null,
+  "name": "Testing quiz",
+  "description": "",
+  "designQuestion": "",
+  "context": "",
+  "owner": {
+    "login": "luke",
+    "name": "Luke"
+  },
+  "collaborators": [],
+  "status": "exploring",
+  "tags": [],
+  "preview": {
+    "tint": [
+      "#e8e6e1",
+      "#8b8880"
+    ],
+    "caption": "Testing quiz",
+    "url": "/p/testing-quiz/main"
+  },
+  "explorations": [
+    {
+      "id": "main",
+      "title": "Main",
+      "premise": "",
+      "author": {
+        "login": "luke",
+        "name": "Luke"
+      },
+      "status": "selected",
+      "preview": {
+        "tint": [
+          "#e8e6e1",
+          "#8b8880"
+        ],
+        "caption": "Testing quiz",
+        "url": "/p/testing-quiz/main"
+      }
+    }
+  ],
+  "selected": {
+    "explorationId": "main",
+    "versionId": "testing-quiz-main-v0.1",
+    "by": {
+      "login": "luke",
+      "name": "Luke"
+    },
+    "at": "2026-09-21"
+  },
+  "created": {
+    "by": {
+      "login": "luke",
+      "name": "Luke"
+    },
+    "at": "2026-09-21"
+  },
+  "updatedAt": "2026-09-21",
+  "archived": false,
+  "repositoryPath": "public/p/testing-quiz"
+}
