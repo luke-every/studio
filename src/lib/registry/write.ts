@@ -26,10 +26,8 @@ import type { PrototypeRecord, ProjectRecord, TeamRecord, VersionRecord } from "
 const TEAMS_PATH = "registry/teams.json";
 
 const prototypePath = (slug: string) => `registry/prototypes/${slug}/prototype.json`;
-const versionPath = (slug: string, explorationId: string, version: string) =>
-  `registry/prototypes/${slug}/versions/${explorationId}-${version}.json`;
-/** Prototypes are served straight out of the deployment at /p/<slug>/. */
-const prototypeFilePath = (slug: string, file: string) => `public/p/${slug}/main/${file}`;
+const versionPath = (slug: string, version: string) =>
+  `registry/prototypes/${slug}/versions/${version}.json`;
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -95,7 +93,6 @@ export async function createTeam(input: {
         name: input.name.trim(),
         remit: input.remit.trim(),
         description: input.description.trim(),
-        status: "active",
         lead: person,
         members: [person],
         created: { by: person, at: today() },
@@ -164,44 +161,18 @@ export async function filePrototype(input: {
   );
 }
 
-/** Change the team's current direction. Records who chose it, and when. */
-export async function selectDirection(input: {
-  prototypeSlug: string;
-  explorationId: string;
-  versionId: string;
-}) {
-  const { value, sha } = await loadPrototype(input.prototypeSlug);
-  const next: PrototypeRecord = {
-    ...value,
-    selected: {
-      explorationId: input.explorationId,
-      versionId: input.versionId,
-      by: await tokenOwner(),
-      at: today(),
-    },
-  };
-
-  prototypeSchema.parse(next);
-  await writeFile(`registry: ${value.name} now follows ${input.versionId}`, {
-    path: prototypePath(input.prototypeSlug),
-    content: stringify(next),
-    sha,
-  });
-}
-
 /**
  * Adding a prototype by hand.
  *
- * The usual route is Claude Code, which commits the prototype's files and
- * its registry entry together. This is the other route: someone has an HTML
- * file and wants it in the studio. The file is committed alongside the
- * record and served from the deployment, so the prototype is genuinely
- * here — not a link to somewhere that might go away.
+ * The usual route is Claude Code — /push writes the files and the version
+ * notes together. This is the other route: someone has an HTML file and
+ * wants it in the studio. The file is committed alongside the record and
+ * served from the deployment, so the prototype is genuinely here.
  */
 export async function createPrototype(input: {
   name: string;
   description: string;
-  designQuestion: string;
+  changes: string;
   teamSlug: string;
   projectSlug: string | null;
   by: string;
@@ -214,29 +185,24 @@ export async function createPrototype(input: {
   }
 
   const person = named(input.by);
-  const url = `/p/${slug}/main`;
+  const url = `/p/${slug}/v0-1`;
+  const versionId = `${slug}-v0.1`;
 
   await writeBinaryFile(
     `prototype(${slug}): add files`,
-    prototypeFilePath(slug, "index.html"),
+    `public/p/${slug}/v0-1/index.html`,
     input.html.bytes,
   );
-
-  const preview = { tint: input.tint, caption: input.name.trim(), url };
-  const versionId = `${slug}-main-v0.1`;
 
   const version: VersionRecord = versionSchema.parse({
     id: versionId,
     prototypeSlug: slug,
-    explorationId: "main",
     version: "v0.1",
     title: "First version",
-    summary: input.description.trim() || "Added to the studio.",
-    why: input.designQuestion.trim(),
+    changes: input.changes.trim() || "Added to the studio.",
     author: person,
     createdAt: today(),
-    preview,
-    deployment: { url, status: "ready" },
+    url,
   });
 
   const prototype: PrototypeRecord = prototypeSchema.parse({
@@ -245,24 +211,9 @@ export async function createPrototype(input: {
     projectSlug: input.projectSlug,
     name: input.name.trim(),
     description: input.description.trim(),
-    designQuestion: input.designQuestion.trim(),
-    context: "",
     owner: person,
-    collaborators: [],
-    status: "exploring",
-    tags: [],
-    preview,
-    explorations: [
-      {
-        id: "main",
-        title: "Main",
-        premise: input.designQuestion.trim(),
-        author: person,
-        status: "selected",
-        preview,
-      },
-    ],
-    selected: { explorationId: "main", versionId, by: person, at: today() },
+    preview: { tint: input.tint, caption: input.name.trim(), url },
+    currentVersion: versionId,
     created: { by: person, at: today() },
     updatedAt: today(),
     archived: false,
@@ -270,7 +221,7 @@ export async function createPrototype(input: {
   });
 
   await writeFile(`registry: add prototype "${input.name.trim()}" v0.1`, {
-    path: versionPath(slug, "main", "v0.1"),
+    path: versionPath(slug, "v0.1"),
     content: stringify(version),
   });
   await writeFile(`registry: add prototype "${input.name.trim()}"`, {

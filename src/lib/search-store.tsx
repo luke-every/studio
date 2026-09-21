@@ -58,9 +58,9 @@ export function useSearch() {
 /* ---------------------------------------------------------------------------
  * Matching
  *
- * Deliberately generous: a prototype matches on anything a person might
- * remember about it, including the question it is asking and the reasoning in
- * its current version — those are often the only words someone recalls.
+ * Deliberately generous: a prototype matches on anything someone might
+ * remember about it, including what a particular version changed — that is
+ * often the only wording anybody recalls.
  * ------------------------------------------------------------------------- */
 
 function normalise(value: string) {
@@ -74,14 +74,12 @@ export function matchesPrototype(prototype: Prototype, query: string) {
   const haystack = [
     prototype.name,
     prototype.description,
-    prototype.designQuestion,
-    prototype.context,
-    ...prototype.tags,
     prototype.owner.name,
-    ...prototype.explorations.flatMap((exploration) => [
-      exploration.title,
-      exploration.premise,
-      ...exploration.versions.flatMap((version) => [version.title, version.summary]),
+    ...prototype.versions.flatMap((version) => [
+      version.version,
+      version.title,
+      version.changes,
+      version.author.name,
     ]),
   ]
     .join(" ")

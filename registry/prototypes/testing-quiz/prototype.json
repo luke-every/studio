@@ -4,52 +4,19 @@
   "projectSlug": null,
   "name": "Testing quiz",
   "description": "",
-  "designQuestion": "",
-  "context": "",
   "owner": {
     "login": "luke",
     "name": "Luke"
   },
-  "collaborators": [],
-  "status": "exploring",
-  "tags": [],
   "preview": {
     "tint": [
       "#e8e6e1",
       "#8b8880"
     ],
     "caption": "Testing quiz",
-    "url": "/p/testing-quiz/main"
+    "url": "/p/testing-quiz/v0-2"
   },
-  "explorations": [
-    {
-      "id": "main",
-      "title": "Main",
-      "premise": "",
-      "author": {
-        "login": "luke",
-        "name": "Luke"
-      },
-      "status": "selected",
-      "preview": {
-        "tint": [
-          "#e8e6e1",
-          "#8b8880"
-        ],
-        "caption": "Testing quiz",
-        "url": "/p/testing-quiz/main"
-      }
-    }
-  ],
-  "selected": {
-    "explorationId": "main",
-    "versionId": "testing-quiz-main-v0.1",
-    "by": {
-      "login": "luke",
-      "name": "Luke"
-    },
-    "at": "2026-09-21"
-  },
+  "currentVersion": "testing-quiz-v0.2",
   "created": {
     "by": {
       "login": "luke",

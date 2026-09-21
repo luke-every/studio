@@ -129,39 +129,40 @@ without touching a component.
 
 ## Structure
 
-Teams are the top level. Prototypes belong to exactly one team, and a
-prototype has explorations, which have versions.
+Teams contain prototypes. A prototype is a name, a sentence, and a list of
+versions — each version saying what changed, and keeping its own copy of the
+files so older ones stay viewable.
 
-Inside a team, **projects are folders**: a way to keep related work together
-when several people circle one problem. Filing is optional, and a project is
-a view onto the team's work rather than a partition of it — the team page
-always lists every prototype in the team, filed or not.
+There is no status, no tags, no context field and no separate design
+question. They were metadata nobody filled in honestly, and an empty field
+reads worse than no field. Do not reintroduce them without being asked.
+
+Projects are optional folders inside a team — a view onto the team's work,
+not a partition of it, so the team page always lists everything.
 
 - `/` — recent prototypes as a quiet horizontal strip, then the teams grid.
   The strip must stay lower in the hierarchy than the teams beneath it.
 - `/teams/[slug]` — the team name, a row of project folders, then every
   prototype in the team, most recently opened first.
 - `/teams/[slug]/projects/[projectSlug]` — the prototypes filed into one.
-- `/prototypes/[slug]` — a single prototype.
+- `/prototypes/[slug]` — one prototype: the thing itself, what it is, and
+  its history. `?v=v0.2` opens a particular version.
+- `/p/<slug>/<version>` — the prototype's own files, outside the door.
 
-Side nav is Home, the search field, then the teams. Nothing else.
-
-**Search is one piece of state for the whole studio**, held in
-`SearchProvider` and typed into the field in the nav. There is no submit and
-no results route: whatever surface the user is on narrows as they type, and
-clearing the field restores it. Any new browsing surface must respect the
-query the same way.
-
-Team pages open with the name and go straight into the work — no remit, no
-status, no lead, no thumbnail in the header.
+Side nav is Home, the search field, Settings, then the teams.
 
 Grid is the default arrangement everywhere, with a grid/list switcher whose
 choice is remembered per scope.
 
-**Every prototype is a phone screen.** Previews are always iPhone proportions
-(`aspect-device`), with device corners (`--r-device`) and a contact shadow
-(`--elev-device`). One shape everywhere is what makes a grid of them read as
-a set of screens.
+**Phone-shaped previews are for thumbnails only.** They make a grid read as
+a set of screens. On the detail page a prototype gets a real frame: its own
+width, its own scrolling, nothing cropped, and browser fullscreen to expand.
+
+**Every page must stay prerendered.** Nothing in `(studio)/layout.tsx` or a
+page may read a cookie, a header or `useSearchParams` — any of those opts
+the page out of static generation and puts a server round trip in front of
+every navigation. The door is checked in middleware for this reason, and the
+version parameter is read through `useSyncExternalStore`.
 
 ---
 
@@ -209,16 +210,16 @@ Setup is in `docs/setup.md`.
 
 ## Adding a prototype from Claude Code
 
-This is the main way work enters the studio:
+`/push` is the way work enters the studio — see `.claude/skills/push`. It
+works out what changed, writes the version notes, runs:
 
 ```
 npm run proto:add -- --file ./thing.html --name "Thing" --team acquisition \
-  [--project slug] [--exploration name] [--description "..."] [--why "..."]
+  --title "headline" --changes "what is new" [--project slug] [--description "..."]
 ```
 
-It copies the HTML into `public/p/` and writes the registry records, then
-you commit — so the version is attributed to whoever made the commit. Run it
-again with the same name to save the next version.
+then commits and pushes. The commit is what attributes the version, which is
+why the studio needs no login.
 
 ---
 

@@ -5,7 +5,6 @@
       "name": "Acquisition",
       "remit": "Arriving and deciding",
       "description": "Everything between landing on us for the first time and understanding what we would send you.",
-      "status": "active",
       "created": {
         "by": {
           "login": "luke-every",
@@ -30,7 +29,6 @@
       "name": "Retention",
       "remit": "Staying, pausing, coming back",
       "description": "The long middle of the relationship. Changing a plan, taking a break, and everything we send when nobody asked.",
-      "status": "active",
       "created": {
         "by": {
           "login": "luke-every",
@@ -55,7 +53,6 @@
       "name": "Playground",
       "remit": "No brief, no promises",
       "description": "Work with nothing riding on it. Some of it becomes real. Most of it is here to settle an argument.",
-      "status": "active",
       "created": {
         "by": {
           "login": "luke-every",

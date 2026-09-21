@@ -12,12 +12,13 @@
  *     --name "Quiz results" \
  *     --team acquisition \
  *     [--project quiz-rework] \
- *     [--exploration editorial] \
- *     [--description "..."] \
- *     [--question "..."] \
+ *     [--description "what the prototype is"] \
+ *     [--title "headline for this version"] \
+ *     [--changes "what is new or different"] \
  *     [--author "Luke"]
  *
- * Run again with the same name to save a new version of the same prototype.
+ * Run again with the same name to save the next version. Each version keeps
+ * its own copy of the files, so older ones stay viewable.
  */
 import { execSync } from "node:child_process";
 import {
@@ -70,11 +71,11 @@ const write = (path: string, value: unknown) => {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 };
 
-function nextVersion(dir: string, explorationId: string) {
+function nextVersion(dir: string) {
   if (!existsSync(dir)) return "v0.1";
   const numbers = readdirSync(dir)
-    .filter((file) => file.startsWith(`${explorationId}-v`) && file.endsWith(".json"))
-    .map((file) => Number(file.replace(`${explorationId}-v`, "").replace(".json", "")));
+    .filter((file) => file.startsWith("v") && file.endsWith(".json"))
+    .map((file) => Number(file.replace(/^v/, "").replace(".json", "")));
   const highest = Math.max(0, ...numbers.filter((value) => !Number.isNaN(value)));
   return `v${(highest + 0.1).toFixed(1)}`;
 }
@@ -95,22 +96,36 @@ function main() {
   }
 
   const slug = args.slug ? slugify(args.slug) : slugify(args.name);
-  const explorationId = args.exploration ? slugify(args.exploration) : "main";
-  const author = args.author
-    ? { login: slugify(args.author), name: args.author }
-    : gitAuthor();
+  const author = args.author ? { login: slugify(args.author), name: args.author } : gitAuthor();
 
   const root = process.cwd();
-  const servedDir = join(root, "public", "p", slug, explorationId);
   const registryDir = join(root, "registry", "prototypes", slug);
   const prototypeFile = join(registryDir, "prototype.json");
 
-  const version = nextVersion(join(registryDir, "versions"), explorationId);
-  const versionId = `${slug}-${explorationId}-${version}`;
-  const url = `/p/${slug}/${explorationId}`;
+  const version = nextVersion(join(registryDir, "versions"));
+  const versionId = `${slug}-${version}`;
+  // Each version keeps its own copy, which is what makes going back through
+  // the history real rather than nominal.
+  const folder = version.replace(".", "-");
+  const url = `/p/${slug}/${folder}`;
 
+  const servedDir = join(root, "public", "p", slug, folder);
   mkdirSync(servedDir, { recursive: true });
   copyFileSync(args.file, join(servedDir, "index.html"));
+
+  write(
+    join(registryDir, "versions", `${version}.json`),
+    versionSchema.parse({
+      id: versionId,
+      prototypeSlug: slug,
+      version,
+      title: args.title ?? (version === "v0.1" ? "First version" : args.name),
+      changes: args.changes ?? "",
+      author,
+      createdAt: today,
+      url,
+    }),
+  );
 
   const preview = {
     tint: [args.tintFrom ?? "#e8e6e1", args.tintTo ?? "#8b8880"] as [string, string],
@@ -118,92 +133,39 @@ function main() {
     url,
   };
 
-  write(
-    join(registryDir, "versions", `${explorationId}-${version}.json`),
-    versionSchema.parse({
-      id: versionId,
-      prototypeSlug: slug,
-      explorationId,
-      version,
-      title: args.title ?? args.name,
-      summary: args.description ?? "",
-      why: args.why ?? "",
-      author,
-      createdAt: today,
-      preview,
-      deployment: { url, status: "ready" },
-    }),
-  );
-
   const existing = existsSync(prototypeFile)
     ? (JSON.parse(readFileSync(prototypeFile, "utf8")) as Record<string, unknown>)
     : null;
 
-  if (existing) {
-    const explorations = (existing.explorations as { id: string }[]) ?? [];
-    const known = explorations.some((exploration) => exploration.id === explorationId);
-
-    write(prototypeFile, {
-      ...existing,
-      preview,
-      explorations: known
-        ? explorations.map((exploration) =>
-            exploration.id === explorationId ? { ...exploration, preview } : exploration,
-          )
-        : [
-            ...explorations,
-            {
-              id: explorationId,
-              title: args.exploration ?? "Main",
-              premise: args.question ?? "",
-              author,
-              status: "active",
-              preview,
-            },
-          ],
-      // The newest version becomes the current direction. Say so explicitly
-      // rather than letting "current" quietly mean "latest".
-      selected: { explorationId, versionId, by: author, at: today },
-      updatedAt: today,
-    });
-  } else {
-    write(
-      prototypeFile,
-      prototypeSchema.parse({
-        slug,
-        teamSlug: args.team,
-        projectSlug: args.project ?? null,
-        name: args.name,
-        description: args.description ?? "",
-        designQuestion: args.question ?? "",
-        context: args.context ?? "",
-        owner: author,
-        collaborators: [],
-        status: "exploring",
-        tags: args.tags ? args.tags.split(",").map((tag) => tag.trim()) : [],
-        preview,
-        explorations: [
-          {
-            id: explorationId,
-            title: args.exploration ?? "Main",
-            premise: args.question ?? "",
-            author,
-            status: "selected",
-            preview,
-          },
-        ],
-        selected: { explorationId, versionId, by: author, at: today },
-        created: { by: author, at: today },
-        updatedAt: today,
-        archived: false,
-        repositoryPath: `public/p/${slug}`,
-      }),
-    );
-  }
+  write(
+    prototypeFile,
+    existing
+      ? {
+          ...existing,
+          ...(args.description ? { description: args.description } : {}),
+          preview,
+          currentVersion: versionId,
+          updatedAt: today,
+        }
+      : prototypeSchema.parse({
+          slug,
+          teamSlug: args.team,
+          projectSlug: args.project ?? null,
+          name: args.name,
+          description: args.description ?? "",
+          owner: author,
+          preview,
+          currentVersion: versionId,
+          created: { by: author, at: today },
+          updatedAt: today,
+          archived: false,
+          repositoryPath: `public/p/${slug}`,
+        }),
+  );
 
   console.log(`${existing ? "Saved" : "Added"} ${args.name} ${version}`);
   console.log(`  prototype  registry/prototypes/${slug}/`);
-  console.log(`  files      public/p/${slug}/${explorationId}/`);
+  console.log(`  files      public/p/${slug}/${folder}/`);
   console.log(`  preview    ${url}`);
   console.log("\nCommit and push, and it is live for everyone after the deploy.");
 }

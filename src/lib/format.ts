@@ -1,18 +1,3 @@
-import type { PrototypeStatus, TeamStatus } from "./registry/types";
-
-export const statusLabel: Record<PrototypeStatus, string> = {
-  exploring: "Exploring",
-  "in-review": "In review",
-  shipped: "Shipped",
-  parked: "Parked",
-};
-
-export const teamStatusLabel: Record<TeamStatus, string> = {
-  active: "Active",
-  "on-hold": "On hold",
-  complete: "Complete",
-};
-
 /**
  * Dates are written the way a person would say them out loud, because this is
  * a studio, not an audit log.

@@ -101,7 +101,7 @@ function AddPrototypeDialog({
   const [by, setBy] = useState("");
   const [html, setHtml] = useState<File | null>(null);
   const [description, setDescription] = useState("");
-  const [designQuestion, setDesignQuestion] = useState("");
+  const [changes, setChanges] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,7 +117,7 @@ function AddPrototypeDialog({
     const form = new FormData();
     form.set("name", name);
     form.set("description", description);
-    form.set("designQuestion", designQuestion);
+    form.set("changes", changes);
     form.set("teamSlug", teamSlug);
     form.set("projectSlug", projectSlug);
     form.set("by", by.trim());
@@ -134,7 +134,7 @@ function AddPrototypeDialog({
     onClose();
     setName("");
     setDescription("");
-    setDesignQuestion("");
+    setChanges("");
     setHtml(null);
     router.refresh();
   };
@@ -228,12 +228,12 @@ function AddPrototypeDialog({
           />
         </Field>
 
-        <Field label="The question" hint="What this is trying to answer. Optional.">
+        <Field label="What's in this version" hint="What you made or changed. Optional.">
           <textarea
-            value={designQuestion}
-            onChange={(event) => setDesignQuestion(event.target.value)}
+            value={changes}
+            onChange={(event) => setChanges(event.target.value)}
             rows={2}
-            placeholder="Can results feel like advice rather than output?"
+            placeholder="First pass at the results screen."
             className={`${inputClass} resize-none`}
           />
         </Field>

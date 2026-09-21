@@ -56,18 +56,6 @@ export async function filePrototype(input: {
   return attempt(() => registry.filePrototype(input), ["/"]);
 }
 
-/** Change the team's current direction. Records who chose it, and when. */
-export async function selectDirection(input: {
-  prototypeSlug: string;
-  explorationId: string;
-  versionId: string;
-}) {
-  return attempt(() => registry.selectDirection(input), [
-    "/",
-    `/prototypes/${input.prototypeSlug}`,
-  ]);
-}
-
 /**
  * Adding a prototype by hand, from an HTML file. The file is committed and
  * served from the deployment, so the prototype is actually here.
@@ -91,7 +79,7 @@ export async function createPrototype(form: FormData) {
       registry.createPrototype({
         name: String(form.get("name") ?? ""),
         description: String(form.get("description") ?? ""),
-        designQuestion: String(form.get("designQuestion") ?? ""),
+        changes: String(form.get("changes") ?? ""),
         teamSlug: String(form.get("teamSlug") ?? ""),
         projectSlug: (form.get("projectSlug") as string) || null,
         by: String(form.get("by") ?? ""),

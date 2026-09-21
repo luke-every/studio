@@ -14,11 +14,6 @@ import {
 /**
  * Reading the registry off disk.
  *
- * This is the only module that knows the registry is files. Everything else
- * goes through the async API in ./index, so moving the source to a database
- * — which running the Hub on Vercel will eventually require, since its
- * filesystem is read-only — is a change here and nowhere else.
- *
  * Every record is parsed through its schema and the relationships between
  * them are checked. Invalid data throws rather than being repaired: a hub
  * that quietly shows the wrong history is worse than one that will not start.
@@ -60,10 +55,10 @@ async function read(): Promise<RegistryData> {
     const dir = join(prototypesRoot, slug);
     prototypes.push(prototypeSchema.parse(await readJson(join(dir, "prototype.json"))));
 
-    const versionFiles = (await readdir(join(dir, "versions"))).filter((name) =>
+    const files = (await readdir(join(dir, "versions"))).filter((name) =>
       name.endsWith(".json"),
     );
-    for (const file of versionFiles) {
+    for (const file of files) {
       versions.push(versionSchema.parse(await readJson(join(dir, "versions", file))));
     }
   }
@@ -75,22 +70,11 @@ async function read(): Promise<RegistryData> {
   return data;
 }
 
-/**
- * Relationships schemas cannot express: every reference points at something
- * that exists, and the selected direction is a real saved state.
- */
-/**
- * Relationships schemas cannot express: every reference points at something
- * that exists, and the selected direction is a real saved state.
- *
- * People are no longer checked — they are GitHub accounts stored where they
- * acted, so there is no list they could fail to appear in.
- */
+/** Relationships schemas cannot express. */
 export function checkRelationships(data: RegistryData): string[] {
   const problems: string[] = [];
   const teamSlugs = new Set(data.teams.map((team) => team.slug));
   const projectSlugs = new Set(data.projects.map((project) => project.slug));
-  const versionIds = new Set(data.versions.map((version) => version.id));
 
   for (const project of data.projects) {
     if (!teamSlugs.has(project.teamSlug)) {
@@ -100,9 +84,7 @@ export function checkRelationships(data: RegistryData): string[] {
 
   for (const prototype of data.prototypes) {
     if (!teamSlugs.has(prototype.teamSlug)) {
-      problems.push(
-        `Prototype ${prototype.slug} references unknown team "${prototype.teamSlug}"`,
-      );
+      problems.push(`Prototype ${prototype.slug} references unknown team "${prototype.teamSlug}"`);
     }
     if (prototype.projectSlug && !projectSlugs.has(prototype.projectSlug)) {
       problems.push(
@@ -110,34 +92,23 @@ export function checkRelationships(data: RegistryData): string[] {
       );
     }
 
-    const explorationIds = new Set(prototype.explorations.map((e) => e.id));
-    if (!explorationIds.has(prototype.selected.explorationId)) {
-      problems.push(
-        `Prototype ${prototype.slug} selects unknown exploration "${prototype.selected.explorationId}"`,
-      );
+    const mine = data.versions.filter((v) => v.prototypeSlug === prototype.slug);
+    if (mine.length === 0) {
+      problems.push(`Prototype ${prototype.slug} has no versions`);
     }
-    if (!versionIds.has(prototype.selected.versionId)) {
+    if (!mine.some((version) => version.id === prototype.currentVersion)) {
       problems.push(
-        `Prototype ${prototype.slug} selects unknown version "${prototype.selected.versionId}"`,
+        `Prototype ${prototype.slug} points at unknown version "${prototype.currentVersion}"`,
       );
     }
 
-    // Version numbers are chronological and never reused within a direction.
-    const seen = new Map<string, Set<string>>();
-    for (const version of data.versions.filter((v) => v.prototypeSlug === prototype.slug)) {
-      if (!explorationIds.has(version.explorationId)) {
-        problems.push(
-          `Version ${version.id} references unknown exploration "${version.explorationId}"`,
-        );
+    // Version numbers are chronological and never reused.
+    const seen = new Set<string>();
+    for (const version of mine) {
+      if (seen.has(version.version)) {
+        problems.push(`Version ${version.version} is used twice in ${prototype.slug}`);
       }
-      const used = seen.get(version.explorationId) ?? new Set<string>();
-      if (used.has(version.version)) {
-        problems.push(
-          `Version number ${version.version} is used twice in ${prototype.slug}/${version.explorationId}`,
-        );
-      }
-      used.add(version.version);
-      seen.set(version.explorationId, used);
+      seen.add(version.version);
     }
   }
 
@@ -150,10 +121,7 @@ export function checkRelationships(data: RegistryData): string[] {
   return problems;
 }
 
-/**
- * Read once per process. The registry only changes when someone commits to
- * it, which means a new build.
- */
+/** Read once per process. The registry only changes when someone commits. */
 let cached: Promise<RegistryData> | null = null;
 
 export function loadRegistry(): Promise<RegistryData> {

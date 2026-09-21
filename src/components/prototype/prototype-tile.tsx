@@ -5,16 +5,9 @@ import Link from "next/link";
 import { FileIntoProject } from "@/components/prototype/file-into-project";
 import { PreviewSurface } from "@/components/ui/preview-surface";
 import { useStudio } from "@/lib/data/studio-store";
-import { formatUpdated, statusLabel } from "@/lib/format";
+import { formatUpdated } from "@/lib/format";
 import type { Prototype } from "@/lib/registry/types";
 import type { ViewMode } from "@/lib/use-view-mode";
-
-const statusTone: Record<Prototype["status"], string> = {
-  exploring: "bg-foreground-subtle",
-  "in-review": "bg-review",
-  shipped: "bg-success",
-  parked: "bg-border-strong",
-};
 
 /** One prototype, in either view mode. */
 export function PrototypeTile({
@@ -75,15 +68,12 @@ export function PrototypeTile({
           <div
             className={`flex items-center gap-2 text-xs text-foreground-subtle ${grid ? "mt-0.5" : "shrink-0"}`}
           >
-            <span className="flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className={`size-1.5 rounded-full ${statusTone[prototype.status]}`}
-              />
-              {statusLabel[prototype.status]}
-            </span>
-            <span aria-hidden>·</span>
             <span>{formatUpdated(prototype.updatedAt)}</span>
+            <span aria-hidden>·</span>
+            <span>
+              {prototype.versions.length}{" "}
+              {prototype.versions.length === 1 ? "version" : "versions"}
+            </span>
             {project ? (
               <>
                 <span aria-hidden>·</span>

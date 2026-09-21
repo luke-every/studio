@@ -10,14 +10,10 @@ import { loadRegistry } from "../src/lib/registry/load";
 async function main() {
   try {
     const data = await loadRegistry();
-    const explorations = data.prototypes.reduce(
-      (total, prototype) => total + prototype.explorations.length,
-      0,
-    );
 
     console.log("Registry");
     console.log(`  ✓ ${data.teams.length} teams, ${data.projects.length} projects`);
-    console.log(`  ✓ ${data.prototypes.length} prototypes, ${explorations} explorations`);
+    console.log(`  ✓ ${data.prototypes.length} prototypes`);
     console.log(`  ✓ ${data.versions.length} versions`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);

@@ -1,159 +1,147 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import { FocusPlaceholder, MotionFocusLayer } from "@/components/motion";
-import { useStudio } from "@/lib/data/studio-store";
+import { VersionRail } from "@/components/prototype/version-rail";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
-import type { Exploration, Prototype } from "@/lib/registry/types";
-import { formatUpdated, statusLabel } from "@/lib/format";
+import { useStudio } from "@/lib/data/studio-store";
+import { formatUpdated } from "@/lib/format";
+import { avatarUrl } from "@/lib/registry/people";
+import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
 
 /**
- * The prototype detail view.
+ * A prototype.
  *
- * It shows the team's **selected** direction, not the newest work: someone
- * can be mid-experiment on a later version without changing what the team
- * regards as current. Who chose it, and when, is shown because that is the
- * part a shared link otherwise loses.
+ * Three things, in order of how much they matter: the prototype itself, what
+ * it is, and how it got here. Everything else that used to be on this page —
+ * a status, a context note, a separate design question — was metadata nobody
+ * filled in honestly, and an empty field reads worse than no field.
+ *
+ * Choosing a version swaps the frame to that version's own files. The choice
+ * lives in the URL, so a link to a particular version is a link somebody
+ * else can open.
  */
-export function PrototypeDetail({
-  prototype,
-  exploration,
-}: {
-  prototype: Prototype;
-  exploration: Exploration;
-}) {
-  const [focused, setFocused] = useState(false);
+export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const { teams, markOpened } = useStudio();
-  const current = prototype.selected.version;
+  const fromUrl = useUrlVersion();
+  const [chosen, setChosen] = useState<string | null>(null);
+
   useEffect(() => {
     markOpened(prototype.slug);
   }, [markOpened, prototype.slug]);
 
-  const others = prototype.explorations.filter(
-    (candidate) => candidate.id !== exploration.id,
-  );
-  const teamName =
-    teams.find((team) => team.slug === prototype.teamSlug)?.name ?? "Team";
+  // The address bar is the source of truth for which version is on screen,
+  // so a link to one is a link somebody else can open.
+  const wanted = chosen ?? fromUrl;
+  const selected =
+    prototype.versions.find((version) => version.version === wanted) ?? prototype.current;
+
+  const choose = (version: PrototypeVersion) => {
+    setChosen(version.version);
+    const url = new URL(window.location.href);
+    if (version.id === prototype.current.id) url.searchParams.delete("v");
+    else url.searchParams.set("v", version.version);
+    window.history.replaceState(null, "", url);
+  };
+
+  const team = teams.find((candidate) => candidate.slug === prototype.teamSlug);
+  const historic = selected.id !== prototype.current.id;
 
   return (
-    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-10 sm:px-8 sm:py-14">
+    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-8 sm:px-8 sm:py-10">
       <Link
         href={`/teams/${prototype.teamSlug}`}
         className="text-xs text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"
       >
-        ← {teamName}
+        ← {team?.name ?? "Team"}
       </Link>
 
-      {/* Identity stays quiet; the prototype itself is the loud part. */}
-      <header className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-end">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <span className="text-eyebrow">{statusLabel[prototype.status]}</span>
-            <span className="text-eyebrow">·</span>
-            <span className="text-eyebrow">{formatUpdated(prototype.updatedAt)}</span>
-          </div>
-
-          <h1 className="mt-3 text-xl font-medium tracking-[var(--tracking-tight)] text-foreground">
+      <header className="mt-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
             {prototype.name}
           </h1>
-
-          <p className="mt-3 max-w-[58ch] text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
-            {prototype.description}
-          </p>
+          {prototype.description ? (
+            <p className="mt-2 max-w-[68ch] text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
+              {prototype.description}
+            </p>
+          ) : null}
         </div>
 
-        <div className="max-w-[42ch] border-l border-border pl-4">
-          <p className="text-eyebrow">The question</p>
-          <p className="mt-1.5 text-md leading-[var(--leading-snug)] text-foreground">
-            {prototype.designQuestion}
-          </p>
+        <div className="flex items-center gap-2 text-xs text-foreground-subtle">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={avatarUrl(prototype.owner)}
+            alt=""
+            width={20}
+            height={20}
+            className="size-5 rounded-full bg-surface-inset"
+          />
+          <span>{prototype.owner.name}</span>
+          <span aria-hidden>·</span>
+          <span>{formatUpdated(prototype.updatedAt)}</span>
         </div>
       </header>
 
-      {/* The prototype itself, at its own size — no phone frame, nothing
-       * cropped. That shape belongs to thumbnails. */}
-      <section className="mt-10">
-        <div className="relative">
-          {focused ? (
-            <FocusPlaceholder className="h-[min(72dvh,46rem)] w-full" />
-          ) : (
-            <PrototypeFrame
-              url={exploration.preview.url}
-              title={prototype.name}
-              className="h-[min(72dvh,46rem)] w-full"
-            />
-          )}
-
-          <div className="absolute right-4 top-4 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setFocused(true)}
-              className="rounded-[var(--r-sm)] border border-border bg-surface-elevated/85 px-2.5 py-1 text-xs text-foreground backdrop-blur-md transition-colors duration-[var(--dur-fast)] hover:bg-surface-elevated"
-            >
-              Focus
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-12 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-        <div>
-          <p className="text-eyebrow">Current direction</p>
-          <h2 className="mt-3 text-md font-medium tracking-[var(--tracking-tight)] text-foreground">
-            {exploration.title} · {current.id}
-          </h2>
-          <p className="mt-3 max-w-[58ch] text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
-            {current.summary}
-          </p>
-          <p className="mt-4 max-w-[58ch] text-sm leading-[var(--leading-relaxed)] text-foreground">
-            {current.why}
-          </p>
-          <p className="mt-5 text-xs text-foreground-subtle">
-            Saved by {current.author.name} · Chosen as the current direction by{" "}
-            {prototype.selected.by.name} on {formatUpdated(prototype.selected.at)}
-          </p>
-        </div>
-
-        <aside className="flex flex-col gap-8">
-          <div className="text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
-            <p className="text-eyebrow">Context</p>
-            <p className="mt-3">{prototype.context}</p>
-          </div>
-
-          {others.length > 0 ? (
-            <div>
-              <p className="text-eyebrow">Other explorations</p>
-              <ul className="mt-3 flex flex-col gap-3">
-                {others.map((other) => (
-                  <li key={other.id} className="text-sm">
-                    <p className="text-foreground">{other.title}</p>
-                    <p className="mt-0.5 text-xs text-foreground-subtle">
-                      {other.author.name} · {other.versions.length}{" "}
-                      {other.versions.length === 1 ? "version" : "versions"}
-                    </p>
-                  </li>
-                ))}
-              </ul>
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-10">
+        <div className="min-w-0">
+          {historic ? (
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <span className="text-foreground">
+                Looking at {selected.version}, not the current version.
+              </span>
+              <button
+                type="button"
+                onClick={() => choose(prototype.current)}
+                className="text-foreground-muted underline underline-offset-2 hover:text-foreground"
+              >
+                Back to {prototype.current.version}
+              </button>
             </div>
           ) : null}
+
+          <PrototypeFrame
+            url={selected.url}
+            title={`${prototype.name} ${selected.version}`}
+            className="h-[min(78dvh,52rem)] w-full"
+          />
+        </div>
+
+        <aside className="min-w-0">
+          <h2 className="text-eyebrow">Versions</h2>
+          <div className="mt-2">
+            <VersionRail
+              versions={prototype.versions}
+              selectedId={selected.id}
+              currentId={prototype.current.id}
+              onSelect={choose}
+            />
+          </div>
         </aside>
-      </section>
-
-      <MotionFocusLayer
-        open={focused}
-        onClose={() => setFocused(false)}
-        label={`${prototype.name} — focus mode`}
-      >
-        <PrototypeFrame
-          url={exploration.preview.url}
-          title={prototype.name}
-          bleed
-          className="h-[min(92dvh,100%)] w-full max-w-[var(--bp-xl)]"
-        />
-      </MotionFocusLayer>
-
+      </div>
     </div>
+  );
+}
+
+/**
+ * Which version the address bar is asking for.
+ *
+ * Read as an external store rather than with useSearchParams, which would
+ * force this page out of prerendering and put a server round trip in front
+ * of every prototype. The server snapshot is null, so the page ships showing
+ * the current version and corrects itself on hydration if a link asked for
+ * another one.
+ */
+function useUrlVersion() {
+  const subscribe = useCallback((listener: () => void) => {
+    window.addEventListener("popstate", listener);
+    return () => window.removeEventListener("popstate", listener);
+  }, []);
+
+  return useSyncExternalStore(
+    subscribe,
+    () => new URLSearchParams(window.location.search).get("v"),
+    () => null,
   );
 }

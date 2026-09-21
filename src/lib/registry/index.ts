@@ -1,7 +1,14 @@
 import "server-only";
 
 import { readRegistry } from "./read";
-import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
+import type {
+  Person,
+  Project,
+  Prototype,
+  PrototypeVersion,
+  RegistrySnapshot,
+  Team,
+} from "./types";
 
 /** The registry's public read API. Nothing above this knows where data lives. */
 
@@ -34,16 +41,7 @@ export async function getPrototype(slug: string): Promise<Prototype | undefined>
   return (await getPrototypes()).find((prototype) => prototype.slug === slug);
 }
 
-/** Every saved version of a prototype, across all its explorations. */
+/** Every saved version of a prototype, newest first. */
 export async function getPrototypeHistory(slug: string): Promise<PrototypeVersion[]> {
-  const prototype = await getPrototype(slug);
-  if (!prototype) return [];
-  return prototype.explorations
-    .flatMap((exploration) => exploration.versions)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-/** The team's current direction — not the latest work. */
-export async function getSelected(slug: string) {
-  return (await getPrototype(slug))?.selected;
+  return (await getPrototype(slug))?.versions ?? [];
 }

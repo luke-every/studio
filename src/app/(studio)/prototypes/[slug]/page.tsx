@@ -12,6 +12,5 @@ export default async function PrototypePage({ params }: PageProps<"/prototypes/[
   const prototype = await getPrototype(slug);
   if (!prototype) notFound();
 
-  // The team's current direction, not the newest work.
-  return <PrototypeDetail prototype={prototype} exploration={prototype.selected.exploration} />;
+  return <PrototypeDetail prototype={prototype} />;
 }
