@@ -2,58 +2,93 @@
 
 import { motion as m } from "motion/react";
 
-import { motionRegister } from "@/lib/motion";
+import { MOTION_ENABLED, motionRegister } from "@/lib/motion";
 import type { PreviewSource } from "@/lib/data/types";
 
+type Size = "sm" | "md" | "lg";
+
+const corner: Record<Size, string> = {
+  sm: "rounded-[var(--r-device-sm)]",
+  md: "rounded-[var(--r-device)]",
+  lg: "rounded-[calc(var(--r-device)*1.4)]",
+};
+
 /**
- * PreviewSurface — the object that travels.
+ * A prototype, as an object on the page.
  *
- * The same component renders a prototype's preview on the hub, on the detail
- * page and inside focus mode. Giving it a stable `layoutId` is what makes the
- * thing you clicked become the thing you land on, rather than one view fading
- * out while another fades in.
+ * Every prototype in the studio is a phone screen, so every preview is the
+ * same shape: iPhone proportions, device corners, and a contact shadow so it
+ * sits on the surface rather than being pasted onto it. One shape everywhere
+ * is what makes a grid of them read as a set of screens.
  *
- * Today it paints a warm placeholder; when the data layer lands it will host a
- * live prototype iframe without anything around it changing.
+ * Today it paints a placeholder; when the data layer lands it hosts a live
+ * prototype without anything around it changing.
  */
 export function PreviewSurface({
   preview,
   layoutId,
   className,
-  caption = true,
+  size = "md",
+  caption = false,
+  lifted = false,
 }: {
   preview: PreviewSource;
   layoutId?: string;
   className?: string;
+  size?: Size;
   caption?: boolean;
+  /** Raises the shadow — for a preview that is being focused or hovered. */
+  lifted?: boolean;
 }) {
+  const body = (
+    <>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.18] mix-blend-soft-light"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 24% 16%, #fff 0, transparent 46%), radial-gradient(circle at 78% 74%, #000 0, transparent 52%)",
+        }}
+      />
+      {/* A hairline inside the corner keeps the screen crisp against a light
+       * background without drawing a visible border. */}
+      <div
+        aria-hidden
+        className={`pointer-events-none absolute inset-0 ${corner[size]} ring-1 ring-inset ring-[#000]/10`}
+      />
+      {caption ? (
+        <span className="absolute bottom-3 left-0 right-0 text-center text-2xs uppercase tracking-[var(--tracking-caps)] text-[#121211]/50">
+          {preview.caption}
+        </span>
+      ) : null}
+    </>
+  );
+
+  const classes = `relative isolate overflow-hidden aspect-device ${corner[size]} ${
+    lifted ? "shadow-[var(--elev-device-lifted)]" : "shadow-[var(--elev-device)]"
+  } ${className ?? ""}`;
+
+  const style = {
+    backgroundImage: `linear-gradient(155deg, ${preview.tint[0]}, ${preview.tint[1]})`,
+  };
+
+  if (!MOTION_ENABLED) {
+    return (
+      <div className={classes} style={style}>
+        {body}
+      </div>
+    );
+  }
+
   return (
     <m.div
       layoutId={layoutId}
       layout
       transition={motionRegister.spatial}
-      className={`relative isolate overflow-hidden rounded-[var(--r-md)] border border-border ${className ?? ""}`}
-      style={{
-        backgroundImage: `linear-gradient(145deg, ${preview.tint[0]}, ${preview.tint[1]})`,
-      }}
+      className={classes}
+      style={style}
     >
-      {/* A soft paper grain keeps the placeholder from reading as a flat swatch. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.16] mix-blend-soft-light"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 20% 20%, #fff 0, transparent 45%), radial-gradient(circle at 80% 70%, #000 0, transparent 50%)",
-        }}
-      />
-      {caption ? (
-        <m.span
-          layout="position"
-          className="absolute bottom-2.5 left-3 text-2xs tracking-[var(--tracking-caps)] uppercase text-[#121211]/50"
-        >
-          {preview.caption}
-        </m.span>
-      ) : null}
+      {body}
     </m.div>
   );
 }

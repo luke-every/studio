@@ -52,30 +52,30 @@ export type PreviewSource = {
   url?: string;
 };
 
-export type ProjectStatus = "active" | "on-hold" | "complete";
+export type TeamStatus = "active" | "on-hold" | "complete";
 
 /**
- * A project is the unit of work the team organises around. Prototypes belong
- * to exactly one project, and the hub is a view of projects first.
+ * A team is how the studio is grouped: the part of the business the work
+ * belongs to. Prototypes belong to exactly one team, and the overview is a
+ * view of teams first.
  */
-export type Project = {
+export type Team = {
   slug: string;
   name: string;
-  /** Who or what the work is for. */
-  client: string;
+  /** What this team is responsible for, in a few words. */
+  remit: string;
   description: string;
-  status: ProjectStatus;
+  status: TeamStatus;
   lead: Person;
   members: Person[];
-  /** ISO date, derived from the prototypes inside it. */
   createdAt: string;
   archived: boolean;
 };
 
 export type Prototype = {
   slug: string;
-  /** The project this prototype belongs to. */
-  projectSlug: string;
+  /** The team this prototype belongs to. */
+  teamSlug: string;
   name: string;
   description: string;
   /** The question this prototype exists to answer. */

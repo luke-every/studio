@@ -9,6 +9,20 @@ CSS-variable design tokens · Git · Vercel.
 
 ---
 
+## Motion is currently OFF
+
+`MOTION_ENABLED` in `src/lib/motion/config.ts` is `false`. Every state change
+is instant: no route transition, no shared-element travel, no layout
+animation, no enter/exit easing. Layers still mount, unmount and trap focus.
+
+The vocabulary, tokens and primitives below all read that flag and stay in
+place, so motion can be reintroduced **one interaction at a time** and judged
+on its own merits. Do not flip the flag back on wholesale.
+
+Everything below describes how motion works when it is enabled.
+
+---
+
 ## Motion and interaction principles
 
 Prototype Studio is a dynamic interface. Never assume a view is static.
@@ -115,18 +129,24 @@ without touching a component.
 
 ## Structure
 
-Projects are the top level. Prototypes belong to exactly one project, and a
+Teams are the top level. Prototypes belong to exactly one team, and a
 prototype has explorations, which have versions.
 
-- `/` — recent prototypes as a quiet horizontal strip, then the projects grid.
-  The strip must stay lower in the hierarchy than the projects beneath it.
-- `/projects/[slug]` — the prototypes inside a project.
+- `/` — recent prototypes as a quiet horizontal strip, then the teams grid.
+  The strip must stay lower in the hierarchy than the teams beneath it.
+- `/teams/[slug]` — the prototypes inside a team.
 - `/prototypes` — everything, newest first.
 - `/prototypes/[slug]` — a single prototype.
 
+Side nav is Home, All, Archive, each with an icon, then the teams.
+
 Grid is the default arrangement everywhere, with a grid/list switcher whose
-choice is remembered. Grid and list are two arrangements of one collection,
-never two component trees — the switch animates the objects into place.
+choice is remembered per scope.
+
+**Every prototype is a phone screen.** Previews are always iPhone proportions
+(`aspect-device`), with device corners (`--r-device`) and a contact shadow
+(`--elev-device`). One shape everywhere is what makes a grid of them read as
+a set of screens.
 
 ---
 

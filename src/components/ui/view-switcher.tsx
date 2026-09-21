@@ -2,7 +2,7 @@
 
 import { motion as m } from "motion/react";
 
-import { layoutId, useMotionLanguage } from "@/lib/motion";
+import { MOTION_ENABLED, layoutId, useMotionLanguage } from "@/lib/motion";
 import type { ViewMode } from "@/lib/use-view-mode";
 
 const options: { mode: ViewMode; label: string }[] = [
@@ -69,11 +69,15 @@ export function ViewSwitcher({
             }`}
           >
             {selected ? (
-              <m.span
-                layoutId={`${layoutId.viewModeIndicator}:${scope}`}
-                transition={motion.enter("spatial")}
-                className="absolute inset-0 rounded-[var(--r-xs)] bg-surface-hover"
-              />
+              MOTION_ENABLED ? (
+                <m.span
+                  layoutId={`${layoutId.viewModeIndicator}:${scope}`}
+                  transition={motion.enter("spatial")}
+                  className="absolute inset-0 rounded-[var(--r-xs)] bg-surface-hover"
+                />
+              ) : (
+                <span className="absolute inset-0 rounded-[var(--r-xs)] bg-surface-hover" />
+              )
             ) : null}
             <span className="relative">
               {option.mode === "grid" ? <GridGlyph /> : <ListGlyph />}

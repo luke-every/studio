@@ -11,7 +11,7 @@ import type { Prototype } from "./types";
 export const prototypes: Prototype[] = [
   {
     slug: "quiz-results",
-    projectSlug: "onboarding-2026",
+    teamSlug: "acquisition",
     name: "Quiz results",
     description:
       "What someone sees the moment the quiz finishes — and whether it feels like a recommendation or a receipt.",
@@ -100,7 +100,7 @@ export const prototypes: Prototype[] = [
   },
   {
     slug: "subscription-pause",
-    projectSlug: "subscription",
+    teamSlug: "retention",
     name: "Pausing a subscription",
     description:
       "The moment someone wants to stop for a while. Making it easy without making it thoughtless.",
@@ -150,7 +150,7 @@ export const prototypes: Prototype[] = [
   },
   {
     slug: "ingredient-story",
-    projectSlug: "storefront",
+    teamSlug: "acquisition",
     name: "Ingredient story",
     description:
       "Where a product came from, told on the product page without turning it into a brochure.",
@@ -189,7 +189,7 @@ export const prototypes: Prototype[] = [
   },
   {
     slug: "reorder-nudge",
-    projectSlug: "lifecycle",
+    teamSlug: "retention",
     name: "Reorder nudge",
     description:
       "Noticing that someone is probably running low, and saying so without being creepy about it.",
@@ -228,7 +228,7 @@ export const prototypes: Prototype[] = [
   },
   {
     slug: "gift-flow",
-    projectSlug: "storefront",
+    teamSlug: "playground",
     name: "Gifting",
     description: "Buying for someone else, including the part where they find out.",
     designQuestion: "Who is the interface actually for — the buyer or the recipient?",
@@ -271,7 +271,7 @@ export const prototypes: Prototype[] = [
  */
 function sketch(input: {
   slug: string;
-  projectSlug: string;
+  teamSlug: string;
   name: string;
   description: string;
   designQuestion: string;
@@ -289,7 +289,7 @@ function sketch(input: {
 
   return {
     slug: input.slug,
-    projectSlug: input.projectSlug,
+    teamSlug: input.teamSlug,
     name: input.name,
     description: input.description,
     designQuestion: input.designQuestion,
@@ -328,7 +328,7 @@ function sketch(input: {
 prototypes.push(
   sketch({
     slug: "quiz-question-pacing",
-    projectSlug: "onboarding-2026",
+    teamSlug: "acquisition",
     name: "Question pacing",
     description: "How many questions we can ask before people start guessing to get to the end.",
     designQuestion: "Where is the line between thorough and tiring?",
@@ -349,7 +349,7 @@ prototypes.push(
   }),
   sketch({
     slug: "quiz-entry-point",
-    projectSlug: "onboarding-2026",
+    teamSlug: "acquisition",
     name: "Entry point",
     description: "Where the quiz is offered, and what we promise before someone starts it.",
     designQuestion: "What makes starting feel worth the two minutes?",
@@ -370,7 +370,7 @@ prototypes.push(
   }),
   sketch({
     slug: "plan-change",
-    projectSlug: "subscription",
+    teamSlug: "retention",
     name: "Changing a plan",
     description: "Moving up, down or sideways without talking to anyone.",
     designQuestion: "Can a plan change be reversible enough that nobody fears making it?",
@@ -391,7 +391,7 @@ prototypes.push(
   }),
   sketch({
     slug: "pdp-nutrition",
-    projectSlug: "storefront",
+    teamSlug: "acquisition",
     name: "Nutrition at a glance",
     description: "The numbers people actually check, without the wall of a full panel.",
     designQuestion: "Which four numbers decide a purchase?",
@@ -411,8 +411,50 @@ prototypes.push(
     },
   }),
   sketch({
+    slug: "shelf-scanner",
+    teamSlug: "playground",
+    name: "Shelf scanner",
+    description: "Point a phone at a shelf and get told what is worth eating.",
+    designQuestion: "Is this a product, or just a good demo?",
+    owner: people.mira,
+    status: "exploring",
+    updatedAt: "2026-09-20",
+    tags: ["camera", "experiment"],
+    tint: ["#dfe3e6", "#6d7a84"],
+    caption: "Camera, live",
+    context: "Built in a week to see whether the camera framing felt natural. It does. Everything after that is unresolved.",
+    exploration: {
+      title: "Hold and hover",
+      premise: "No shutter button. Hold the phone up and results appear as you move.",
+      version: "v0.2",
+      summary: "Results resolve continuously instead of on a capture.",
+      why: "A shutter turns browsing into a task. Hovering keeps it browsing.",
+    },
+  }),
+  sketch({
+    slug: "kitchen-timer",
+    teamSlug: "playground",
+    name: "Kitchen timer",
+    description: "A timer that knows what you are cooking, because we sent it to you.",
+    designQuestion: "Where does a brand stop being useful and start being present?",
+    owner: people.tom,
+    status: "exploring",
+    updatedAt: "2026-09-13",
+    tags: ["experiment"],
+    tint: ["#e6e2dc", "#8b8177"],
+    caption: "Twelve minutes",
+    context: "An afternoon's work. Mostly here to argue about whether we should be in someone's kitchen at all.",
+    exploration: {
+      title: "One dish at a time",
+      premise: "The timer only ever knows about the thing you are cooking right now.",
+      version: "v0.1",
+      summary: "A single timer tied to the current recipe, with no list and no history.",
+      why: "The moment it becomes a timer app, we are competing with the phone's own. We are not going to win that.",
+    },
+  }),
+  sketch({
     slug: "winback-note",
-    projectSlug: "lifecycle",
+    teamSlug: "retention",
     name: "Win-back note",
     description: "What we say to someone who left three months ago.",
     designQuestion: "Is there a version of this that is not a discount?",

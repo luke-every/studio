@@ -2,94 +2,95 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion as m } from "motion/react";
+import type { ReactNode } from "react";
 
 import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 import { useStudio } from "@/lib/data/studio-store";
-import { layoutId, useMotionLanguage } from "@/lib/motion";
 
-const sections = [
-  { href: "/", label: "Overview" },
-  { href: "/prototypes", label: "All prototypes" },
-  { href: "/archive", label: "Archive" },
+import { AllIcon, ArchiveIcon, HomeIcon, TeamDot } from "./nav-icons";
+
+const destinations = [
+  { href: "/", label: "Home", icon: HomeIcon },
+  { href: "/prototypes", label: "All", icon: AllIcon },
+  { href: "/archive", label: "Archive", icon: ArchiveIcon },
 ];
 
 function NavLink({
   href,
-  label,
   active,
-  muted = false,
+  icon,
+  children,
 }: {
   href: string;
-  label: string;
   active: boolean;
-  muted?: boolean;
+  icon: ReactNode;
+  children: ReactNode;
 }) {
-  const motion = useMotionLanguage();
-
   return (
     <Link
       href={href}
-      className={`relative flex items-center gap-2 rounded-[var(--r-sm)] px-2.5 py-1.5 text-sm transition-colors duration-[var(--dur-fast)] ${
+      aria-current={active ? "page" : undefined}
+      className={`flex items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-1.5 text-sm ${
         active
-          ? "text-foreground"
-          : muted
-            ? "text-foreground-subtle hover:text-foreground"
-            : "text-foreground-muted hover:text-foreground"
+          ? "bg-surface-hover text-foreground"
+          : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
       }`}
     >
-      {active ? (
-        <m.span
-          layoutId={layoutId.navIndicator}
-          transition={motion.enter("spatial")}
-          className="absolute inset-0 rounded-[var(--r-sm)] bg-surface-hover"
-        />
-      ) : null}
-      <span className="relative truncate">{label}</span>
+      <span className={active ? "text-foreground" : "text-foreground-subtle"}>{icon}</span>
+      <span className="truncate">{children}</span>
     </Link>
   );
 }
 
 /**
- * The side nav is the fixed frame of the studio: it never unmounts, so the
- * active indicator travels between destinations rather than being redrawn,
- * and the content area is the only thing that changes on navigation.
+ * The fixed frame of the studio. It never unmounts, so the content area is
+ * the only thing that changes on navigation.
  */
 export function SideNav() {
   const pathname = usePathname();
-  const { projects } = useStudio();
+  const { teams } = useStudio();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <nav className="flex h-full flex-col gap-7 px-4 py-5">
+    <nav className="flex h-full flex-col gap-7 px-3 py-5">
       <Link href="/" className="px-2.5 text-sm font-medium tracking-[var(--tracking-tight)]">
         Prototype Studio
       </Link>
 
       <div className="flex flex-col gap-0.5">
-        {sections.map((section) => (
-          <NavLink
-            key={section.href}
-            href={section.href}
-            label={section.label}
-            active={isActive(section.href)}
-          />
-        ))}
+        {destinations.map((destination) => {
+          const Icon = destination.icon;
+          return (
+            <NavLink
+              key={destination.href}
+              href={destination.href}
+              active={isActive(destination.href)}
+              icon={<Icon />}
+            >
+              {destination.label}
+            </NavLink>
+          );
+        })}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-        <p className="px-2.5 text-eyebrow">Projects</p>
+        <p className="px-2.5 text-eyebrow">Teams</p>
         <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-          {projects.map((project) => (
+          {teams.map((team) => (
             <NavLink
-              key={project.slug}
-              href={`/projects/${project.slug}`}
-              label={project.name}
-              active={pathname === `/projects/${project.slug}`}
-              muted
-            />
+              key={team.slug}
+              href={`/teams/${team.slug}`}
+              active={pathname === `/teams/${team.slug}`}
+              icon={
+                <span className="grid size-4 place-items-center">
+                  <TeamDot tint={team.previews[0]?.tint[1] ?? "var(--border-strong)"} />
+                </span>
+              }
+            >
+              {team.name}
+            </NavLink>
           ))}
         </div>
       </div>

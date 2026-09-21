@@ -4,7 +4,7 @@ import { PrototypeTile } from "@/components/prototype/prototype-tile";
 import { Collection } from "@/components/ui/collection";
 import { PageHeader } from "@/components/ui/page-header";
 import { ViewSwitcher } from "@/components/ui/view-switcher";
-import { latestPrototypes } from "@/lib/data/projects";
+import { latestPrototypes } from "@/lib/data/teams";
 import { useStudio } from "@/lib/data/studio-store";
 import { useViewMode } from "@/lib/use-view-mode";
 
@@ -23,13 +23,8 @@ export default function AllPrototypesPage() {
 
       <div className="mt-7">
         <Collection mode={mode}>
-          {all.map((prototype, index) => (
-            <PrototypeTile
-              key={prototype.slug}
-              prototype={prototype}
-              mode={mode}
-              index={index}
-            />
+          {all.map((prototype) => (
+            <PrototypeTile key={prototype.slug} prototype={prototype} mode={mode} />
           ))}
         </Collection>
       </div>

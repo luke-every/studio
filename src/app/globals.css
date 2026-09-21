@@ -57,10 +57,14 @@
   --radius-md: var(--r-md);
   --radius-lg: var(--r-lg);
   --radius-xl: var(--r-xl);
+  --radius-device: var(--r-device);
+  --radius-device-sm: var(--r-device-sm);
 
   --shadow-raised: var(--elev-raised);
   --shadow-floating: var(--elev-floating);
   --shadow-overlay: var(--elev-overlay);
+  --shadow-device: var(--elev-device);
+  --shadow-device-lifted: var(--elev-device-lifted);
 
   /* Media queries cannot resolve custom properties, so breakpoints are
    * written literally here and mirrored as --bp-* in tokens.css for use in
@@ -118,6 +122,11 @@
 }
 
 @layer utilities {
+  /* Every prototype is a phone screen, so every preview is one shape. */
+  .aspect-device {
+    aspect-ratio: 9 / 19.5;
+  }
+
   .text-eyebrow {
     font-size: var(--fs-2xs);
     letter-spacing: var(--tracking-caps);

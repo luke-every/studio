@@ -4,24 +4,25 @@ import { AnimatePresence } from "motion/react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { useNavigationDirection } from "@/lib/motion";
+import { MOTION_ENABLED, useNavigationDirection } from "@/lib/motion";
 
 import { MotionPage } from "./motion-page";
 
 /**
- * RouteTransition — keeps both sides of a navigation mounted for a moment.
+ * RouteTransition — keeps both sides of a navigation mounted for a moment, so
+ * shared elements can travel across a route change.
  *
- * This is what makes shared elements work across routes: the outgoing view is
- * still in the tree when the incoming one mounts, so an element carrying the
- * same layoutId on both sides is recognised as one object and travels between
- * them instead of one view fading out while another fades in.
- *
- * `mode="popLayout"` rather than `"wait"`, so the incoming view never waits
- * for the outgoing one to finish — a transition must not delay interaction.
+ * While the global motion switch is off this does nothing at all: the route
+ * renders directly, with no presence wrapper in the navigation path. Keeping
+ * AnimatePresence here with zero-duration transitions is not equivalent — an
+ * exiting tree that never animates can hold the incoming view in an empty
+ * frame, which is exactly the failure this avoids.
  */
 export function RouteTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const direction = useNavigationDirection();
+
+  if (!MOTION_ENABLED) return <>{children}</>;
 
   return (
     <AnimatePresence mode="popLayout" initial={false}>

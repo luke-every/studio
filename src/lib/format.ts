@@ -1,4 +1,4 @@
-import type { ProjectStatus, PrototypeStatus } from "./data/types";
+import type { PrototypeStatus, TeamStatus } from "./data/types";
 
 export const statusLabel: Record<PrototypeStatus, string> = {
   exploring: "Exploring",
@@ -7,7 +7,7 @@ export const statusLabel: Record<PrototypeStatus, string> = {
   parked: "Parked",
 };
 
-export const projectStatusLabel: Record<ProjectStatus, string> = {
+export const teamStatusLabel: Record<TeamStatus, string> = {
   active: "Active",
   "on-hold": "On hold",
   complete: "Complete",

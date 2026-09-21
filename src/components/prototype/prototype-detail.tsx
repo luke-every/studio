@@ -1,13 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { motion as m } from "motion/react";
 import { useState } from "react";
 
 import { FocusPlaceholder, MotionFocusLayer } from "@/components/motion";
 import { useStudio } from "@/lib/data/studio-store";
 import { PreviewSurface } from "@/components/ui/preview-surface";
-import { layoutId, useMotionLanguage } from "@/lib/motion";
 import type { Exploration, Prototype } from "@/lib/data/types";
 import { formatUpdated, statusLabel } from "@/lib/format";
 
@@ -27,18 +25,18 @@ export function PrototypeDetail({
   exploration: Exploration;
 }) {
   const [focused, setFocused] = useState(false);
-  const { projects } = useStudio();
-  const motion = useMotionLanguage();
+  const { teams } = useStudio();
   const current = exploration.versions[0];
-  const projectName = projects.find((p) => p.slug === prototype.projectSlug)?.name ?? "Project";
+  const teamName =
+    teams.find((team) => team.slug === prototype.teamSlug)?.name ?? "Team";
 
   return (
     <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-10 sm:px-8 sm:py-14">
       <Link
-        href={`/projects/${prototype.projectSlug}`}
+        href={`/teams/${prototype.teamSlug}`}
         className="text-xs text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"
       >
-        ← {projectName}
+        ← {teamName}
       </Link>
 
       {/* Identity stays quiet; the prototype itself is the loud part. */}
@@ -50,13 +48,9 @@ export function PrototypeDetail({
             <span className="text-eyebrow">{formatUpdated(prototype.updatedAt)}</span>
           </div>
 
-          <m.h1
-            layoutId={layoutId.prototypeTitle(prototype.slug)}
-            transition={motion.enter("spatial")}
-            className="mt-3 text-xl font-medium tracking-[var(--tracking-tight)] text-foreground"
-          >
+          <h1 className="mt-3 text-xl font-medium tracking-[var(--tracking-tight)] text-foreground">
             {prototype.name}
-          </m.h1>
+          </h1>
 
           <p className="mt-3 max-w-[58ch] text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
             {prototype.description}
@@ -71,17 +65,17 @@ export function PrototypeDetail({
         </div>
       </header>
 
-      {/* The live prototype. In focus mode this exact element travels to the
-       * overlay, so the placeholder below holds its place in the layout. */}
+      {/* The live prototype, as a device on a surface. In focus mode this
+       * same screen is what fills the layer. */}
       <section className="mt-10">
-        <div className="relative aspect-[16/10] w-full sm:aspect-[16/9]">
+        <div className="relative flex justify-center rounded-[var(--r-lg)] border border-border bg-surface-inset py-10">
           {focused ? (
-            <FocusPlaceholder className="size-full" />
+            <FocusPlaceholder className="h-[26rem] aspect-device" />
           ) : (
             <PreviewSurface
               preview={exploration.preview}
-              layoutId={layoutId.prototypePreview(prototype.slug)}
-              className="size-full"
+              size="lg"
+              className="h-[26rem]"
             />
           )}
 
@@ -124,8 +118,9 @@ export function PrototypeDetail({
       >
         <PreviewSurface
           preview={exploration.preview}
-          layoutId={layoutId.prototypePreview(prototype.slug)}
-          className="aspect-[16/10] w-full max-w-[var(--bp-lg)]"
+          size="lg"
+          lifted
+          className="h-[min(82dvh,44rem)]"
         />
       </MotionFocusLayer>
 

@@ -27,13 +27,8 @@ export default function ArchivePage() {
       <div className="mt-7">
         {archived.length > 0 ? (
           <Collection mode={mode}>
-            {archived.map((prototype, index) => (
-              <PrototypeTile
-                key={prototype.slug}
-                prototype={prototype}
-                mode={mode}
-                index={index}
-              />
+            {archived.map((prototype) => (
+              <PrototypeTile key={prototype.slug} prototype={prototype} mode={mode} />
             ))}
           </Collection>
         ) : (

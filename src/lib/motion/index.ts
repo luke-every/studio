@@ -8,3 +8,4 @@ export { useNavigationDirection } from "./use-navigation-direction";
 export type { NavigationDirection } from "./use-navigation-direction";
 export { MotionProvider } from "./motion-provider";
 export { layoutId } from "./layout-ids";
+export { MOTION_ENABLED, INSTANT } from "./config";

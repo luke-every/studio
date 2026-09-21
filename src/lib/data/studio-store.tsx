@@ -11,21 +11,21 @@ import {
 
 import { people } from "./people";
 import { prototypes as seedPrototypes } from "./prototypes";
-import { seedProjects, summariseProject, type ProjectSummary } from "./projects";
-import type { Project, Prototype } from "./types";
+import { seedTeams, summariseTeam, type TeamSummary } from "./teams";
+import type { Prototype, Team } from "./types";
 
 /**
  * The studio's working set.
  *
- * A deliberate placeholder for the data layer: projects created here live in
+ * A deliberate placeholder for the data layer: teams created here live in
  * memory for the session only. It exists so the creation flow can be designed
  * and felt now, and so that swapping in the real source later is a change to
  * this file rather than to every view.
  */
 type StudioContextValue = {
-  projects: ProjectSummary[];
+  teams: TeamSummary[];
   prototypes: Prototype[];
-  addProject: (input: { name: string; client: string; description: string }) => Project;
+  addTeam: (input: { name: string; remit: string; description: string }) => Team;
 };
 
 const StudioContext = createContext<StudioContextValue | null>(null);
@@ -35,17 +35,17 @@ function slugify(name: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  return base || `project-${Date.now()}`;
+  return base || `team-${Date.now()}`;
 }
 
 export function StudioProvider({ children }: { children: ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>(seedProjects);
+  const [teams, setTeams] = useState<Team[]>(seedTeams);
 
-  const addProject = useCallback<StudioContextValue["addProject"]>((input) => {
-    const project: Project = {
+  const addTeam = useCallback<StudioContextValue["addTeam"]>((input) => {
+    const team: Team = {
       slug: slugify(input.name),
       name: input.name.trim(),
-      client: input.client.trim() || "Every Foods",
+      remit: input.remit.trim(),
       description: input.description.trim(),
       status: "active",
       lead: people.luke,
@@ -54,17 +54,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       archived: false,
     };
 
-    setProjects((current) => [project, ...current]);
-    return project;
+    setTeams((current) => [...current, team]);
+    return team;
   }, []);
 
   const value = useMemo<StudioContextValue>(
     () => ({
-      projects: projects.map((project) => summariseProject(project, seedPrototypes)),
+      teams: teams.map((team) => summariseTeam(team, seedPrototypes)),
       prototypes: seedPrototypes,
-      addProject,
+      addTeam,
     }),
-    [projects, addProject],
+    [teams, addTeam],
   );
 
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;

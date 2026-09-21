@@ -3,6 +3,7 @@
 import { LayoutGroup, MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 
+import { INSTANT, MOTION_ENABLED } from "./config";
 import { motionRegister } from "./vocabulary";
 
 /**
@@ -17,6 +18,10 @@ import { motionRegister } from "./vocabulary";
  * the detail page can carry the same layoutId and be treated as one object.
  */
 export function MotionProvider({ children }: { children: ReactNode }) {
+  if (!MOTION_ENABLED) {
+    return <MotionConfig transition={INSTANT}>{children}</MotionConfig>;
+  }
+
   return (
     <MotionConfig reducedMotion="user" transition={motionRegister.normal}>
       <LayoutGroup>{children}</LayoutGroup>

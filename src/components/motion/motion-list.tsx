@@ -3,7 +3,7 @@
 import { motion as m } from "motion/react";
 import type { ReactNode } from "react";
 
-import { motionRegister, spring, stagger, useMotionLanguage } from "@/lib/motion";
+import { MOTION_ENABLED, motionRegister, spring, stagger, useMotionLanguage } from "@/lib/motion";
 
 /**
  * MotionList / MotionItem — a group of things that arrive together and
@@ -34,6 +34,10 @@ export function MotionList({
 }) {
   const MotionComponent = m[Component];
 
+  if (!MOTION_ENABLED) {
+    return <Component className={className}>{children}</Component>;
+  }
+
   return (
     <MotionComponent layout className={className} transition={spring.layout}>
       {children}
@@ -58,6 +62,10 @@ export function MotionItem({
   const motion = useMotionLanguage();
   const MotionComponent = m[Component];
   const delay = Math.min(index, MAX_STAGGERED_ITEMS) * stagger[rhythm];
+
+  if (!MOTION_ENABLED) {
+    return <Component className={className}>{children}</Component>;
+  }
 
   return (
     <MotionComponent

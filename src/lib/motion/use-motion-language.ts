@@ -2,6 +2,7 @@
 
 import { useReducedMotion } from "motion/react";
 
+import { INSTANT, MOTION_ENABLED } from "./config";
 import { exitRegister, motionRegister, type MotionRegister } from "./vocabulary";
 import { travel, type TravelToken } from "./tokens";
 
@@ -21,17 +22,24 @@ import { travel, type TravelToken } from "./tokens";
  *   />
  */
 export function useMotionLanguage() {
-  const reduced = useReducedMotion() ?? false;
+  const prefersReduced = useReducedMotion() ?? false;
+  // With the global switch off, every caller behaves as if motion were reduced.
+  const reduced = prefersReduced || !MOTION_ENABLED;
 
   return {
     reduced,
+    enabled: MOTION_ENABLED,
     /** Transition for an element arriving or changing. */
-    enter: (register: MotionRegister = "normal") => motionRegister[register],
+    enter: (register: MotionRegister = "normal") =>
+      MOTION_ENABLED ? motionRegister[register] : INSTANT,
     /** Transition for an element leaving. */
-    exit: (register: MotionRegister = "normal") => exitRegister[register],
+    exit: (register: MotionRegister = "normal") =>
+      MOTION_ENABLED ? exitRegister[register] : INSTANT,
     /** Vertical/horizontal offset in px, zero when motion is reduced. */
     distance: (token: TravelToken) => (reduced ? 0 : travel[token]),
     /** Scale delta, flattened to 1 when motion is reduced. */
     scale: (value: number) => (reduced ? 1 : value),
+    /** A shared layout id, or undefined while motion is off. */
+    shared: (id: string) => (MOTION_ENABLED ? id : undefined),
   };
 }

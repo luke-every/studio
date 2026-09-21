@@ -3,34 +3,33 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-import { MotionItem, MotionModal } from "@/components/motion";
+import { MotionModal } from "@/components/motion";
 import { useStudio } from "@/lib/data/studio-store";
 import type { ViewMode } from "@/lib/use-view-mode";
 
 /**
- * Creating a project starts from the place projects live, as one more tile in
- * the grid rather than a button in a toolbar — the empty slot is the
- * invitation. The form itself is a modal because it is a short, committed
- * decision, and it lands the user in the new project rather than back where
- * they started.
+ * Creating a team starts from the place teams live, as one more tile in the
+ * grid rather than a button in a toolbar — the empty slot is the invitation.
+ * Submitting lands the user inside the new team rather than back where they
+ * started.
  */
-export function NewProjectTile({ mode, index }: { mode: ViewMode; index: number }) {
+export function NewTeamTile({ mode }: { mode: ViewMode }) {
   const [open, setOpen] = useState(false);
   const grid = mode === "grid";
 
   return (
     <>
-      <MotionItem as="article" index={index} rhythm="tight">
+      <article>
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className={`group flex w-full gap-4 rounded-[var(--r-md)] text-left transition-colors duration-[var(--dur-fast)] ${
+          className={`group flex w-full gap-4 rounded-[var(--r-md)] text-left ${
             grid ? "flex-col" : "flex-row items-center border-b border-divider py-3"
           }`}
         >
           <span
-            className={`grid place-items-center rounded-[var(--r-md)] border border-dashed border-border-strong text-foreground-subtle transition-colors duration-[var(--dur-fast)] group-hover:border-foreground-muted group-hover:text-foreground-muted ${
-              grid ? "aspect-[4/3] w-full" : "aspect-[4/3] w-24 shrink-0"
+            className={`grid place-items-center rounded-[var(--r-lg)] border border-dashed border-border-strong text-foreground-subtle transition-colors duration-[var(--dur-fast)] group-hover:border-foreground-muted group-hover:text-foreground-muted ${
+              grid ? "aspect-[5/3] w-full" : "aspect-[5/3] w-28 shrink-0"
             }`}
           >
             <svg viewBox="0 0 16 16" aria-hidden className="size-4">
@@ -43,53 +42,58 @@ export function NewProjectTile({ mode, index }: { mode: ViewMode; index: number 
             </svg>
           </span>
 
-          <span className="flex min-w-0 flex-col gap-1">
+          <span className="flex min-w-0 flex-col gap-0.5">
             <span className="text-md font-medium tracking-[var(--tracking-tight)] text-foreground">
-              New project
+              New team
             </span>
-            <span className="text-sm text-foreground-subtle">
+            <span className="text-xs text-foreground-subtle">
               Somewhere to put the next question.
             </span>
           </span>
         </button>
-      </MotionItem>
+      </article>
 
-      <NewProjectDialog open={open} onClose={() => setOpen(false)} />
+      <NewTeamDialog open={open} onClose={() => setOpen(false)} />
     </>
   );
 }
 
-function NewProjectDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { addProject } = useStudio();
+function NewTeamDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { addTeam } = useStudio();
   const router = useRouter();
   const [name, setName] = useState("");
-  const [client, setClient] = useState("");
+  const [remit, setRemit] = useState("");
   const [description, setDescription] = useState("");
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
 
-    const project = addProject({ name, client, description });
+    const team = addTeam({ name, remit, description });
     setName("");
-    setClient("");
+    setRemit("");
     setDescription("");
     onClose();
-    router.push(`/projects/${project.slug}`);
+    router.push(`/teams/${team.slug}`);
   };
 
   return (
-    <MotionModal open={open} onClose={onClose} label="New project">
+    <MotionModal open={open} onClose={onClose} label="New team">
       <form onSubmit={submit} className="flex flex-col gap-5">
         <div>
-          <h2 className="text-md font-medium tracking-[var(--tracking-tight)]">New project</h2>
+          <h2 className="text-md font-medium tracking-[var(--tracking-tight)]">New team</h2>
           <p className="mt-1 text-sm text-foreground-muted">
-            A project is a body of work. Prototypes live inside it.
+            A team is a part of the business. Prototypes live inside it.
           </p>
         </div>
 
-        <Field label="Name" value={name} onChange={setName} placeholder="Checkout" autoFocus />
-        <Field label="For" value={client} onChange={setClient} placeholder="Every Foods" />
+        <Field label="Name" value={name} onChange={setName} placeholder="Activation" autoFocus />
+        <Field
+          label="Remit"
+          value={remit}
+          onChange={setRemit}
+          placeholder="What this team is responsible for."
+        />
         <Field
           label="What is it about"
           value={description}
@@ -109,9 +113,9 @@ function NewProjectDialog({ open, onClose }: { open: boolean; onClose: () => voi
           <button
             type="submit"
             disabled={!name.trim()}
-            className="rounded-[var(--r-sm)] bg-accent px-3 py-1.5 text-sm text-accent-foreground transition-opacity duration-[var(--dur-fast)] disabled:opacity-40"
+            className="rounded-[var(--r-sm)] bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-40"
           >
-            Create project
+            Create team
           </button>
         </div>
       </form>
