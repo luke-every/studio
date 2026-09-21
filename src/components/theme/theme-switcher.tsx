@@ -39,7 +39,7 @@ export function ThemeSwitcher() {
           onClick={() => setOpen((value) => !value)}
           aria-haspopup="menu"
           aria-expanded={open}
-          className="flex h-8 items-center gap-2 rounded-[var(--r-full)] border border-border px-3 text-xs text-foreground-muted transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover hover:text-foreground"
+          className="flex h-6 items-center gap-1.5 rounded-[var(--r-sm)] border border-border px-2 text-xs text-foreground-muted transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover hover:text-foreground"
         >
           <span
             aria-hidden

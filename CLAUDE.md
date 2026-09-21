@@ -113,13 +113,37 @@ without touching a component.
 
 ---
 
+## Structure
+
+Projects are the top level. Prototypes belong to exactly one project, and a
+prototype has explorations, which have versions.
+
+- `/` — recent prototypes as a quiet horizontal strip, then the projects grid.
+  The strip must stay lower in the hierarchy than the projects beneath it.
+- `/projects/[slug]` — the prototypes inside a project.
+- `/prototypes` — everything, newest first.
+- `/prototypes/[slug]` — a single prototype.
+
+Grid is the default arrangement everywhere, with a grid/list switcher whose
+choice is remembered. Grid and list are two arrangements of one collection,
+never two component trees — the switch animates the objects into place.
+
+---
+
 ## Product feel
 
 Calm, human, visual, precise, warm, tactile, intentional, responsive.
 
+**Visual reference: Programa.design.** Neutral and quiet. Small type, thin
+hairline borders, small radii, near-monochrome, generous whitespace, and the
+thumbnails doing the visual work. Colour is a signal — a status dot, a state —
+never decoration.
+
+**Sans-serif only.** One family throughout. No serif display face, no mono.
+
 Clarity, hierarchy, restraint, continuity and progressive disclosure from
-Apple. Warmth, storytelling, exploration and authored content from Airbnb.
-Neither one's visual styling.
+Apple. Warmth, storytelling and exploration from Airbnb. Neither one's visual
+styling.
 
 It must not read as Linear, Notion, Jira, GitHub, a developer dashboard, or a
 generated SaaS template. Language in the interface is written the way the team

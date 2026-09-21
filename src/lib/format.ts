@@ -1,10 +1,16 @@
-import type { PrototypeStatus } from "./data/types";
+import type { ProjectStatus, PrototypeStatus } from "./data/types";
 
 export const statusLabel: Record<PrototypeStatus, string> = {
   exploring: "Exploring",
   "in-review": "In review",
   shipped: "Shipped",
   parked: "Parked",
+};
+
+export const projectStatusLabel: Record<ProjectStatus, string> = {
+  active: "Active",
+  "on-hold": "On hold",
+  complete: "Complete",
 };
 
 /**

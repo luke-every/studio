@@ -67,7 +67,7 @@ export function MotionFocusLayer({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-[var(--r-full)] border border-border bg-surface-elevated px-3 py-1.5 text-xs text-foreground transition-colors duration-[var(--dur-fast)] hover:bg-surface-hover"
+              className="rounded-[var(--r-sm)] border border-border bg-surface-elevated px-2.5 py-1 text-xs text-foreground transition-colors duration-[var(--dur-fast)] hover:bg-surface-hover"
             >
               Close
             </button>

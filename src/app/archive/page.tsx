@@ -1,27 +1,47 @@
-import { MotionList } from "@/components/motion";
-import { PrototypeRow } from "@/components/prototype/prototype-row";
-import { prototypes } from "@/lib/data/prototypes";
+"use client";
+
+import { PrototypeTile } from "@/components/prototype/prototype-tile";
+import { Collection } from "@/components/ui/collection";
+import { PageHeader } from "@/components/ui/page-header";
+import { ViewSwitcher } from "@/components/ui/view-switcher";
+import { useStudio } from "@/lib/data/studio-store";
+import { useViewMode } from "@/lib/use-view-mode";
 
 export default function ArchivePage() {
+  const { prototypes } = useStudio();
+  const [mode, setMode] = useViewMode("prototypes");
   const archived = prototypes.filter((prototype) => prototype.archived);
 
   return (
-    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-12 sm:px-8 sm:py-16">
-      <div className="max-w-[46ch]">
-        <p className="text-eyebrow">Archive</p>
-        <h1 className="mt-3 font-serif text-2xl leading-[var(--leading-tight)] tracking-[var(--tracking-tight)] text-foreground">
-          Put down, not thrown away.
-        </h1>
-        <p className="mt-4 text-md leading-[var(--leading-relaxed)] text-foreground-muted">
-          Work we stopped for a reason. The reason is usually the useful part.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-8 sm:px-8 sm:py-10">
+      <PageHeader
+        title="Archive"
+        description="Work we stopped for a reason. The reason is usually the useful part."
+        actions={
+          archived.length > 0 ? (
+            <ViewSwitcher mode={mode} onChange={setMode} scope="prototypes" />
+          ) : null
+        }
+      />
 
-      <MotionList className="mt-12 flex flex-col gap-2 sm:mt-16">
-        {archived.map((prototype, index) => (
-          <PrototypeRow key={prototype.slug} prototype={prototype} index={index} />
-        ))}
-      </MotionList>
+      <div className="mt-7">
+        {archived.length > 0 ? (
+          <Collection mode={mode}>
+            {archived.map((prototype, index) => (
+              <PrototypeTile
+                key={prototype.slug}
+                prototype={prototype}
+                mode={mode}
+                index={index}
+              />
+            ))}
+          </Collection>
+        ) : (
+          <p className="max-w-[40ch] py-10 text-sm text-foreground-muted">
+            Nothing archived yet. Everything we have started is still open.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

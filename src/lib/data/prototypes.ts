@@ -11,6 +11,7 @@ import type { Prototype } from "./types";
 export const prototypes: Prototype[] = [
   {
     slug: "quiz-results",
+    projectSlug: "onboarding-2026",
     name: "Quiz results",
     description:
       "What someone sees the moment the quiz finishes — and whether it feels like a recommendation or a receipt.",
@@ -99,6 +100,7 @@ export const prototypes: Prototype[] = [
   },
   {
     slug: "subscription-pause",
+    projectSlug: "subscription",
     name: "Pausing a subscription",
     description:
       "The moment someone wants to stop for a while. Making it easy without making it thoughtless.",
@@ -148,6 +150,7 @@ export const prototypes: Prototype[] = [
   },
   {
     slug: "ingredient-story",
+    projectSlug: "storefront",
     name: "Ingredient story",
     description:
       "Where a product came from, told on the product page without turning it into a brochure.",
@@ -186,6 +189,7 @@ export const prototypes: Prototype[] = [
   },
   {
     slug: "reorder-nudge",
+    projectSlug: "lifecycle",
     name: "Reorder nudge",
     description:
       "Noticing that someone is probably running low, and saying so without being creepy about it.",
@@ -224,6 +228,7 @@ export const prototypes: Prototype[] = [
   },
   {
     slug: "gift-flow",
+    projectSlug: "storefront",
     name: "Gifting",
     description: "Buying for someone else, including the part where they find out.",
     designQuestion: "Who is the interface actually for — the buyer or the recipient?",
@@ -259,6 +264,174 @@ export const prototypes: Prototype[] = [
     ],
   },
 ];
+
+/**
+ * Lighter fixtures. Enough shape to populate a project, without pretending to
+ * a history that has not happened yet.
+ */
+function sketch(input: {
+  slug: string;
+  projectSlug: string;
+  name: string;
+  description: string;
+  designQuestion: string;
+  owner: Prototype["owner"];
+  status: Prototype["status"];
+  updatedAt: string;
+  tags: string[];
+  tint: [string, string];
+  caption: string;
+  context: string;
+  exploration: { title: string; premise: string; version: string; summary: string; why: string };
+  archived?: boolean;
+}): Prototype {
+  const preview = { tint: input.tint, caption: input.caption };
+
+  return {
+    slug: input.slug,
+    projectSlug: input.projectSlug,
+    name: input.name,
+    description: input.description,
+    designQuestion: input.designQuestion,
+    owner: input.owner,
+    collaborators: [],
+    status: input.status,
+    updatedAt: input.updatedAt,
+    archived: input.archived ?? false,
+    tags: input.tags,
+    preview,
+    currentExplorationId: "main",
+    context: input.context,
+    explorations: [
+      {
+        id: "main",
+        title: input.exploration.title,
+        premise: input.exploration.premise,
+        author: input.owner,
+        preview,
+        versions: [
+          {
+            id: input.exploration.version,
+            title: input.exploration.title,
+            summary: input.exploration.summary,
+            why: input.exploration.why,
+            author: input.owner,
+            date: input.updatedAt,
+            preview,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+prototypes.push(
+  sketch({
+    slug: "quiz-question-pacing",
+    projectSlug: "onboarding-2026",
+    name: "Question pacing",
+    description: "How many questions we can ask before people start guessing to get to the end.",
+    designQuestion: "Where is the line between thorough and tiring?",
+    owner: people.mira,
+    status: "exploring",
+    updatedAt: "2026-09-19",
+    tags: ["onboarding"],
+    tint: ["#e8e6e1", "#8b8880"],
+    caption: "Six questions, paced",
+    context: "Drop-off climbs sharply after question seven, and the answers after it get noticeably less considered.",
+    exploration: {
+      title: "One question per screen",
+      premise: "Give each question the whole screen and let progress do the reassuring.",
+      version: "v0.3",
+      summary: "One question at a time, with a quiet progress line rather than a counter.",
+      why: "A counter invites bargaining. A line just shows movement.",
+    },
+  }),
+  sketch({
+    slug: "quiz-entry-point",
+    projectSlug: "onboarding-2026",
+    name: "Entry point",
+    description: "Where the quiz is offered, and what we promise before someone starts it.",
+    designQuestion: "What makes starting feel worth the two minutes?",
+    owner: people.luke,
+    status: "in-review",
+    updatedAt: "2026-09-14",
+    tags: ["onboarding", "homepage"],
+    tint: ["#e4e5e3", "#7f837e"],
+    caption: "The invitation",
+    context: "The current entry says 'Take the quiz'. It says nothing about what you get back.",
+    exploration: {
+      title: "Promise the outcome",
+      premise: "Lead with what you end up with, not with what you have to do.",
+      version: "v0.2",
+      summary: "Entry copy names the result rather than the activity.",
+      why: "People weigh effort against outcome. We were only ever showing them the effort.",
+    },
+  }),
+  sketch({
+    slug: "plan-change",
+    projectSlug: "subscription",
+    name: "Changing a plan",
+    description: "Moving up, down or sideways without talking to anyone.",
+    designQuestion: "Can a plan change be reversible enough that nobody fears making it?",
+    owner: people.tom,
+    status: "exploring",
+    updatedAt: "2026-09-10",
+    tags: ["account"],
+    tint: ["#e7e6e2", "#86837c"],
+    caption: "Before and after",
+    context: "Plan changes are the second most common support request after pauses.",
+    exploration: {
+      title: "Show the next delivery",
+      premise: "Every plan change is really a question about the next box. Answer that first.",
+      version: "v0.2",
+      summary: "The next delivery is previewed as it will be after the change.",
+      why: "Abstract plan names mean nothing. The box arriving on Thursday means everything.",
+    },
+  }),
+  sketch({
+    slug: "pdp-nutrition",
+    projectSlug: "storefront",
+    name: "Nutrition at a glance",
+    description: "The numbers people actually check, without the wall of a full panel.",
+    designQuestion: "Which four numbers decide a purchase?",
+    owner: people.sarah,
+    status: "in-review",
+    updatedAt: "2026-09-17",
+    tags: ["pdp"],
+    tint: ["#e9e8e3", "#8a8781"],
+    caption: "Four numbers",
+    context: "Session replays show people opening the nutrition tab, scanning, and closing it within four seconds.",
+    exploration: {
+      title: "Four up front",
+      premise: "Surface the four most-checked numbers inline; keep the full panel one tap away.",
+      version: "v0.4",
+      summary: "Protein, fibre, sugar and calories shown inline under the price.",
+      why: "Four seconds is not reading. It is looking for something specific.",
+    },
+  }),
+  sketch({
+    slug: "winback-note",
+    projectSlug: "lifecycle",
+    name: "Win-back note",
+    description: "What we say to someone who left three months ago.",
+    designQuestion: "Is there a version of this that is not a discount?",
+    owner: people.tom,
+    status: "parked",
+    updatedAt: "2026-07-22",
+    tags: ["lifecycle", "email"],
+    tint: ["#e6e5e1", "#8d8a84"],
+    caption: "Three months later",
+    context: "Parked while we work out whether we have anything to say that is not a percentage off.",
+    exploration: {
+      title: "Say what changed",
+      premise: "Tell them what is different now. If nothing is, do not send anything.",
+      version: "v0.1",
+      summary: "The note leads with what has changed since they left.",
+      why: "A discount says we want them back. Saying what changed gives them a reason to come.",
+    },
+  }),
+);
 
 export function getPrototype(slug: string): Prototype | undefined {
   return prototypes.find((prototype) => prototype.slug === slug);

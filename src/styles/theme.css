@@ -15,8 +15,8 @@
  * ------------------------------------------------------------------------- */
 
 :root {
-  --background: var(--paper-100);
-  --background-sunken: var(--paper-200);
+  --background: var(--paper-200);
+  --background-sunken: var(--paper-300);
   --foreground: var(--ink-900);
   --foreground-muted: var(--ink-500);
   --foreground-subtle: var(--ink-400);
@@ -31,17 +31,19 @@
   --border-strong: var(--ink-400);
   --divider: var(--alpha-ink-08);
 
-  --accent: var(--clay-500);
-  --accent-hover: var(--clay-600);
+  /* The accent is ink. Emphasis comes from contrast and weight, not hue. */
+  --accent: var(--ink-900);
+  --accent-hover: var(--ink-700);
   --accent-foreground: var(--paper-50);
-  --accent-muted: color-mix(in oklab, var(--clay-500) 12%, transparent);
+  --accent-muted: var(--alpha-ink-08);
 
-  --destructive: var(--rust-500);
+  --destructive: var(--signal-stop);
   --destructive-foreground: var(--paper-50);
-  --success: var(--moss-500);
+  --success: var(--signal-live);
   --success-foreground: var(--paper-50);
+  --review: var(--signal-review);
 
-  --focus-ring: var(--clay-500);
+  --focus-ring: var(--ink-900);
   --scrim: color-mix(in oklab, var(--ink-900) 32%, transparent);
 
   --shadow-color-mix: var(--alpha-ink-12);
@@ -66,17 +68,18 @@
     --border-strong: var(--alpha-paper-16);
     --divider: var(--alpha-paper-06);
 
-    --accent: var(--clay-400);
-    --accent-hover: #e89b76;
+    --accent: var(--paper-100);
+    --accent-hover: var(--paper-50);
     --accent-foreground: var(--ink-900);
-    --accent-muted: color-mix(in oklab, var(--clay-400) 16%, transparent);
+    --accent-muted: var(--alpha-paper-10);
 
-    --destructive: var(--rust-400);
+    --destructive: var(--signal-stop-soft);
     --destructive-foreground: var(--ink-900);
-    --success: var(--moss-400);
+    --success: var(--signal-live-soft);
     --success-foreground: var(--ink-900);
+    --review: var(--signal-review-soft);
 
-    --focus-ring: var(--clay-400);
+    --focus-ring: var(--paper-100);
     --scrim: color-mix(in oklab, #000000 58%, transparent);
 
     --elev-raised: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px -4px rgb(0 0 0 / 0.45);
@@ -103,17 +106,18 @@
   --border-strong: var(--alpha-paper-16);
   --divider: var(--alpha-paper-06);
 
-  --accent: var(--clay-400);
-  --accent-hover: #e89b76;
+  --accent: var(--paper-100);
+  --accent-hover: var(--paper-50);
   --accent-foreground: var(--ink-900);
-  --accent-muted: color-mix(in oklab, var(--clay-400) 16%, transparent);
+  --accent-muted: var(--alpha-paper-10);
 
-  --destructive: var(--rust-400);
+  --destructive: var(--signal-stop-soft);
   --destructive-foreground: var(--ink-900);
-  --success: var(--moss-400);
+  --success: var(--signal-live-soft);
   --success-foreground: var(--ink-900);
+  --review: var(--signal-review-soft);
 
-  --focus-ring: var(--clay-400);
+  --focus-ring: var(--paper-100);
   --scrim: color-mix(in oklab, #000000 58%, transparent);
 
   --elev-raised: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px -4px rgb(0 0 0 / 0.45);

@@ -37,10 +37,10 @@
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-scrim: var(--scrim);
+  --color-review: var(--review);
 
+  /* One family, throughout. */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
-  --font-mono: var(--font-mono-stack), ui-monospace, SFMono-Regular, monospace;
 
   --text-2xs: var(--fs-2xs);
   --text-xs: var(--fs-xs);

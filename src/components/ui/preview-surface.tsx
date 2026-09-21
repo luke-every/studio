@@ -32,7 +32,7 @@ export function PreviewSurface({
       layoutId={layoutId}
       layout
       transition={motionRegister.spatial}
-      className={`relative isolate overflow-hidden rounded-[var(--r-lg)] border border-border ${className ?? ""}`}
+      className={`relative isolate overflow-hidden rounded-[var(--r-md)] border border-border ${className ?? ""}`}
       style={{
         backgroundImage: `linear-gradient(145deg, ${preview.tint[0]}, ${preview.tint[1]})`,
       }}
@@ -49,7 +49,7 @@ export function PreviewSurface({
       {caption ? (
         <m.span
           layout="position"
-          className="absolute bottom-3 left-4 text-2xs font-medium tracking-[0.08em] uppercase text-[#17140f]/55"
+          className="absolute bottom-2.5 left-3 text-2xs tracking-[var(--tracking-caps)] uppercase text-[#121211]/50"
         >
           {preview.caption}
         </m.span>

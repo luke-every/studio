@@ -5,6 +5,7 @@ import { motion as m } from "motion/react";
 import { useState } from "react";
 
 import { FocusPlaceholder, MotionFocusLayer } from "@/components/motion";
+import { useStudio } from "@/lib/data/studio-store";
 import { PreviewSurface } from "@/components/ui/preview-surface";
 import { layoutId, useMotionLanguage } from "@/lib/motion";
 import type { Exploration, Prototype } from "@/lib/data/types";
@@ -26,16 +27,18 @@ export function PrototypeDetail({
   exploration: Exploration;
 }) {
   const [focused, setFocused] = useState(false);
+  const { projects } = useStudio();
   const motion = useMotionLanguage();
   const current = exploration.versions[0];
+  const projectName = projects.find((p) => p.slug === prototype.projectSlug)?.name ?? "Project";
 
   return (
     <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-10 sm:px-8 sm:py-14">
       <Link
-        href="/"
-        className="text-sm text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"
+        href={`/projects/${prototype.projectSlug}`}
+        className="text-xs text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"
       >
-        ← Prototypes
+        ← {projectName}
       </Link>
 
       {/* Identity stays quiet; the prototype itself is the loud part. */}
@@ -50,19 +53,22 @@ export function PrototypeDetail({
           <m.h1
             layoutId={layoutId.prototypeTitle(prototype.slug)}
             transition={motion.enter("spatial")}
-            className="mt-3 font-serif text-2xl leading-[var(--leading-tight)] tracking-[var(--tracking-tight)] text-foreground"
+            className="mt-3 text-xl font-medium tracking-[var(--tracking-tight)] text-foreground"
           >
             {prototype.name}
           </m.h1>
 
-          <p className="mt-4 max-w-[58ch] text-md leading-[var(--leading-relaxed)] text-foreground-muted">
+          <p className="mt-3 max-w-[58ch] text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
             {prototype.description}
           </p>
         </div>
 
-        <p className="max-w-[40ch] border-l border-border pl-5 font-serif text-lg leading-[var(--leading-snug)] text-foreground">
-          {prototype.designQuestion}
-        </p>
+        <div className="max-w-[42ch] border-l border-border pl-4">
+          <p className="text-eyebrow">The question</p>
+          <p className="mt-1.5 text-md leading-[var(--leading-snug)] text-foreground">
+            {prototype.designQuestion}
+          </p>
+        </div>
       </header>
 
       {/* The live prototype. In focus mode this exact element travels to the
@@ -83,7 +89,7 @@ export function PrototypeDetail({
             <button
               type="button"
               onClick={() => setFocused(true)}
-              className="rounded-[var(--r-full)] border border-border bg-surface-elevated/80 px-3 py-1.5 text-xs text-foreground backdrop-blur-md transition-colors duration-[var(--dur-fast)] hover:bg-surface-elevated"
+              className="rounded-[var(--r-sm)] border border-border bg-surface-elevated/85 px-2.5 py-1 text-xs text-foreground backdrop-blur-md transition-colors duration-[var(--dur-fast)] hover:bg-surface-elevated"
             >
               Focus
             </button>
@@ -94,13 +100,13 @@ export function PrototypeDetail({
       <section className="mt-12 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div>
           <p className="text-eyebrow">Current exploration</p>
-          <h2 className="mt-3 font-serif text-lg text-foreground">
+          <h2 className="mt-3 text-md font-medium tracking-[var(--tracking-tight)] text-foreground">
             {exploration.title} · {current.id}
           </h2>
-          <p className="mt-3 max-w-[58ch] text-base leading-[var(--leading-relaxed)] text-foreground-muted">
+          <p className="mt-3 max-w-[58ch] text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
             {current.summary}
           </p>
-          <p className="mt-4 max-w-[58ch] text-base leading-[var(--leading-relaxed)] text-foreground">
+          <p className="mt-4 max-w-[58ch] text-sm leading-[var(--leading-relaxed)] text-foreground">
             {current.why}
           </p>
         </div>

@@ -52,8 +52,30 @@ export type PreviewSource = {
   url?: string;
 };
 
+export type ProjectStatus = "active" | "on-hold" | "complete";
+
+/**
+ * A project is the unit of work the team organises around. Prototypes belong
+ * to exactly one project, and the hub is a view of projects first.
+ */
+export type Project = {
+  slug: string;
+  name: string;
+  /** Who or what the work is for. */
+  client: string;
+  description: string;
+  status: ProjectStatus;
+  lead: Person;
+  members: Person[];
+  /** ISO date, derived from the prototypes inside it. */
+  createdAt: string;
+  archived: boolean;
+};
+
 export type Prototype = {
   slug: string;
+  /** The project this prototype belongs to. */
+  projectSlug: string;
   name: string;
   description: string;
   /** The question this prototype exists to answer. */

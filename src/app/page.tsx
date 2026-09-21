@@ -1,34 +1,52 @@
-import { MotionList } from "@/components/motion";
-import { PrototypeRow } from "@/components/prototype/prototype-row";
-import { prototypes } from "@/lib/data/prototypes";
+"use client";
+
+import { LatestStrip } from "@/components/home/latest-strip";
+import { NewProjectTile } from "@/components/project/new-project";
+import { ProjectCard } from "@/components/project/project-card";
+import { Collection } from "@/components/ui/collection";
+import { PageHeader } from "@/components/ui/page-header";
+import { ViewSwitcher } from "@/components/ui/view-switcher";
+import { latestPrototypes } from "@/lib/data/projects";
+import { useStudio } from "@/lib/data/studio-store";
+import { useViewMode } from "@/lib/use-view-mode";
 
 /**
- * The hub, in its foundation form: the editorial list only.
+ * The overview.
  *
- * Filters, search, the grid/list switcher and the command menu arrive in the
- * hub stage — the point of this version is that the architecture underneath
- * (tokens, theme, motion, shared elements) is already carrying it.
+ * Two bands, deliberately unequal: a quiet strip of recent prototypes for
+ * picking up where you left off, and beneath it the projects — the actual
+ * structure of the studio, and the reason to be on this page.
  */
-export default function HubPage() {
-  const active = prototypes.filter((prototype) => !prototype.archived);
+export default function HomePage() {
+  const { projects, prototypes } = useStudio();
+  const [mode, setMode] = useViewMode("projects");
+  const recent = latestPrototypes(8, prototypes);
 
   return (
-    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-12 sm:px-8 sm:py-16">
-      <div className="max-w-[46ch]">
-        <p className="text-eyebrow">Prototype Studio</p>
-        <h1 className="mt-3 font-serif text-2xl leading-[var(--leading-tight)] tracking-[var(--tracking-tight)] text-foreground">
-          Explore what we&rsquo;re making.
-        </h1>
-        <p className="mt-4 text-md leading-[var(--leading-relaxed)] text-foreground-muted">
-          Work in progress, with the thinking attached. Open anything.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-8 sm:px-8 sm:py-10">
+      <LatestStrip prototypes={recent} />
 
-      <MotionList className="mt-12 flex flex-col gap-2 sm:mt-16">
-        {active.map((prototype, index) => (
-          <PrototypeRow key={prototype.slug} prototype={prototype} index={index} />
-        ))}
-      </MotionList>
+      <div className="mt-12 border-t border-divider pt-8 sm:mt-14">
+        <PageHeader
+          title="Projects"
+          description="Every piece of work we have open, and the prototypes inside it."
+          actions={<ViewSwitcher mode={mode} onChange={setMode} scope="projects" />}
+        />
+
+        <div className="mt-7">
+          <Collection mode={mode}>
+            {projects.map((project, index) => (
+              <ProjectCard
+                key={project.slug}
+                project={project}
+                mode={mode}
+                index={index}
+              />
+            ))}
+            <NewProjectTile mode={mode} index={projects.length} />
+          </Collection>
+        </div>
+      </div>
     </div>
   );
 }

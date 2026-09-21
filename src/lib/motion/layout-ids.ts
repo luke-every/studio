@@ -7,6 +7,8 @@
  * having ids built inline at call sites.
  */
 export const layoutId = {
+  projectThumbnail: (slug: string) => `project-thumbnail:${slug}`,
+  projectTitle: (slug: string) => `project-title:${slug}`,
   prototypePreview: (slug: string) => `prototype-preview:${slug}`,
   prototypeTitle: (slug: string) => `prototype-title:${slug}`,
   prototypeMeta: (slug: string) => `prototype-meta:${slug}`,
