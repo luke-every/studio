@@ -1,32 +1,57 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Keep the door shut.
+ * The door, checked here and only here.
  *
- * The check itself lives in lib/gate; this only decides who gets sent to it.
- * Middleware runs on the edge without Node crypto, so it looks for the
- * cookie's presence and leaves verifying it to the pages, which do have the
- * password to compare against.
+ * This used to be verified in the root layout as well, which meant every
+ * page read a cookie — and a page that reads a cookie cannot be
+ * prerendered. With a password set in production that quietly turned the
+ * whole studio dynamic: every navigation became a server round trip, which
+ * is exactly the delay it felt like.
+ *
+ * Middleware runs before the page and has no such cost, so the check lives
+ * here and the pages stay static. Web Crypto rather than node:crypto,
+ * because middleware runs on the edge runtime.
  */
-export function middleware(request: NextRequest) {
+
+const encoder = new TextEncoder();
+
+function base64url(bytes: ArrayBuffer) {
+  return Buffer.from(bytes).toString("base64url");
+}
+
+/** Must match the signature written by lib/gate. */
+async function signature(password: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return base64url(await crypto.subtle.sign("HMAC", key, encoder.encode("prototype-studio")));
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Prototypes are deliberately outside the door, so a prototype link can be
+  // shared with someone who does not have the word.
   const exempt =
     pathname === "/unlock" ||
-    pathname.startsWith("/_next") ||
     pathname.startsWith("/p/") ||
+    pathname.startsWith("/_next") ||
     pathname === "/favicon.ico";
 
   if (exempt) return NextResponse.next();
 
-  const locked = Boolean(process.env.STUDIO_PASSWORD?.trim());
-  const hasCookie = request.cookies.has("proto.open");
+  const password = process.env.STUDIO_PASSWORD?.trim();
+  if (!password) return NextResponse.next();
 
-  if (locked && !hasCookie) {
-    return NextResponse.redirect(new URL("/unlock", request.url));
-  }
+  const cookie = request.cookies.get("proto.open")?.value;
+  if (cookie && cookie === (await signature(password))) return NextResponse.next();
 
-  return NextResponse.next();
+  return NextResponse.redirect(new URL("/unlock", request.url));
 }
 
 export const config = {

@@ -13,8 +13,13 @@ import { useStudio } from "@/lib/data/studio-store";
 import { matchesPrototype, useSearch } from "@/lib/search-store";
 import { useViewMode } from "@/lib/use-view-mode";
 
-/** A team, and the prototypes inside it. */
-export default function TeamPage() {
+/**
+ * A team, and the prototypes inside it.
+ *
+ * A client view over the snapshot the layout already loaded, so opening a
+ * team costs nothing: no fetch, no server render, no wait.
+ */
+export function TeamView() {
   const params = useParams<{ slug: string }>();
   const { teams, prototypes, opened } = useStudio();
   const [mode, setMode] = useViewMode("prototypes");

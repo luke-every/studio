@@ -13,8 +13,11 @@ import { formatUpdated } from "@/lib/format";
 import { matchesPrototype, useSearch } from "@/lib/search-store";
 import { useViewMode } from "@/lib/use-view-mode";
 
-/** A project folder: the prototypes filed into it, most recently opened first. */
-export default function ProjectPage() {
+/**
+ * A project folder: the prototypes filed into it, most recently opened
+ * first. A client view over the snapshot the layout already loaded.
+ */
+export function ProjectView() {
   const params = useParams<{ slug: string; projectSlug: string }>();
   const { teams, projects, prototypes, opened } = useStudio();
   const [mode, setMode] = useViewMode("prototypes");
