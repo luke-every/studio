@@ -34,9 +34,11 @@ export async function readSeed(): Promise<RegistryDocument> {
   const { teams, projects } = teamsFileSchema.parse(await readJson(join(root, "teams.json")));
   const prototypesRoot = join(root, "prototypes");
 
-  const slugs = (await readdir(prototypesRoot, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+  // An empty seed has no prototypes directory to trace into the deployment,
+  // which is normal rather than a failure.
+  const slugs = await readdir(prototypesRoot, { withFileTypes: true })
+    .then((entries) => entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name))
+    .catch(() => [] as string[]);
 
   const document: RegistryDocument = { teams, projects, prototypes: [], versions: [] };
 
