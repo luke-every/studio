@@ -1,0 +1,26 @@
+{
+  "id": "testing-quiz-main-v0.1",
+  "prototypeSlug": "testing-quiz",
+  "explorationId": "main",
+  "version": "v0.1",
+  "title": "First version",
+  "summary": "Added to the studio.",
+  "why": "",
+  "author": {
+    "login": "luke",
+    "name": "Luke"
+  },
+  "createdAt": "2026-09-21",
+  "preview": {
+    "tint": [
+      "#e8e6e1",
+      "#8b8880"
+    ],
+    "caption": "Testing quiz",
+    "url": "/p/testing-quiz/main"
+  },
+  "deployment": {
+    "url": "/p/testing-quiz/main",
+    "status": "ready"
+  }
+}
