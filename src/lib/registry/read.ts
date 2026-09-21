@@ -154,10 +154,14 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
         changes: version.changes,
         author: version.author,
         createdAt: version.createdAt,
-        url: version.url,
+        // Served from the studio rather than straight from the store: the
+        // store sends HTML as a download, which no frame can show.
+        url: version.url ? servedPath(record.slug, version.version) : undefined,
+        fileUrl: version.url,
       }));
 
     const current = versions.find((version) => version.id === record.currentVersion) ?? versions[0];
+
 
     return {
       slug: record.slug,
@@ -166,7 +170,10 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
       name: record.name,
       description: record.description,
       owner: record.owner,
-      preview: record.preview,
+      preview: {
+        ...record.preview,
+        url: current?.url ?? undefined,
+      },
       versions,
       current,
       createdBy: record.created.by,
@@ -194,6 +201,11 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
     projects,
     prototypes,
   };
+}
+
+/** Where a version is served from. Paths use v0-2 so a dot never needs escaping. */
+export function servedPath(slug: string, version: string) {
+  return `/p/${slug}/${version.replace(".", "-")}`;
 }
 
 /** "v0.10" is after "v0.9", which a string sort would get backwards. */

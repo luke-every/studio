@@ -27,8 +27,10 @@ export type PrototypeVersion = {
   changes: string;
   author: Person;
   createdAt: string;
-  /** This version's own files, so old versions stay viewable. */
+  /** Where the studio serves this version from, on its own domain. */
   url?: string;
+  /** Where the file actually lives in the store. */
+  fileUrl?: string;
 };
 
 export type Prototype = {

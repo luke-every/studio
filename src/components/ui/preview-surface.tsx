@@ -62,6 +62,7 @@ export function PreviewSurface({
             loading="lazy"
             tabIndex={interactive ? 0 : -1}
             scrolling="no"
+            sandbox="allow-scripts allow-same-origin"
             className={`absolute left-0 top-0 origin-top-left border-0 ${
               interactive ? "" : "pointer-events-none"
             }`}

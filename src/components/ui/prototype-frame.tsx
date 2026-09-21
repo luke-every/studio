@@ -68,7 +68,15 @@ export function PrototypeFrame({
         expanded ? "rounded-none border-0" : "rounded-[var(--r-lg)]"
       } ${className ?? ""}`}
     >
-      <iframe src={url} title={title} className="size-full border-0" />
+      {/* Same-origin now that the studio serves these, so the frame is
+       * sandboxed: a prototype can do everything it needs and cannot reach
+       * out into the page around it. */}
+      <iframe
+        src={url}
+        title={title}
+        className="size-full border-0"
+        sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
+      />
 
       <div className="absolute right-3 top-3 flex items-center gap-1.5 opacity-0 transition-opacity duration-[var(--dur-fast)] focus-within:opacity-100 group-hover/frame:opacity-100">
         {controls}
