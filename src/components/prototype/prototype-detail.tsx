@@ -82,6 +82,7 @@ export function PrototypeDetail({
             <PreviewSurface
               preview={exploration.preview}
               size="lg"
+              interactive
               className="h-[26rem]"
             />
           )}
@@ -150,6 +151,7 @@ export function PrototypeDetail({
           preview={exploration.preview}
           size="lg"
           lifted
+          interactive
           className="h-[min(82dvh,44rem)]"
         />
       </MotionFocusLayer>

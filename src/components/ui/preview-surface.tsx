@@ -7,6 +7,10 @@ import type { PreviewSource } from "@/lib/registry/types";
 
 type Size = "sm" | "md" | "lg";
 
+/** The viewport a prototype is rendered at before being scaled to fit. */
+const FRAME_WIDTH = 390;
+const FRAME_HEIGHT = Math.round((390 * 19.5) / 9);
+
 const corner: Record<Size, string> = {
   sm: "rounded-[var(--r-device-sm)]",
   md: "rounded-[var(--r-device)]",
@@ -31,6 +35,7 @@ export function PreviewSurface({
   size = "md",
   caption = false,
   lifted = false,
+  interactive = false,
 }: {
   preview: PreviewSource;
   layoutId?: string;
@@ -39,21 +44,42 @@ export function PreviewSurface({
   caption?: boolean;
   /** Raises the shadow — for a preview that is being focused or hovered. */
   lifted?: boolean;
+  /** Lets the prototype inside be used, rather than only looked at. */
+  interactive?: boolean;
 }) {
+  // A prototype served from this deployment is shown as itself. Scaled to
+  // the tile with container units, so a grid of these is a grid of real
+  // screens rather than a grid of screenshots that will go stale.
+  const live = preview.url?.startsWith("/") ? preview.url : null;
+
   const body = (
     <>
-      {preview.image ? (
+      {live ? (
+        <div className="absolute inset-0 [container-type:size]">
+          <iframe
+            src={live}
+            title={preview.caption}
+            loading="lazy"
+            tabIndex={interactive ? 0 : -1}
+            scrolling="no"
+            className={`absolute left-0 top-0 origin-top-left border-0 ${
+              interactive ? "" : "pointer-events-none"
+            }`}
+            style={{
+              width: `${FRAME_WIDTH}px`,
+              height: `${FRAME_HEIGHT}px`,
+              transform: `scale(calc(100cqw / ${FRAME_WIDTH}))`,
+            }}
+          />
+        </div>
+      ) : preview.image ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={preview.image}
-          alt=""
-          className="absolute inset-0 size-full object-cover"
-        />
+        <img src={preview.image} alt="" className="absolute inset-0 size-full object-cover" />
       ) : null}
       <div
         aria-hidden
         className={`pointer-events-none absolute inset-0 mix-blend-soft-light ${
-          preview.image ? "opacity-0" : "opacity-[0.18]"
+          live || preview.image ? "opacity-0" : "opacity-[0.18]"
         }`}
         style={{
           backgroundImage:

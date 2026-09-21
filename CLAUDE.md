@@ -196,13 +196,29 @@ adding features:
     written as commits by the person making the change. No database. Do not
     introduce another service without asking.
 
-15. **Setup happens in the app.** No environment variables, no config
-    files. Anything that needs configuring belongs in Settings, and
-    anything missing must be reported there in plain language. If a new
-    feature needs a secret, it is stored per-person or committed to the
-    registry — never added to the deployment.
+15. **Nobody signs in.** There are no accounts and no user records. One
+    shared password opens the studio; one token does the app's writing.
+    Authorship comes from git commits for work pushed from Claude Code, and
+    from a "Created by" field for the one flow where the app cannot know.
+    Do not add authentication.
+16. **Prototypes are files, not links.** Each lives at
+    `public/p/<slug>/<exploration>/index.html` and is served from this
+    deployment. Previews render the real thing rather than a screenshot.
 
 Setup is in `docs/setup.md`.
+
+## Adding a prototype from Claude Code
+
+This is the main way work enters the studio:
+
+```
+npm run proto:add -- --file ./thing.html --name "Thing" --team acquisition \
+  [--project slug] [--exploration name] [--description "..."] [--why "..."]
+```
+
+It copies the HTML into `public/p/` and writes the registry records, then
+you commit — so the version is attributed to whoever made the commit. Run it
+again with the same name to save the next version.
 
 ---
 

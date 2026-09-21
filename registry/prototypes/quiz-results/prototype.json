@@ -3,7 +3,7 @@
   "teamSlug": "acquisition",
   "projectSlug": "quiz-rework",
   "name": "Quiz results",
-  "description": "What someone sees the moment the quiz finishes \u2014 and whether it feels like a recommendation or a receipt.",
+  "description": "What someone sees the moment the quiz finishes — and whether it feels like a recommendation or a receipt.",
   "designQuestion": "Can the results page feel like advice from someone who knows food, rather than an algorithm's output?",
   "context": "Two thirds of people who finish the quiz never scroll past the first recommendation. We assumed that was a content problem; the session replays suggest it is a hierarchy problem.",
   "status": "in-review",
@@ -13,10 +13,11 @@
   ],
   "preview": {
     "tint": [
-      "#f3d9c4",
-      "#c4633d"
+      "#e8e6e1",
+      "#8b8880"
     ],
-    "caption": "Results, editorial layout"
+    "caption": "Quiz results",
+    "url": "/p/quiz-results/editorial"
   },
   "explorations": [
     {
@@ -27,10 +28,11 @@
       "branch": "explore/editorial",
       "preview": {
         "tint": [
-          "#f3d9c4",
-          "#c4633d"
+          "#e8e6e1",
+          "#8b8880"
         ],
-        "caption": "One recommendation, in full"
+        "caption": "Quiz results",
+        "url": "/p/quiz-results/editorial"
       },
       "author": {
         "login": "luke",
@@ -58,12 +60,12 @@
   ],
   "selected": {
     "explorationId": "editorial",
-    "versionId": "quiz-results-editorial-v0.8",
+    "versionId": "quiz-results-editorial-v0.9",
     "by": {
       "login": "luke",
       "name": "Luke"
     },
-    "at": "2026-09-18"
+    "at": "2026-09-21"
   },
   "created": {
     "by": {
@@ -72,7 +74,7 @@
     },
     "at": "2026-09-08"
   },
-  "updatedAt": "2026-09-18",
+  "updatedAt": "2026-09-21",
   "archived": false,
   "owner": {
     "login": "luke",

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "registry:check": "tsx scripts/check-registry.ts"
+    "registry:check": "tsx scripts/check-registry.ts",
+    "proto:add": "tsx scripts/add-prototype.ts"
   },
   "dependencies": {
     "motion": "^13.4.0",

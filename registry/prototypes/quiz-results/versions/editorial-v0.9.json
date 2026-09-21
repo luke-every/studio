@@ -1,0 +1,26 @@
+{
+  "id": "quiz-results-editorial-v0.9",
+  "prototypeSlug": "quiz-results",
+  "explorationId": "editorial",
+  "version": "v0.9",
+  "title": "Quiz results",
+  "summary": "Editorial result page",
+  "why": "",
+  "author": {
+    "login": "luke",
+    "name": "Luke"
+  },
+  "createdAt": "2026-09-21",
+  "preview": {
+    "tint": [
+      "#e8e6e1",
+      "#8b8880"
+    ],
+    "caption": "Quiz results",
+    "url": "/p/quiz-results/editorial"
+  },
+  "deployment": {
+    "url": "/p/quiz-results/editorial",
+    "status": "ready"
+  }
+}

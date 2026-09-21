@@ -1,22 +1,26 @@
 import "server-only";
 
-import type { Session } from "@/lib/auth/session";
-import type {
-  PrototypeRecord,
-  TeamRecord,
-  ProjectRecord,
-  VersionRecord,
-} from "./schema";
+import {
+  GitHubError,
+  readJsonFile,
+  tokenOwner,
+  writeBinaryFile,
+  writeFile,
+} from "./github";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
-import { GitHubError, readJsonFile, writeBinaryFile, writeFile } from "./github";
+import type { PrototypeRecord, ProjectRecord, TeamRecord, VersionRecord } from "./schema";
 
 /**
  * Changing the registry.
  *
  * Each of these reads the current file from GitHub, applies one change,
  * validates the result against the same schema the application reads
- * through, and commits it. Validating before committing is what keeps a bad
- * write from becoming a broken studio for everyone else.
+ * through, and commits it. Validating before committing is what keeps one
+ * bad write from becoming a broken studio for everybody.
+ *
+ * Work made in Claude Code does not come through here — it is committed by
+ * whoever made it, so its authorship is real. These are the changes made by
+ * hand in the app, where the name has to be asked for.
  */
 
 const TEAMS_PATH = "registry/teams.json";
@@ -24,17 +28,11 @@ const TEAMS_PATH = "registry/teams.json";
 const prototypePath = (slug: string) => `registry/prototypes/${slug}/prototype.json`;
 const versionPath = (slug: string, explorationId: string, version: string) =>
   `registry/prototypes/${slug}/versions/${explorationId}-${version}.json`;
+/** Prototypes are served straight out of the deployment at /p/<slug>/. */
+const prototypeFilePath = (slug: string, file: string) => `public/p/${slug}/main/${file}`;
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-/**
- * The person, as stored. The display name travels with the login so
- * attribution still reads properly long after they have moved on.
- */
-function author(session: Session) {
-  return { login: session.login, name: session.name };
 }
 
 export function slugify(name: string, fallback: string) {
@@ -45,33 +43,49 @@ export function slugify(name: string, fallback: string) {
   return base || `${fallback}-${Date.now()}`;
 }
 
-type TeamsFile = { teams: TeamRecord[]; projects: ProjectRecord[] };
-
-async function loadTeamsFile(session: Session) {
-  const file = await readJsonFile<TeamsFile>(session, TEAMS_PATH);
-  if (!file) throw new GitHubError(`${TEAMS_PATH} is missing from the repository.`);
-  return { value: teamsFileSchema.parse(file.value), sha: file.sha };
-}
-
-async function loadPrototype(session: Session, slug: string) {
-  const file = await readJsonFile<PrototypeRecord>(session, prototypePath(slug));
-  if (!file) throw new GitHubError(`No prototype called "${slug}" in the registry.`);
-  return { value: prototypeSchema.parse(file.value), sha: file.sha };
+/**
+ * The person, as stored.
+ *
+ * There are no accounts, so authorship comes from one of two places. A
+ * prototype added by hand carries the name typed on the form, because only
+ * the person at the keyboard knows it. Everything else — a team, a filing,
+ * a change of direction — is attributed to whoever owns the studio's token,
+ * which is a real person rather than "the system".
+ */
+function named(name: string) {
+  const trimmed = name.trim() || "Someone";
+  return { login: slugify(trimmed, "person"), name: trimmed };
 }
 
 const stringify = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 
-export async function createTeam(
-  session: Session,
-  input: { name: string; remit: string; description: string },
-) {
-  const { value, sha } = await loadTeamsFile(session);
+type TeamsFile = { teams: TeamRecord[]; projects: ProjectRecord[] };
+
+async function loadTeamsFile() {
+  const file = await readJsonFile<TeamsFile>(TEAMS_PATH);
+  if (!file) throw new GitHubError(`${TEAMS_PATH} is missing from the repository.`);
+  return { value: teamsFileSchema.parse(file.value), sha: file.sha };
+}
+
+async function loadPrototype(slug: string) {
+  const file = await readJsonFile<PrototypeRecord>(prototypePath(slug));
+  if (!file) throw new GitHubError(`No prototype called "${slug}" in the registry.`);
+  return { value: prototypeSchema.parse(file.value), sha: file.sha };
+}
+
+export async function createTeam(input: {
+  name: string;
+  remit: string;
+  description: string;
+}) {
+  const { value, sha } = await loadTeamsFile();
   const slug = slugify(input.name, "team");
 
   if (value.teams.some((team) => team.slug === slug)) {
     throw new GitHubError(`There is already a team called "${input.name}".`);
   }
 
+  const person = await tokenOwner();
   const next: TeamsFile = {
     ...value,
     teams: [
@@ -82,16 +96,16 @@ export async function createTeam(
         remit: input.remit.trim(),
         description: input.description.trim(),
         status: "active",
-        lead: author(session),
-        members: [author(session)],
-        created: { by: author(session), at: today() },
+        lead: person,
+        members: [person],
+        created: { by: person, at: today() },
         archived: false,
       },
     ],
   };
 
   teamsFileSchema.parse(next);
-  await writeFile(session, `registry: add team "${input.name.trim()}"`, {
+  await writeFile(`registry: add team "${input.name.trim()}"`, {
     path: TEAMS_PATH,
     content: stringify(next),
     sha,
@@ -100,11 +114,8 @@ export async function createTeam(
   return slug;
 }
 
-export async function createProject(
-  session: Session,
-  input: { teamSlug: string; name: string },
-) {
-  const { value, sha } = await loadTeamsFile(session);
+export async function createProject(input: { teamSlug: string; name: string }) {
+  const { value, sha } = await loadTeamsFile();
   const slug = slugify(input.name, "project");
 
   if (!value.teams.some((team) => team.slug === input.teamSlug)) {
@@ -122,13 +133,13 @@ export async function createProject(
         slug,
         teamSlug: input.teamSlug,
         name: input.name.trim(),
-        created: { by: author(session), at: today() },
+        created: { by: await tokenOwner(), at: today() },
       },
     ],
   };
 
   teamsFileSchema.parse(next);
-  await writeFile(session, `registry: add project "${input.name.trim()}"`, {
+  await writeFile(`registry: add project "${input.name.trim()}"`, {
     path: TEAMS_PATH,
     content: stringify(next),
     sha,
@@ -137,16 +148,15 @@ export async function createProject(
   return slug;
 }
 
-export async function filePrototype(
-  session: Session,
-  input: { prototypeSlug: string; projectSlug: string | null },
-) {
-  const { value, sha } = await loadPrototype(session, input.prototypeSlug);
+export async function filePrototype(input: {
+  prototypeSlug: string;
+  projectSlug: string | null;
+}) {
+  const { value, sha } = await loadPrototype(input.prototypeSlug);
   const next: PrototypeRecord = { ...value, projectSlug: input.projectSlug };
 
   prototypeSchema.parse(next);
   await writeFile(
-    session,
     input.projectSlug
       ? `registry: file ${value.name} into ${input.projectSlug}`
       : `registry: remove ${value.name} from its project`,
@@ -155,23 +165,24 @@ export async function filePrototype(
 }
 
 /** Change the team's current direction. Records who chose it, and when. */
-export async function selectDirection(
-  session: Session,
-  input: { prototypeSlug: string; explorationId: string; versionId: string },
-) {
-  const { value, sha } = await loadPrototype(session, input.prototypeSlug);
+export async function selectDirection(input: {
+  prototypeSlug: string;
+  explorationId: string;
+  versionId: string;
+}) {
+  const { value, sha } = await loadPrototype(input.prototypeSlug);
   const next: PrototypeRecord = {
     ...value,
     selected: {
       explorationId: input.explorationId,
       versionId: input.versionId,
-      by: author(session),
+      by: await tokenOwner(),
       at: today(),
     },
   };
 
   prototypeSchema.parse(next);
-  await writeFile(session, `registry: ${value.name} now follows ${input.versionId}`, {
+  await writeFile(`registry: ${value.name} now follows ${input.versionId}`, {
     path: prototypePath(input.prototypeSlug),
     content: stringify(next),
     sha,
@@ -181,49 +192,39 @@ export async function selectDirection(
 /**
  * Adding a prototype by hand.
  *
- * Not everything arrives through the save-a-version workflow — often someone
- * has already built something somewhere else and simply wants it findable.
- * This creates the prototype and its first version in one go, because a
- * prototype with no saved state is not something anyone can look at.
+ * The usual route is Claude Code, which commits the prototype's files and
+ * its registry entry together. This is the other route: someone has an HTML
+ * file and wants it in the studio. The file is committed alongside the
+ * record and served from the deployment, so the prototype is genuinely
+ * here — not a link to somewhere that might go away.
  */
-export async function createPrototype(
-  session: Session,
-  input: {
-    name: string;
-    description: string;
-    designQuestion: string;
-    context: string;
-    teamSlug: string;
-    projectSlug: string | null;
-    url: string;
-    tint: [string, string];
-    image?: { filename: string; bytes: ArrayBuffer };
-  },
-) {
+export async function createPrototype(input: {
+  name: string;
+  description: string;
+  designQuestion: string;
+  teamSlug: string;
+  projectSlug: string | null;
+  by: string;
+  tint: [string, string];
+  html: { bytes: ArrayBuffer };
+}) {
   const slug = slugify(input.name, "prototype");
-  const existing = await readJsonFile(session, prototypePath(slug));
-  if (existing) throw new GitHubError(`There is already a prototype called "${input.name}".`);
-
-  let imagePath: string | undefined;
-  if (input.image) {
-    const extension = input.image.filename.split(".").pop()?.toLowerCase() ?? "png";
-    imagePath = `public/previews/${slug}.${extension}`;
-    await writeBinaryFile(
-      session,
-      `registry: preview image for ${input.name.trim()}`,
-      imagePath,
-      input.image.bytes,
-    );
+  if (await readJsonFile(prototypePath(slug))) {
+    throw new GitHubError(`There is already a prototype called "${input.name}".`);
   }
 
-  const preview = {
-    tint: input.tint,
-    caption: input.name.trim(),
-    ...(input.url ? { url: input.url } : {}),
-    ...(imagePath ? { image: imagePath.replace(/^public/, "") } : {}),
-  };
+  const person = named(input.by);
+  const url = `/p/${slug}/main`;
 
+  await writeBinaryFile(
+    `prototype(${slug}): add files`,
+    prototypeFilePath(slug, "index.html"),
+    input.html.bytes,
+  );
+
+  const preview = { tint: input.tint, caption: input.name.trim(), url };
   const versionId = `${slug}-main-v0.1`;
+
   const version: VersionRecord = versionSchema.parse({
     id: versionId,
     prototypeSlug: slug,
@@ -231,11 +232,11 @@ export async function createPrototype(
     version: "v0.1",
     title: "First version",
     summary: input.description.trim() || "Added to the studio.",
-    why: input.context.trim(),
-    author: author(session),
+    why: input.designQuestion.trim(),
+    author: person,
     createdAt: today(),
     preview,
-    deployment: input.url ? { url: input.url, status: "ready" } : null,
+    deployment: { url, status: "ready" },
   });
 
   const prototype: PrototypeRecord = prototypeSchema.parse({
@@ -245,8 +246,8 @@ export async function createPrototype(
     name: input.name.trim(),
     description: input.description.trim(),
     designQuestion: input.designQuestion.trim(),
-    context: input.context.trim(),
-    owner: author(session),
+    context: "",
+    owner: person,
     collaborators: [],
     status: "exploring",
     tags: [],
@@ -256,27 +257,23 @@ export async function createPrototype(
         id: "main",
         title: "Main",
         premise: input.designQuestion.trim(),
-        author: author(session),
+        author: person,
         status: "selected",
         preview,
       },
     ],
-    selected: {
-      explorationId: "main",
-      versionId,
-      by: author(session),
-      at: today(),
-    },
-    created: { by: author(session), at: today() },
+    selected: { explorationId: "main", versionId, by: person, at: today() },
+    created: { by: person, at: today() },
     updatedAt: today(),
     archived: false,
+    repositoryPath: `public/p/${slug}`,
   });
 
-  await writeFile(session, `registry: add prototype "${input.name.trim()}" v0.1`, {
+  await writeFile(`registry: add prototype "${input.name.trim()}" v0.1`, {
     path: versionPath(slug, "main", "v0.1"),
     content: stringify(version),
   });
-  await writeFile(session, `registry: add prototype "${input.name.trim()}"`, {
+  await writeFile(`registry: add prototype "${input.name.trim()}"`, {
     path: prototypePath(slug),
     content: stringify(prototype),
   });

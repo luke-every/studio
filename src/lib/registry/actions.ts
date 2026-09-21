@@ -2,41 +2,34 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getVerifiedSession } from "@/lib/auth/session";
+import { isUnlocked } from "@/lib/gate";
 
 import * as registry from "./write";
 
 /**
  * Writes.
  *
- * Every one of these is a commit on the team's repository, made with the
- * signed-in person's own GitHub token. Failures are returned rather than
- * thrown, so the interface can say what went wrong without losing what
- * somebody typed.
+ * Every one of these is a commit on the studio's repository. Failures are
+ * returned rather than thrown, so the interface can say what went wrong
+ * without losing what somebody typed.
  *
- * The change is in GitHub immediately; it appears for everyone else once
- * Vercel has finished redeploying, which the interface says plainly rather
- * than pretending to be instant.
+ * The change is in GitHub immediately; it appears for everyone once Vercel
+ * has redeployed, which the interface says plainly rather than pretending
+ * to be instant.
  */
 
-export type WriteResult<T = unknown> =
-  | ({ ok: true } & T)
-  | { ok: false; error: string };
-
-const SIGNED_OUT =
-  "Connect your GitHub account in Settings to make changes.";
+export type WriteResult<T = unknown> = ({ ok: true } & T) | { ok: false; error: string };
 
 async function attempt<T>(
-  work: (session: NonNullable<Awaited<ReturnType<typeof getVerifiedSession>>>) => Promise<T>,
+  work: () => Promise<T>,
   paths: string[],
 ): Promise<WriteResult<{ value: T }>> {
-  // Identity comes from GitHub, not from the cookie, so nothing can be
-  // committed under someone else's name.
-  const session = await getVerifiedSession();
-  if (!session) return { ok: false, error: SIGNED_OUT };
+  if (!(await isUnlocked())) {
+    return { ok: false, error: "The studio is locked." };
+  }
 
   try {
-    const value = await work(session);
+    const value = await work();
     paths.forEach((path) => revalidatePath(path, "layout"));
     return { ok: true, value };
   } catch (error) {
@@ -49,21 +42,18 @@ export async function createTeam(input: {
   remit: string;
   description: string;
 }) {
-  return attempt((session) => registry.createTeam(session, input), ["/"]);
+  return attempt(() => registry.createTeam(input), ["/"]);
 }
 
 export async function createProject(input: { teamSlug: string; name: string }) {
-  return attempt((session) => registry.createProject(session, input), [
-    "/",
-    `/teams/${input.teamSlug}`,
-  ]);
+  return attempt(() => registry.createProject(input), ["/", `/teams/${input.teamSlug}`]);
 }
 
 export async function filePrototype(input: {
   prototypeSlug: string;
   projectSlug: string | null;
 }) {
-  return attempt((session) => registry.filePrototype(session, input), ["/"]);
+  return attempt(() => registry.filePrototype(input), ["/"]);
 }
 
 /** Change the team's current direction. Records who chose it, and when. */
@@ -72,37 +62,44 @@ export async function selectDirection(input: {
   explorationId: string;
   versionId: string;
 }) {
-  return attempt((session) => registry.selectDirection(session, input), [
+  return attempt(() => registry.selectDirection(input), [
     "/",
     `/prototypes/${input.prototypeSlug}`,
   ]);
 }
 
 /**
- * Adding a prototype by hand, for work that was built somewhere else. The
- * image, if there is one, is committed alongside the record.
+ * Adding a prototype by hand, from an HTML file. The file is committed and
+ * served from the deployment, so the prototype is actually here.
  */
 export async function createPrototype(form: FormData) {
-  const image = form.get("image");
-  const hasImage = image instanceof File && image.size > 0;
+  const file = form.get("html");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false as const, error: "Choose an HTML file to upload." };
+  }
+  if (file.size > 4_000_000) {
+    return {
+      ok: false as const,
+      error: "That file is larger than 4MB. Prototypes this big belong in Claude Code.",
+    };
+  }
+
+  const bytes = await file.arrayBuffer();
 
   return attempt(
-    async (session) =>
-      registry.createPrototype(session, {
+    () =>
+      registry.createPrototype({
         name: String(form.get("name") ?? ""),
         description: String(form.get("description") ?? ""),
         designQuestion: String(form.get("designQuestion") ?? ""),
-        context: String(form.get("context") ?? ""),
         teamSlug: String(form.get("teamSlug") ?? ""),
         projectSlug: (form.get("projectSlug") as string) || null,
-        url: String(form.get("url") ?? ""),
+        by: String(form.get("by") ?? ""),
         tint: [
           String(form.get("tintFrom") ?? "#e8e6e1"),
           String(form.get("tintTo") ?? "#8b8880"),
         ],
-        image: hasImage
-          ? { filename: image.name, bytes: await image.arrayBuffer() }
-          : undefined,
+        html: { bytes },
       }),
     ["/"],
   );

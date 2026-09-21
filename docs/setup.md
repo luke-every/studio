@@ -1,83 +1,90 @@
-# Setting the studio up
+# Setting up
 
-There is nothing to configure outside the app. No environment variables, no
-config files, no database. Deploy it and finish setup in **Settings**.
+The studio runs on GitHub and Vercel. No database, no accounts, no sign-in.
 
 ```
-GitHub    the code, and the registry — what everything means
-Vercel    runs the Hub, and hosts the prototype previews
+GitHub    the code, the registry, and the prototypes themselves
+Vercel    runs the Hub and serves the prototypes
 ```
 
-## Deploy
+## Three environment variables, set once in Vercel
 
-Import the repository on Vercel and deploy. That is the whole deployment
-step — Vercel tells the studio which repository it came from, so the
-repository setting answers itself.
+| Variable | What it is |
+| --- | --- |
+| `GITHUB_TOKEN` | A fine-grained token scoped to this repository with **Contents: read and write**. Used only for changes made in the app. |
+| `STUDIO_PASSWORD` | One shared word for the whole team. Not a login — no accounts, no sign-out. |
+| `REGISTRY_REPO` | Only needed outside Vercel. On Vercel the repository is detected. |
 
-## Connect, in the app
+Settings inside the app reports all three, and says what to fix.
 
-Open **Settings**:
+## Two ways work gets in
 
-1. **You** — paste a GitHub personal access token. The button next to the
-   field opens the right page on GitHub. Scope it to this repository and give
-   it **Contents: read and write**; nothing else is needed.
-2. **Repository** — already filled in on Vercel. Change it only to write
-   somewhere else, such as a branch while trying things out.
-3. **Write access** — the studio checks it can actually push, and says what
-   is wrong if it cannot.
+**From Claude Code — the normal way.** Build an HTML prototype, then:
 
-Each person connects their own token, once. There is no shared token, no
-OAuth app to register, and no secret held for the team.
+```
+npm run proto:add -- \
+  --file ./quiz-results.html \
+  --name "Quiz results" \
+  --team acquisition \
+  --project quiz-rework \
+  --exploration editorial \
+  --description "Editorial result page"
+```
 
-## Why tokens rather than "Sign in with GitHub"
+That copies the file to `public/p/<slug>/<exploration>/` and writes the
+registry records beside it. Commit and push; it is live after the deploy.
+Because *you* make the commit, the version is attributed to you — this is
+where real authorship comes from, and why the studio needs no login.
 
-An OAuth app has a client ID and secret that must exist *before* anyone can
-sign in, which means they can only live in environment variables — exactly
-the manual setup this avoids. A token is something each person creates for
-themselves, so the studio needs nothing configured to accept it.
+Running it again with the same name saves the next version (v0.2, v0.3…) and
+makes it the current direction.
 
-The cost is one paste per person instead of one click. For a team this size
-that is a good trade, and it is reversible: OAuth could be added later
-without changing anything that reads a session.
+**By hand in the app.** *Add prototype* on any team page takes an HTML file,
+a name, a team and a "Created by". The file is committed with the studio's
+token and served the same way. This is the only place the studio asks who you
+are, because it is the only place it cannot tell.
 
-## How your token is held
+## Prototypes are files, not links
 
-In an httpOnly cookie on your device, and nowhere else. It is never shown to
-anyone else and never written to the repository.
+Every prototype lives in the repository and is served from this deployment:
 
-The cookie is not encrypted, on purpose: the token *is* the credential, so
-sealing it would protect against nothing that stealing the cookie does not
-already defeat. What matters is that the **name** in the cookie is never
-trusted — every write asks GitHub who the token belongs to, so nobody can
-commit under someone else's name by editing their own cookie.
+```
+public/p/quiz-results/editorial/index.html   →   /p/quiz-results/editorial
+```
 
-Revoking a token on GitHub immediately stops it working here.
+Tiles in the grid are the real thing, rendered small; the detail page is the
+real thing, usable. Nothing goes stale and nothing disappears when someone
+tidies up an account elsewhere.
 
-## People
+This is also what makes remixing somebody's prototype simple later: copying a
+folder is a real operation, copying a link is not.
 
-No accounts to create. Whoever connects is who they are on GitHub, their
-display name is recorded on whatever they create, and avatars come from
-`github.com/<login>.png`. Someone who cannot push can still browse
-everything; Settings tells them why they cannot change anything.
+## The door
 
-## Running it locally
+`STUDIO_PASSWORD` puts one shared word in front of everything. Type it once
+per device. There is no account, nothing to remember, and no sign-out.
+
+Leave it unset locally. Set it in production: without it, anyone who finds
+the URL can add prototypes to the repository.
+
+Prototypes themselves at `/p/…` are deliberately outside the door, so a
+prototype link can be shared with someone who does not have the word.
+
+## Running locally
 
 ```
 npm run dev
 npm run registry:check   # validate the registry without starting the app
 ```
 
-Locally the repository is not detected, so set it once in Settings — it is
-remembered for you, and committed for everyone as soon as you are connected.
-
 ## What lives where
 
 | | |
 | --- | --- |
-| `registry/` | teams, projects, prototypes, versions — the source of truth |
-| `registry/settings.json` | which repository the studio writes to |
-| `public/previews/` | uploaded preview images, committed with their prototype |
+| `registry/` | teams, projects, prototypes, versions — what everything means |
+| `public/p/<slug>/<exploration>/` | the prototypes themselves |
+| `scripts/add-prototype.ts` | the Claude Code route in |
 | `src/lib/registry/read.ts` | reads the registry from this deployment |
 | `src/lib/registry/write.ts` | applies one change and commits it |
 | `src/lib/registry/github.ts` | the only place that talks to the GitHub API |
-| `src/lib/auth/` | connecting an account, and the session cookie |
+| `src/lib/gate.ts` | the shared password |

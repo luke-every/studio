@@ -6,19 +6,21 @@ import { useState, type FormEvent } from "react";
 import { MotionModal } from "@/components/motion";
 import { useStudio } from "@/lib/data/studio-store";
 import { createPrototype } from "@/lib/registry/actions";
-import { useViewer } from "@/lib/viewer";
 
 /**
- * Adding a prototype that was built somewhere else.
+ * Adding a prototype by hand.
  *
- * Not everything arrives through the save-a-version workflow — a PM will
- * have made something in another tool and simply wants it findable. This
- * asks for the least that makes a prototype useful to somebody else: where
- * it is, which team it belongs to, and what question it is asking.
+ * The usual route is Claude Code, which commits the prototype's files and
+ * its registry entry together. This is the other route: someone has an HTML
+ * file and wants it in the studio.
  *
- * The preview image is optional and committed alongside the record. Without
- * one the prototype gets a plain tinted placeholder, which is honest rather
- * than an empty grey box.
+ * The file is uploaded and committed, not linked — so the prototype is
+ * genuinely here, served from this deployment, and cannot quietly disappear
+ * when somebody tidies up their account somewhere else.
+ *
+ * This is also the only place the studio asks who you are, because it is the
+ * only place it cannot tell: work pushed from Claude Code carries the name
+ * of whoever committed it.
  */
 export function AddPrototype({
   teamSlug,
@@ -31,9 +33,6 @@ export function AddPrototype({
   trigger?: "tile" | "button";
 }) {
   const [open, setOpen] = useState(false);
-  const viewer = useViewer();
-
-  if (!viewer) return null;
 
   return (
     <>
@@ -99,10 +98,10 @@ function AddPrototypeDialog({
   const [teamSlug, setTeamSlug] = useState(initialTeam ?? teams[0]?.slug ?? "");
   const [projectSlug, setProjectSlug] = useState(initialProject ?? "");
   const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  const [by, setBy] = useState("");
+  const [html, setHtml] = useState<File | null>(null);
   const [description, setDescription] = useState("");
   const [designQuestion, setDesignQuestion] = useState("");
-  const [image, setImage] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,7 +109,7 @@ function AddPrototypeDialog({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!name.trim() || !teamSlug) return;
+    if (!name.trim() || !teamSlug || !by.trim() || !html) return;
 
     setSaving(true);
     setError(null);
@@ -119,11 +118,10 @@ function AddPrototypeDialog({
     form.set("name", name);
     form.set("description", description);
     form.set("designQuestion", designQuestion);
-    form.set("context", "");
     form.set("teamSlug", teamSlug);
     form.set("projectSlug", projectSlug);
-    form.set("url", url.trim());
-    if (image) form.set("image", image);
+    form.set("by", by.trim());
+    form.set("html", html);
 
     const result = await createPrototype(form);
     setSaving(false);
@@ -135,10 +133,9 @@ function AddPrototypeDialog({
 
     onClose();
     setName("");
-    setUrl("");
     setDescription("");
     setDesignQuestion("");
-    setImage(null);
+    setHtml(null);
     router.refresh();
   };
 
@@ -150,7 +147,7 @@ function AddPrototypeDialog({
             Add a prototype
           </h2>
           <p className="mt-1 text-sm text-foreground-muted">
-            For work made somewhere else. It will be saved as v0.1 under your name.
+            Upload an HTML file. It is saved as v0.1 and committed to the repository.
           </p>
         </div>
 
@@ -164,12 +161,24 @@ function AddPrototypeDialog({
           />
         </Field>
 
-        <Field label="Link" hint="Wherever it can be looked at — a deployment, a Figma prototype.">
+        <Field
+          label="The prototype"
+          required
+          hint="A single HTML file. It is committed to the repository and served from here, so it stays available."
+        >
           <input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://"
-            type="url"
+            type="file"
+            accept=".html,text/html"
+            onChange={(event) => setHtml(event.target.files?.[0] ?? null)}
+            className="text-xs text-foreground-muted file:mr-3 file:rounded-[var(--r-sm)] file:border file:border-border file:bg-surface file:px-2.5 file:py-1.5 file:text-xs file:text-foreground"
+          />
+        </Field>
+
+        <Field label="Created by" required hint="Your name, so the studio knows whose this is.">
+          <input
+            value={by}
+            onChange={(event) => setBy(event.target.value)}
+            placeholder="Sarah"
             className={inputClass}
           />
         </Field>
@@ -229,15 +238,6 @@ function AddPrototypeDialog({
           />
         </Field>
 
-        <Field label="Preview image" hint="Optional. A screenshot, ideally a phone screen.">
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={(event) => setImage(event.target.files?.[0] ?? null)}
-            className="text-xs text-foreground-muted file:mr-3 file:rounded-[var(--r-sm)] file:border file:border-border file:bg-surface file:px-2.5 file:py-1.5 file:text-xs file:text-foreground"
-          />
-        </Field>
-
         {error ? (
           <p className="rounded-[var(--r-sm)] border border-border bg-surface-hover px-3 py-2 text-xs text-foreground">
             {error}
@@ -254,7 +254,7 @@ function AddPrototypeDialog({
           </button>
           <button
             type="submit"
-            disabled={!name.trim() || !teamSlug || saving}
+            disabled={!name.trim() || !teamSlug || !by.trim() || !html || saving}
             className="rounded-[var(--r-sm)] bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-40"
           >
             {saving ? "Adding…" : "Add prototype"}

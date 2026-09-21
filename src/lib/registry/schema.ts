@@ -63,11 +63,24 @@ export const projectSchema = z.object({
   created: attributionSchema,
 });
 
+/**
+ * Where something can be looked at: a path served from this deployment
+ * (the normal case, since prototypes live in the repository) or a full URL
+ * for the occasional thing hosted elsewhere.
+ */
+const location = z
+  .string()
+  .min(1)
+  .refine(
+    (value) => value.startsWith("/") || /^https?:\/\//.test(value),
+    "must be a path like /p/slug/ or a full URL",
+  );
+
 export const previewSchema = z.object({
   tint: z.tuple([z.string(), z.string()]),
   caption: z.string(),
-  /** A live prototype, once one exists. */
-  url: z.string().url().optional(),
+  /** The prototype itself, served from this deployment. */
+  url: location.optional(),
   /** A screenshot committed under public/, referenced by its served path. */
   image: z.string().optional(),
 });
@@ -144,7 +157,7 @@ export const versionSchema = z.object({
    */
   deployment: z
     .object({
-      url: z.string().url(),
+      url: location,
       status: z.enum(["pending", "ready", "failed"]),
     })
     .nullable()
