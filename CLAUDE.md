@@ -89,6 +89,15 @@ value in a component. If nothing fits, question the interaction.
 
 ---
 
+## Primitives
+
+Reach for an existing primitive from `@/components/motion` before writing a new
+animated component. The catalogue, and the reasoning behind each one, is in
+`docs/motion.md`. Shared overlay behaviour (escape, scroll lock, focus trap,
+focus restoration) is `useOverlayBehaviour` — never reimplemented per layer.
+
+---
+
 ## Token discipline
 
 - Raw values live only in `src/styles/tokens.css`.

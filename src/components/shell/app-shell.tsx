@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { RouteTransition } from "@/components/motion";
+
 import { Masthead } from "./masthead";
 
 /**
@@ -11,7 +13,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
       <Masthead />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1">
+        <RouteTransition>{children}</RouteTransition>
+      </main>
     </div>
   );
 }

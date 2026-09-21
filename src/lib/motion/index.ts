@@ -3,5 +3,8 @@ export type { DurationToken, EasingToken, SpringToken, TravelToken } from "./tok
 export { motionRegister, exitRegister, stagger } from "./vocabulary";
 export type { MotionRegister } from "./vocabulary";
 export { useMotionLanguage } from "./use-motion-language";
+export { useOverlayBehaviour } from "./use-overlay-behaviour";
+export { useNavigationDirection } from "./use-navigation-direction";
+export type { NavigationDirection } from "./use-navigation-direction";
 export { MotionProvider } from "./motion-provider";
 export { layoutId } from "./layout-ids";

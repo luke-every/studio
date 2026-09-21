@@ -1,4 +1,4 @@
-import { MotionPage } from "@/components/motion/motion-page";
+import { MotionList } from "@/components/motion";
 import { PrototypeRow } from "@/components/prototype/prototype-row";
 import { prototypes } from "@/lib/data/prototypes";
 
@@ -13,7 +13,7 @@ export default function HubPage() {
   const active = prototypes.filter((prototype) => !prototype.archived);
 
   return (
-    <MotionPage className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-12 sm:px-8 sm:py-16">
+    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-12 sm:px-8 sm:py-16">
       <div className="max-w-[46ch]">
         <p className="text-eyebrow">Prototype Studio</p>
         <h1 className="mt-3 font-serif text-2xl leading-[var(--leading-tight)] tracking-[var(--tracking-tight)] text-foreground">
@@ -24,11 +24,11 @@ export default function HubPage() {
         </p>
       </div>
 
-      <div className="mt-12 flex flex-col gap-2 sm:mt-16">
+      <MotionList className="mt-12 flex flex-col gap-2 sm:mt-16">
         {active.map((prototype, index) => (
           <PrototypeRow key={prototype.slug} prototype={prototype} index={index} />
         ))}
-      </div>
-    </MotionPage>
+      </MotionList>
+    </div>
   );
 }

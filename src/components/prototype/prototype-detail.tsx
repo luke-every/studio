@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { AnimatePresence, motion as m } from "motion/react";
-import { useEffect, useState } from "react";
+import { motion as m } from "motion/react";
+import { useState } from "react";
 
-import { MotionPage } from "@/components/motion/motion-page";
+import { FocusPlaceholder, MotionFocusLayer } from "@/components/motion";
 import { PreviewSurface } from "@/components/ui/preview-surface";
 import { layoutId, useMotionLanguage } from "@/lib/motion";
 import type { Exploration, Prototype } from "@/lib/data/types";
@@ -29,17 +29,8 @@ export function PrototypeDetail({
   const motion = useMotionLanguage();
   const current = exploration.versions[0];
 
-  useEffect(() => {
-    if (!focused) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFocused(false);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [focused]);
-
   return (
-    <MotionPage className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-10 sm:px-8 sm:py-14">
+    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-10 sm:px-8 sm:py-14">
       <Link
         href="/"
         className="text-sm text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"
@@ -79,7 +70,7 @@ export function PrototypeDetail({
       <section className="mt-10">
         <div className="relative aspect-[16/10] w-full sm:aspect-[16/9]">
           {focused ? (
-            <div className="size-full rounded-[var(--r-lg)] border border-dashed border-border" />
+            <FocusPlaceholder className="size-full" />
           ) : (
             <PreviewSurface
               preview={exploration.preview}
@@ -120,37 +111,18 @@ export function PrototypeDetail({
         </aside>
       </section>
 
-      <AnimatePresence>
-        {focused ? (
-          <m.div
-            className="fixed inset-0 flex items-center justify-center p-4 sm:p-10"
-            style={{ zIndex: "var(--z-focus-mode)" }}
-            initial={{ backgroundColor: "rgba(0,0,0,0)" }}
-            animate={{ backgroundColor: "var(--scrim)" }}
-            exit={{ backgroundColor: "rgba(0,0,0,0)" }}
-            transition={motion.enter("immersive")}
-            onClick={() => setFocused(false)}
-          >
-            <PreviewSurface
-              preview={exploration.preview}
-              layoutId={layoutId.prototypePreview(prototype.slug)}
-              className="aspect-[16/10] w-full max-w-[var(--bp-lg)]"
-            />
+      <MotionFocusLayer
+        open={focused}
+        onClose={() => setFocused(false)}
+        label={`${prototype.name} — focus mode`}
+      >
+        <PreviewSurface
+          preview={exploration.preview}
+          layoutId={layoutId.prototypePreview(prototype.slug)}
+          className="aspect-[16/10] w-full max-w-[var(--bp-lg)]"
+        />
+      </MotionFocusLayer>
 
-            <m.button
-              type="button"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={motion.enter("gentle")}
-              onClick={() => setFocused(false)}
-              className="absolute right-5 top-5 rounded-[var(--r-full)] border border-border bg-surface-elevated px-3 py-1.5 text-xs text-foreground"
-            >
-              Close
-            </m.button>
-          </m.div>
-        ) : null}
-      </AnimatePresence>
-    </MotionPage>
+    </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion as m } from "motion/react";
 
+import { MotionItem } from "@/components/motion";
 import { PreviewSurface } from "@/components/ui/preview-surface";
 import { layoutId, useMotionLanguage } from "@/lib/motion";
 import type { Prototype } from "@/lib/data/types";
@@ -18,12 +19,7 @@ export function PrototypeRow({ prototype, index }: { prototype: Prototype; index
   const motion = useMotionLanguage();
 
   return (
-    <m.article
-      layout
-      initial={{ opacity: 0, y: motion.distance("md") }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ ...motion.enter("normal"), delay: index * 0.04 }}
-    >
+    <MotionItem as="article" index={index} rhythm="editorial">
       <Link
         href={`/prototypes/${prototype.slug}`}
         className="group grid grid-cols-1 gap-5 rounded-[var(--r-xl)] p-3 transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] sm:gap-7 sm:p-4"
@@ -64,6 +60,6 @@ export function PrototypeRow({ prototype, index }: { prototype: Prototype; index
           </div>
         </div>
       </Link>
-    </m.article>
+    </MotionItem>
   );
 }

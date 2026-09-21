@@ -4,6 +4,32 @@ Companion to the principles in `CLAUDE.md`. This file answers "which tool do I
 reach for", so that a new interaction built six months from now still speaks
 the same language.
 
+## The primitives
+
+All exported from `@/components/motion`.
+
+| Primitive | The problem it solves |
+| --------- | --------------------- |
+| `RouteTransition` | Keeps the outgoing and incoming route mounted together so shared elements can travel between them. Rendered once, in `AppShell`. Pages do not wrap themselves. |
+| `MotionPage` | The settle-in for content that has no counterpart on the other side of a navigation. Directional: deeper comes up, back comes down, lateral gets no offset. |
+| `MotionList` / `MotionItem` | A group that arrives together and rearranges together. Capped stagger on arrival; layout animation on reorder, filter and view-mode change. |
+| `MotionPanel` | Progressive disclosure in place — the layout is pushed, not covered, so the user keeps their place. |
+| `MotionPopover` | A layer with a visible origin: grows out of its trigger, collapses back into it. Owns outside-click and escape. |
+| `MotionScrim` | The one backdrop, so every layer dims the page identically. |
+| `MotionModal` | A decision the user must deal with. Grows into place, shrinks back out. |
+| `MotionSheet` | Edge-anchored secondary content. Draggable back at its edge; commits on distance or velocity. |
+| `MotionFocusLayer` / `FocusPlaceholder` | A mode change. Animates only the scrim and controls — the caller passes the shared element, which travels from the page. The placeholder holds its vacated space. |
+
+Two things on the original list were deliberately **not** built. `MotionPresence`
+and `MotionLayout` would have been renames of `AnimatePresence` and `layout`
+with no behaviour of their own, and a wrapper that adds nothing is a wrapper
+that hides where the real API is. Use Motion's own directly.
+
+Shared behaviour lives in hooks, not in a base component:
+`useOverlayBehaviour` (escape, scroll lock, focus trap, focus restoration) is
+used by modal, sheet and focus layer; `useNavigationDirection` is used by the
+route transition.
+
 ## Which mechanism
 
 **Shared layout transition** (`layoutId`) — the same object exists in two
