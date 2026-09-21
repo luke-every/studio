@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import { AppShell } from "@/components/shell/app-shell";
 import { MotionProvider } from "@/lib/motion";
 import { StudioProvider } from "@/lib/data/studio-store";
+import { SearchProvider } from "@/lib/search-store";
 import { ThemeProvider, ThemeScript } from "@/lib/theme";
 
 import "./globals.css";
@@ -32,9 +33,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full">
         <ThemeProvider>
           <StudioProvider>
-            <MotionProvider>
-              <AppShell>{children}</AppShell>
-            </MotionProvider>
+            <SearchProvider>
+              <MotionProvider>
+                <AppShell>{children}</AppShell>
+              </MotionProvider>
+            </SearchProvider>
           </StudioProvider>
         </ThemeProvider>
       </body>

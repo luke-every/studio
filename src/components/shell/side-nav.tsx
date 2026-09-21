@@ -7,13 +7,10 @@ import type { ReactNode } from "react";
 import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 import { useStudio } from "@/lib/data/studio-store";
 
-import { AllIcon, ArchiveIcon, HomeIcon, TeamDot } from "./nav-icons";
+import { HomeIcon, TeamDot } from "./nav-icons";
+import { SearchField } from "./search-field";
 
-const destinations = [
-  { href: "/", label: "Home", icon: HomeIcon },
-  { href: "/prototypes", label: "All", icon: AllIcon },
-  { href: "/archive", label: "Archive", icon: ArchiveIcon },
-];
+const destinations = [{ href: "/", label: "Home", icon: HomeIcon }];
 
 function NavLink({
   href,
@@ -59,20 +56,24 @@ export function SideNav() {
         Prototype Studio
       </Link>
 
-      <div className="flex flex-col gap-0.5">
-        {destinations.map((destination) => {
-          const Icon = destination.icon;
-          return (
-            <NavLink
-              key={destination.href}
-              href={destination.href}
-              active={isActive(destination.href)}
-              icon={<Icon />}
-            >
-              {destination.label}
-            </NavLink>
-          );
-        })}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-0.5">
+            {destinations.map((destination) => {
+            const Icon = destination.icon;
+            return (
+              <NavLink
+                key={destination.href}
+                href={destination.href}
+                active={isActive(destination.href)}
+                icon={<Icon />}
+              >
+                {destination.label}
+              </NavLink>
+            );
+          })}
+        </div>
+
+        <SearchField />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-1.5">

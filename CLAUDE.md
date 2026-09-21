@@ -139,13 +139,21 @@ always lists every prototype in the team, filed or not.
 
 - `/` — recent prototypes as a quiet horizontal strip, then the teams grid.
   The strip must stay lower in the hierarchy than the teams beneath it.
-- `/teams/[slug]` — a row of project folders, then every prototype in the
-  team, most recently opened first.
+- `/teams/[slug]` — the team name, a row of project folders, then every
+  prototype in the team, most recently opened first.
 - `/teams/[slug]/projects/[projectSlug]` — the prototypes filed into one.
-- `/prototypes` — everything, newest first.
 - `/prototypes/[slug]` — a single prototype.
 
-Side nav is Home, All, Archive, each with an icon, then the teams.
+Side nav is Home, the search field, then the teams. Nothing else.
+
+**Search is one piece of state for the whole studio**, held in
+`SearchProvider` and typed into the field in the nav. There is no submit and
+no results route: whatever surface the user is on narrows as they type, and
+clearing the field restores it. Any new browsing surface must respect the
+query the same way.
+
+Team pages open with the name and go straight into the work — no remit, no
+status, no lead, no thumbnail in the header.
 
 Grid is the default arrangement everywhere, with a grid/list switcher whose
 choice is remembered per scope.

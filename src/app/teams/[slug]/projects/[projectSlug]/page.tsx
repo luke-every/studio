@@ -9,6 +9,7 @@ import { ViewSwitcher } from "@/components/ui/view-switcher";
 import { useStudio } from "@/lib/data/studio-store";
 import { prototypesInProject } from "@/lib/data/teams";
 import { formatUpdated } from "@/lib/format";
+import { matchesPrototype, useSearch } from "@/lib/search-store";
 import { useViewMode } from "@/lib/use-view-mode";
 
 /** A project folder: the prototypes filed into it, most recently opened first. */
@@ -16,6 +17,7 @@ export default function ProjectPage() {
   const params = useParams<{ slug: string; projectSlug: string }>();
   const { teams, projects, prototypes } = useStudio();
   const [mode, setMode] = useViewMode("prototypes");
+  const { query } = useSearch();
 
   const team = teams.find((candidate) => candidate.slug === params.slug);
   const project = projects.find(
@@ -23,7 +25,9 @@ export default function ProjectPage() {
   );
   if (!team || !project) notFound();
 
-  const contents = prototypesInProject(project.slug, prototypes);
+  const contents = prototypesInProject(project.slug, prototypes).filter((prototype) =>
+    matchesPrototype(prototype, query),
+  );
 
   return (
     <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-8 sm:px-8 sm:py-10">

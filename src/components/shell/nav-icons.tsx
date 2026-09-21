@@ -34,27 +34,6 @@ export function HomeIcon(props: IconProps) {
   );
 }
 
-export function AllIcon(props: IconProps) {
-  return (
-    <Frame {...props}>
-      <rect x="2.5" y="2.5" width="4.5" height="5.5" rx="1.25" />
-      <rect x="9" y="2.5" width="4.5" height="5.5" rx="1.25" />
-      <rect x="2.5" y="10" width="4.5" height="3.5" rx="1.25" />
-      <rect x="9" y="10" width="4.5" height="3.5" rx="1.25" />
-    </Frame>
-  );
-}
-
-export function ArchiveIcon(props: IconProps) {
-  return (
-    <Frame {...props}>
-      <rect x="2.25" y="3" width="11.5" height="3" rx="1" />
-      <path d="M3.25 6v6.25a.75.75 0 0 0 .75.75h8a.75.75 0 0 0 .75-.75V6" />
-      <path d="M6.5 9h3" />
-    </Frame>
-  );
-}
-
 export function TeamDot({ tint }: { tint: string }) {
   return (
     <span
