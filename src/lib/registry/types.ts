@@ -9,12 +9,13 @@
  * Components depend on these types and never on the registry file format.
  */
 
+/**
+ * A person is a GitHub account. Nothing else is stored about them — initials
+ * and avatars are derived from the login (see ./people).
+ */
 export type Person = {
-  id: string;
+  login: string;
   name: string;
-  initials: string;
-  email: string;
-  active: boolean;
 };
 
 export type PreviewSource = {
@@ -117,7 +118,8 @@ export type Project = {
 
 /** Everything the interface needs, resolved in one pass. */
 export type RegistrySnapshot = {
-  users: Person[];
+  /** Everyone who appears anywhere in the registry. Derived, never managed. */
+  people: Person[];
   teams: Team[];
   projects: Project[];
   prototypes: Prototype[];

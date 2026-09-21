@@ -6,7 +6,6 @@
   "title": "Promise the outcome",
   "summary": "Entry copy names the result rather than the activity.",
   "why": "People weigh effort against outcome. We were only ever showing them the effort.",
-  "authorId": "luke",
   "createdAt": "2026-09-14",
   "preview": {
     "tint": [
@@ -15,5 +14,9 @@
     ],
     "caption": "The invitation"
   },
-  "deployment": null
+  "deployment": null,
+  "author": {
+    "login": "luke",
+    "name": "Luke"
+  }
 }

@@ -6,8 +6,6 @@
   "description": "A timer that knows what you are cooking, because we sent it to you.",
   "designQuestion": "Where does a brand stop being useful and start being present?",
   "context": "An afternoon's work. Mostly here to argue about whether we should be in someone's kitchen at all.",
-  "ownerId": "tom",
-  "collaboratorIds": [],
   "status": "exploring",
   "tags": [
     "experiment"
@@ -24,7 +22,6 @@
       "id": "main",
       "title": "One dish at a time",
       "premise": "The timer only ever knows about the thing you are cooking right now.",
-      "authorId": "tom",
       "status": "selected",
       "branch": "explore/main",
       "preview": {
@@ -33,19 +30,34 @@
           "#8b8177"
         ],
         "caption": "Twelve minutes"
+      },
+      "author": {
+        "login": "tom",
+        "name": "Tom"
       }
     }
   ],
   "selected": {
     "explorationId": "main",
     "versionId": "kitchen-timer-main-v0.1",
-    "by": "tom",
+    "by": {
+      "login": "tom",
+      "name": "Tom"
+    },
     "at": "2026-09-13"
   },
   "created": {
-    "by": "tom",
+    "by": {
+      "login": "tom",
+      "name": "Tom"
+    },
     "at": "2026-09-13"
   },
   "updatedAt": "2026-09-13",
-  "archived": false
+  "archived": false,
+  "owner": {
+    "login": "tom",
+    "name": "Tom"
+  },
+  "collaborators": []
 }

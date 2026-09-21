@@ -4,12 +4,8 @@
   "projectSlug": null,
   "name": "Gifting",
   "description": "Buying for someone else, including the part where they find out.",
-  "designQuestion": "Who is the interface actually for — the buyer or the recipient?",
+  "designQuestion": "Who is the interface actually for \u2014 the buyer or the recipient?",
   "context": "Parked until the autumn planning round. The recipient-first framing is the part worth picking back up.",
-  "ownerId": "luke",
-  "collaboratorIds": [
-    "mira"
-  ],
   "status": "parked",
   "tags": [
     "checkout",
@@ -27,7 +23,6 @@
       "id": "recipient-first",
       "title": "Recipient-first",
       "premise": "Design the arrival moment first and work backwards to the purchase.",
-      "authorId": "luke",
       "status": "selected",
       "branch": "explore/recipient-first",
       "preview": {
@@ -36,19 +31,39 @@
           "#b2432f"
         ],
         "caption": "The arrival moment"
+      },
+      "author": {
+        "login": "luke",
+        "name": "Luke"
       }
     }
   ],
   "selected": {
     "explorationId": "recipient-first",
     "versionId": "gift-flow-recipient-first-v0.5",
-    "by": "luke",
+    "by": {
+      "login": "luke",
+      "name": "Luke"
+    },
     "at": "2026-06-04"
   },
   "created": {
-    "by": "luke",
+    "by": {
+      "login": "luke",
+      "name": "Luke"
+    },
     "at": "2026-06-04"
   },
   "updatedAt": "2026-06-04",
-  "archived": true
+  "archived": true,
+  "owner": {
+    "login": "luke",
+    "name": "Luke"
+  },
+  "collaborators": [
+    {
+      "login": "mira",
+      "name": "Mira"
+    }
+  ]
 }

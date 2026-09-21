@@ -6,13 +6,16 @@ import type { ReactNode } from "react";
 
 import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 
-import { UserSwitcher } from "./user-switcher";
+import { ViewerBadge } from "./viewer-badge";
 import { useStudio } from "@/lib/data/studio-store";
 
-import { HomeIcon, TeamDot } from "./nav-icons";
+import { HomeIcon, SettingsIcon, TeamDot } from "./nav-icons";
 import { SearchField } from "./search-field";
 
-const destinations = [{ href: "/", label: "Home", icon: HomeIcon }];
+const destinations = [
+  { href: "/", label: "Home", icon: HomeIcon },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
+];
 
 function NavLink({
   href,
@@ -47,7 +50,7 @@ function NavLink({
  */
 export function SideNav() {
   const pathname = usePathname();
-  const { teams, writable, error, dismissError } = useStudio();
+  const { teams, canWrite, publishing, error, dismissError } = useStudio();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -107,15 +110,20 @@ export function SideNav() {
           {error}
           <span className="mt-1 block text-foreground-subtle">Tap to dismiss</span>
         </button>
-      ) : !writable ? (
+      ) : publishing.length > 0 ? (
         <p className="rounded-[var(--r-sm)] bg-surface-hover px-2.5 py-2 text-xs leading-[var(--leading-normal)] text-foreground-subtle">
-          Reading from the registry files. Changes cannot be saved until the
-          database is connected.
+          Saved to GitHub. {publishing[publishing.length - 1]} will appear for
+          everyone once the deploy finishes, in about a minute.
+        </p>
+      ) : !canWrite ? (
+        <p className="rounded-[var(--r-sm)] bg-surface-hover px-2.5 py-2 text-xs leading-[var(--leading-normal)] text-foreground-subtle">
+          Signed out — you can look at everything, but changes need a GitHub
+          account so they can be attributed.
         </p>
       ) : null}
 
       <div className="flex items-center justify-between gap-2 border-t border-divider px-1.5 pt-3">
-        <UserSwitcher />
+        <ViewerBadge />
         <ThemeSwitcher />
       </div>
     </nav>

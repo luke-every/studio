@@ -1,27 +1,16 @@
 import "server-only";
 
-import { getStore } from "./get-store";
+import { readRegistry } from "./read";
 import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
 
-/**
- * The registry's public read API.
- *
- * Async throughout, and deliberately ignorant of where the data lives —
- * files locally, Supabase when it is configured. Nothing above this layer
- * knows the difference.
- */
+/** The registry's public read API. Nothing above this knows where data lives. */
 
 export async function getRegistrySnapshot(): Promise<RegistrySnapshot> {
-  return getStore().read();
+  return readRegistry();
 }
 
-/** Whether changes made in the interface will outlive the session. */
-export function isWritable(): boolean {
-  return getStore().writable;
-}
-
-export async function getUsers(): Promise<Person[]> {
-  return (await getRegistrySnapshot()).users;
+export async function getPeople(): Promise<Person[]> {
+  return (await getRegistrySnapshot()).people;
 }
 
 export async function getTeams(): Promise<Team[]> {

@@ -6,8 +6,6 @@
   "description": "Where the quiz is offered, and what we promise before someone starts it.",
   "designQuestion": "What makes starting feel worth the two minutes?",
   "context": "The current entry says 'Take the quiz'. It says nothing about what you get back.",
-  "ownerId": "luke",
-  "collaboratorIds": [],
   "status": "in-review",
   "tags": [
     "onboarding",
@@ -25,7 +23,6 @@
       "id": "main",
       "title": "Promise the outcome",
       "premise": "Lead with what you end up with, not with what you have to do.",
-      "authorId": "luke",
       "status": "selected",
       "branch": "explore/main",
       "preview": {
@@ -34,19 +31,34 @@
           "#7f837e"
         ],
         "caption": "The invitation"
+      },
+      "author": {
+        "login": "luke",
+        "name": "Luke"
       }
     }
   ],
   "selected": {
     "explorationId": "main",
     "versionId": "quiz-entry-point-main-v0.2",
-    "by": "luke",
+    "by": {
+      "login": "luke",
+      "name": "Luke"
+    },
     "at": "2026-09-14"
   },
   "created": {
-    "by": "luke",
+    "by": {
+      "login": "luke",
+      "name": "Luke"
+    },
     "at": "2026-09-14"
   },
   "updatedAt": "2026-09-14",
-  "archived": false
+  "archived": false,
+  "owner": {
+    "login": "luke",
+    "name": "Luke"
+  },
+  "collaborators": []
 }

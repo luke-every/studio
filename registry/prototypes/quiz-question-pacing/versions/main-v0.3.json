@@ -6,7 +6,6 @@
   "title": "One question per screen",
   "summary": "One question at a time, with a quiet progress line rather than a counter.",
   "why": "A counter invites bargaining. A line just shows movement.",
-  "authorId": "mira",
   "createdAt": "2026-09-19",
   "preview": {
     "tint": [
@@ -15,5 +14,9 @@
     ],
     "caption": "Six questions, paced"
   },
-  "deployment": null
+  "deployment": null,
+  "author": {
+    "login": "mira",
+    "name": "Mira"
+  }
 }

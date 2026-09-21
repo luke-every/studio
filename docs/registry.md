@@ -84,15 +84,30 @@ npm run registry:check
 runs the same validation on its own and exits non-zero. It never repairs
 anything.
 
+## Writing it
+
+A change in the Hub reads the current file from GitHub, applies one change,
+validates the result against the same schema the application reads through,
+and commits it — as the person who made it, using their own token. Validating
+before committing is what stops one bad write becoming a broken studio for
+everybody.
+
+Reads do not go through GitHub. They come from the registry files in the
+deployed bundle, which is faster and has no rate limit; the cost is that a
+change reaches other people when Vercel has finished redeploying. For changes
+this rare, that is a fair trade for having no database.
+
 ## What is not built yet
 
-**Writes.** The Hub runs on Vercel, whose filesystem is read-only, so
-creating a team, creating a project and filing a prototype currently apply to
-the browser session only — the nav says so plainly when that has happened.
-Making them persist means a real store behind `src/lib/registry`, and that is
-the next piece of work. Nothing in the interface changes when it lands.
+**Saving a version from inside the Hub.** Versions can be added by hand with
+*Add prototype*, which creates v0.1, but the full save-a-version workflow —
+inspect the working tree, validate, commit, record — still belongs to Claude
+Code rather than the interface.
 
-**Authentication.** People identify themselves with the switcher in the nav
-and the choice is remembered locally. That is enough to attribute work, which
-is the point; it is not enough to trust it. Real sign-in replaces
-`CurrentUserProvider` and nothing that consumes it changes.
+**Commit references.** `commitSha` is not stored, because for versions saved
+into this repository the commit that introduced the file is the version. When
+prototypes become real apps with their own deploys, a version will need to
+name the commit it describes, and that field will have to earn its place then.
+
+**Screenshots on save.** *Add prototype* accepts an uploaded image. Nothing
+captures one automatically yet.

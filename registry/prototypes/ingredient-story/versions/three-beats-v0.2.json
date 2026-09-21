@@ -6,7 +6,6 @@
   "title": "Interleaved with imagery",
   "summary": "Story fragments sit between product photographs rather than after them.",
   "why": "Scroll depth suggests people leave during the photography, not before it. Put the words where the eyes already are.",
-  "authorId": "mira",
   "createdAt": "2026-09-12",
   "preview": {
     "tint": [
@@ -15,5 +14,9 @@
     ],
     "caption": "v0.2"
   },
-  "deployment": null
+  "deployment": null,
+  "author": {
+    "login": "mira",
+    "name": "Mira"
+  }
 }

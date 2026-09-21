@@ -6,8 +6,6 @@
   "description": "Noticing that someone is probably running low, and saying so without being creepy about it.",
   "designQuestion": "What is the difference between helpful timing and surveillance?",
   "context": "Shipped in August. Kept here because the tone work is the most useful part and we keep referring back to it.",
-  "ownerId": "tom",
-  "collaboratorIds": [],
   "status": "shipped",
   "tags": [
     "lifecycle",
@@ -25,7 +23,6 @@
       "id": "probably",
       "title": "Say 'probably'",
       "premise": "Admit the guess. The nudge is an estimate, and phrasing it as one makes it land better than certainty does.",
-      "authorId": "tom",
       "status": "selected",
       "branch": "explore/probably",
       "preview": {
@@ -34,19 +31,34 @@
           "#4f7a70"
         ],
         "caption": "Probably"
+      },
+      "author": {
+        "login": "tom",
+        "name": "Tom"
       }
     }
   ],
   "selected": {
     "explorationId": "probably",
     "versionId": "reorder-nudge-probably-v1.0",
-    "by": "tom",
+    "by": {
+      "login": "tom",
+      "name": "Tom"
+    },
     "at": "2026-08-29"
   },
   "created": {
-    "by": "tom",
+    "by": {
+      "login": "tom",
+      "name": "Tom"
+    },
     "at": "2026-08-29"
   },
   "updatedAt": "2026-08-29",
-  "archived": false
+  "archived": false,
+  "owner": {
+    "login": "tom",
+    "name": "Tom"
+  },
+  "collaborators": []
 }

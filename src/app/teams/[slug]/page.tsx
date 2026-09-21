@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
 
 import { ProjectStrip } from "@/components/project/project-strip";
+import { AddPrototype } from "@/components/prototype/add-prototype";
 import { PrototypeTile } from "@/components/prototype/prototype-tile";
 import { Collection } from "@/components/ui/collection";
 import { ViewSwitcher } from "@/components/ui/view-switcher";
@@ -48,15 +49,21 @@ export default function TeamPage() {
           <h2 className="text-eyebrow">
             {query.trim() ? `Matching “${query.trim()}”` : "All prototypes"}
           </h2>
-          {contents.length > 0 ? (
-            <ViewSwitcher mode={mode} onChange={setMode} scope="prototypes" />
-          ) : null}
+          <div className="flex items-center gap-2">
+            <AddPrototype teamSlug={team.slug} trigger="button" />
+            {contents.length > 0 ? (
+              <ViewSwitcher mode={mode} onChange={setMode} scope="prototypes" />
+            ) : null}
+          </div>
         </div>
         {contents.length > 0 ? (
           <Collection mode={mode}>
             {contents.map((prototype) => (
               <PrototypeTile key={prototype.slug} prototype={prototype} mode={mode} />
             ))}
+            {mode === "grid" && !query.trim() ? (
+              <AddPrototype teamSlug={team.slug} />
+            ) : null}
           </Collection>
         ) : (
           <div className="max-w-[44ch] py-10">

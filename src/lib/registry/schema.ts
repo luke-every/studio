@@ -23,19 +23,23 @@ const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "must be an ISO date, YYYY-MM-DD");
 
-/** A person. Identity is the id — names change, ids do not. */
-export const userSchema = z.object({
-  id: slug,
+/**
+ * A person is a GitHub account. There is no user list to maintain and no
+ * accounts to create: whoever signs in is who they are on GitHub.
+ *
+ * The display name is stored alongside the login rather than looked up,
+ * so attribution still reads properly for someone who has left, and so the
+ * studio never needs to call GitHub just to render a name. Avatars come
+ * from github.com/<login>.png, which needs no storage at all.
+ */
+export const authorSchema = z.object({
+  login: z.string().min(1),
   name: z.string().min(1),
-  email: z.string().email(),
-  initials: z.string().min(1).max(3),
-  /** Whether they are still on the team. Past work keeps its attribution. */
-  active: z.boolean().default(true),
 });
 
 /** Who did something, and when. Attached to anything a person causes. */
 export const attributionSchema = z.object({
-  by: slug,
+  by: authorSchema,
   at: isoDate,
 });
 
@@ -45,8 +49,8 @@ export const teamSchema = z.object({
   remit: z.string().default(""),
   description: z.string().default(""),
   status: z.enum(["active", "on-hold", "complete"]),
-  leadId: slug,
-  memberIds: z.array(slug),
+  lead: authorSchema,
+  members: z.array(authorSchema),
   created: attributionSchema,
   archived: z.boolean().default(false),
 });
@@ -64,7 +68,7 @@ export const previewSchema = z.object({
   caption: z.string(),
   /** A live prototype, once one exists. */
   url: z.string().url().optional(),
-  /** A captured screenshot, once the capture pipeline exists. */
+  /** A screenshot committed under public/, referenced by its served path. */
   image: z.string().optional(),
 });
 
@@ -73,7 +77,7 @@ export const explorationSchema = z.object({
   id: slug,
   title: z.string().min(1),
   premise: z.string().default(""),
-  authorId: slug,
+  author: authorSchema,
   status: z.enum(["active", "review", "selected", "archived"]).default("active"),
   /** Exploration branch in git, when the work has one. */
   branch: z.string().optional(),
@@ -89,7 +93,7 @@ export const explorationSchema = z.object({
 export const selectionSchema = z.object({
   explorationId: slug,
   versionId: z.string().min(1),
-  by: slug,
+  by: authorSchema,
   at: isoDate,
 });
 
@@ -102,8 +106,8 @@ export const prototypeSchema = z.object({
   description: z.string().default(""),
   designQuestion: z.string().default(""),
   context: z.string().default(""),
-  ownerId: slug,
-  collaboratorIds: z.array(slug).default([]),
+  owner: authorSchema,
+  collaborators: z.array(authorSchema).default([]),
   status: z.enum(["exploring", "in-review", "shipped", "parked"]),
   tags: z.array(z.string()).default([]),
   preview: previewSchema,
@@ -130,7 +134,7 @@ export const versionSchema = z.object({
   title: z.string().min(1),
   summary: z.string().default(""),
   why: z.string().default(""),
-  authorId: slug,
+  author: authorSchema,
   createdAt: isoDate,
   preview: previewSchema,
   /**
@@ -147,13 +151,12 @@ export const versionSchema = z.object({
     .default(null),
 });
 
-export const usersFileSchema = z.object({ users: z.array(userSchema) });
 export const teamsFileSchema = z.object({
   teams: z.array(teamSchema),
   projects: z.array(projectSchema),
 });
 
-export type UserRecord = z.infer<typeof userSchema>;
+export type AuthorRecord = z.infer<typeof authorSchema>;
 export type TeamRecord = z.infer<typeof teamSchema>;
 export type ProjectRecord = z.infer<typeof projectSchema>;
 export type PrototypeRecord = z.infer<typeof prototypeSchema>;

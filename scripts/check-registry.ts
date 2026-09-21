@@ -16,7 +16,6 @@ async function main() {
     );
 
     console.log("Registry");
-    console.log(`  ✓ ${data.users.length} people`);
     console.log(`  ✓ ${data.teams.length} teams, ${data.projects.length} projects`);
     console.log(`  ✓ ${data.prototypes.length} prototypes, ${explorations} explorations`);
     console.log(`  ✓ ${data.versions.length} versions`);

@@ -3,14 +3,9 @@
   "teamSlug": "acquisition",
   "projectSlug": "quiz-rework",
   "name": "Quiz results",
-  "description": "What someone sees the moment the quiz finishes — and whether it feels like a recommendation or a receipt.",
+  "description": "What someone sees the moment the quiz finishes \u2014 and whether it feels like a recommendation or a receipt.",
   "designQuestion": "Can the results page feel like advice from someone who knows food, rather than an algorithm's output?",
   "context": "Two thirds of people who finish the quiz never scroll past the first recommendation. We assumed that was a content problem; the session replays suggest it is a hierarchy problem.",
-  "ownerId": "luke",
-  "collaboratorIds": [
-    "sarah",
-    "mira"
-  ],
   "status": "in-review",
   "tags": [
     "onboarding",
@@ -28,7 +23,6 @@
       "id": "editorial",
       "title": "Editorial recommendation",
       "premise": "Lead with one confident recommendation, written like a person wrote it, and let everything else be secondary.",
-      "authorId": "luke",
       "status": "selected",
       "branch": "explore/editorial",
       "preview": {
@@ -37,13 +31,16 @@
           "#c4633d"
         ],
         "caption": "One recommendation, in full"
+      },
+      "author": {
+        "login": "luke",
+        "name": "Luke"
       }
     },
     {
       "id": "comparison-first",
       "title": "Comparison-first",
       "premise": "Assume people want to choose, not be told. Put the comparison up front and make the differences legible.",
-      "authorId": "sarah",
       "status": "active",
       "branch": "explore/comparison-first",
       "preview": {
@@ -52,19 +49,43 @@
           "#5f7a52"
         ],
         "caption": "Side-by-side comparison"
+      },
+      "author": {
+        "login": "sarah",
+        "name": "Sarah"
       }
     }
   ],
   "selected": {
     "explorationId": "editorial",
     "versionId": "quiz-results-editorial-v0.8",
-    "by": "luke",
+    "by": {
+      "login": "luke",
+      "name": "Luke"
+    },
     "at": "2026-09-18"
   },
   "created": {
-    "by": "luke",
+    "by": {
+      "login": "luke",
+      "name": "Luke"
+    },
     "at": "2026-09-08"
   },
   "updatedAt": "2026-09-18",
-  "archived": false
+  "archived": false,
+  "owner": {
+    "login": "luke",
+    "name": "Luke"
+  },
+  "collaborators": [
+    {
+      "login": "sarah",
+      "name": "Sarah"
+    },
+    {
+      "login": "mira",
+      "name": "Mira"
+    }
+  ]
 }

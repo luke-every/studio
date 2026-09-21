@@ -6,7 +6,6 @@
   "title": "Say what changed",
   "summary": "The note leads with what has changed since they left.",
   "why": "A discount says we want them back. Saying what changed gives them a reason to come.",
-  "authorId": "tom",
   "createdAt": "2026-07-22",
   "preview": {
     "tint": [
@@ -15,5 +14,9 @@
     ],
     "caption": "Three months later"
   },
-  "deployment": null
+  "deployment": null,
+  "author": {
+    "login": "tom",
+    "name": "Tom"
+  }
 }

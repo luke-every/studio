@@ -6,8 +6,6 @@
   "description": "What we say to someone who left three months ago.",
   "designQuestion": "Is there a version of this that is not a discount?",
   "context": "Parked while we work out whether we have anything to say that is not a percentage off.",
-  "ownerId": "tom",
-  "collaboratorIds": [],
   "status": "parked",
   "tags": [
     "lifecycle",
@@ -25,7 +23,6 @@
       "id": "main",
       "title": "Say what changed",
       "premise": "Tell them what is different now. If nothing is, do not send anything.",
-      "authorId": "tom",
       "status": "selected",
       "branch": "explore/main",
       "preview": {
@@ -34,19 +31,34 @@
           "#8d8a84"
         ],
         "caption": "Three months later"
+      },
+      "author": {
+        "login": "tom",
+        "name": "Tom"
       }
     }
   ],
   "selected": {
     "explorationId": "main",
     "versionId": "winback-note-main-v0.1",
-    "by": "tom",
+    "by": {
+      "login": "tom",
+      "name": "Tom"
+    },
     "at": "2026-07-22"
   },
   "created": {
-    "by": "tom",
+    "by": {
+      "login": "tom",
+      "name": "Tom"
+    },
     "at": "2026-07-22"
   },
   "updatedAt": "2026-07-22",
-  "archived": false
+  "archived": false,
+  "owner": {
+    "login": "tom",
+    "name": "Tom"
+  },
+  "collaborators": []
 }

@@ -6,10 +6,6 @@
   "description": "The moment someone wants to stop for a while. Making it easy without making it thoughtless.",
   "designQuestion": "Can pausing feel generous rather than defensive, and still leave people likely to come back?",
   "context": "Support handles roughly forty pause requests a week by hand. Every one of them is a conversation we could have had in the product.",
-  "ownerId": "sarah",
-  "collaboratorIds": [
-    "tom"
-  ],
   "status": "exploring",
   "tags": [
     "retention",
@@ -27,7 +23,6 @@
       "id": "return-date",
       "title": "Pick a return date",
       "premise": "A pause with a date attached is a plan. A pause without one is a slow cancellation.",
-      "authorId": "sarah",
       "status": "selected",
       "branch": "explore/return-date",
       "preview": {
@@ -36,19 +31,39 @@
           "#7a6b96"
         ],
         "caption": "Return date picker"
+      },
+      "author": {
+        "login": "sarah",
+        "name": "Sarah"
       }
     }
   ],
   "selected": {
     "explorationId": "return-date",
     "versionId": "subscription-pause-return-date-v0.4",
-    "by": "sarah",
+    "by": {
+      "login": "sarah",
+      "name": "Sarah"
+    },
     "at": "2026-09-16"
   },
   "created": {
-    "by": "sarah",
+    "by": {
+      "login": "sarah",
+      "name": "Sarah"
+    },
     "at": "2026-09-09"
   },
   "updatedAt": "2026-09-16",
-  "archived": false
+  "archived": false,
+  "owner": {
+    "login": "sarah",
+    "name": "Sarah"
+  },
+  "collaborators": [
+    {
+      "login": "tom",
+      "name": "Tom"
+    }
+  ]
 }

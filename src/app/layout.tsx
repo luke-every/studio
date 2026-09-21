@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
 import { AppShell } from "@/components/shell/app-shell";
-import { CurrentUserProvider } from "@/lib/current-user";
+import { getSession, toViewer } from "@/lib/auth/session";
 import { StudioProvider } from "@/lib/data/studio-store";
 import { MotionProvider } from "@/lib/motion";
-import { getRegistrySnapshot, isWritable } from "@/lib/registry";
+import { getRegistrySnapshot } from "@/lib/registry";
+import { ViewerProvider } from "@/lib/viewer";
 import { SearchProvider } from "@/lib/search-store";
 import { ThemeProvider, ThemeScript } from "@/lib/theme";
 
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
  */
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const snapshot = await getRegistrySnapshot();
-  const writable = isWritable();
+  const session = await getSession();
 
   return (
     <html lang="en" suppressHydrationWarning className={`${inter.variable} h-full antialiased`}>
@@ -38,15 +39,15 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-full">
         <ThemeProvider>
-          <CurrentUserProvider users={snapshot.users}>
-            <StudioProvider snapshot={snapshot} writable={writable}>
+          <ViewerProvider viewer={session ? toViewer(session) : null}>
+            <StudioProvider snapshot={snapshot}>
               <SearchProvider>
                 <MotionProvider>
                   <AppShell>{children}</AppShell>
                 </MotionProvider>
               </SearchProvider>
             </StudioProvider>
-          </CurrentUserProvider>
+          </ViewerProvider>
         </ThemeProvider>
       </body>
     </html>

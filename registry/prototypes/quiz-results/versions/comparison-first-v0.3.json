@@ -6,7 +6,6 @@
   "title": "Difference-led comparison",
   "summary": "Only the attributes that actually differ between the three results are shown.",
   "why": "A full comparison table was unreadable. Showing sameness is wasted space; showing difference is the whole point.",
-  "authorId": "sarah",
   "createdAt": "2026-09-15",
   "preview": {
     "tint": [
@@ -15,5 +14,9 @@
     ],
     "caption": "v0.3"
   },
-  "deployment": null
+  "deployment": null,
+  "author": {
+    "login": "sarah",
+    "name": "Sarah"
+  }
 }

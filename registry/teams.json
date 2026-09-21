@@ -6,17 +6,32 @@
       "remit": "Arriving and deciding",
       "description": "Everything between landing on us for the first time and understanding what we would send you.",
       "status": "active",
-      "leadId": "luke",
-      "memberIds": [
-        "luke",
-        "mira",
-        "sarah"
-      ],
       "created": {
-        "by": "luke",
+        "by": {
+          "login": "luke",
+          "name": "Luke"
+        },
         "at": "2026-05-30"
       },
-      "archived": false
+      "archived": false,
+      "lead": {
+        "login": "luke",
+        "name": "Luke"
+      },
+      "members": [
+        {
+          "login": "luke",
+          "name": "Luke"
+        },
+        {
+          "login": "mira",
+          "name": "Mira"
+        },
+        {
+          "login": "sarah",
+          "name": "Sarah"
+        }
+      ]
     },
     {
       "slug": "retention",
@@ -24,16 +39,28 @@
       "remit": "Staying, pausing, coming back",
       "description": "The long middle of the relationship. Changing a plan, taking a break, and everything we send when nobody asked.",
       "status": "active",
-      "leadId": "sarah",
-      "memberIds": [
-        "sarah",
-        "tom"
-      ],
       "created": {
-        "by": "sarah",
+        "by": {
+          "login": "sarah",
+          "name": "Sarah"
+        },
         "at": "2026-04-11"
       },
-      "archived": false
+      "archived": false,
+      "lead": {
+        "login": "sarah",
+        "name": "Sarah"
+      },
+      "members": [
+        {
+          "login": "sarah",
+          "name": "Sarah"
+        },
+        {
+          "login": "tom",
+          "name": "Tom"
+        }
+      ]
     },
     {
       "slug": "playground",
@@ -41,17 +68,32 @@
       "remit": "No brief, no promises",
       "description": "Work with nothing riding on it. Some of it becomes real. Most of it is here to settle an argument.",
       "status": "active",
-      "leadId": "mira",
-      "memberIds": [
-        "mira",
-        "tom",
-        "luke"
-      ],
       "created": {
-        "by": "mira",
+        "by": {
+          "login": "mira",
+          "name": "Mira"
+        },
         "at": "2026-08-02"
       },
-      "archived": false
+      "archived": false,
+      "lead": {
+        "login": "mira",
+        "name": "Mira"
+      },
+      "members": [
+        {
+          "login": "mira",
+          "name": "Mira"
+        },
+        {
+          "login": "tom",
+          "name": "Tom"
+        },
+        {
+          "login": "luke",
+          "name": "Luke"
+        }
+      ]
     }
   ],
   "projects": [
@@ -60,7 +102,10 @@
       "teamSlug": "acquisition",
       "name": "Quiz rework",
       "created": {
-        "by": "luke",
+        "by": {
+          "login": "luke",
+          "name": "Luke"
+        },
         "at": "2026-08-14"
       }
     },
@@ -69,7 +114,10 @@
       "teamSlug": "acquisition",
       "name": "Product page",
       "created": {
-        "by": "luke",
+        "by": {
+          "login": "luke",
+          "name": "Luke"
+        },
         "at": "2026-07-21"
       }
     },
@@ -78,7 +126,10 @@
       "teamSlug": "retention",
       "name": "Leaving well",
       "created": {
-        "by": "luke",
+        "by": {
+          "login": "luke",
+          "name": "Luke"
+        },
         "at": "2026-08-02"
       }
     },
@@ -87,7 +138,10 @@
       "teamSlug": "retention",
       "name": "Saying something",
       "created": {
-        "by": "luke",
+        "by": {
+          "login": "luke",
+          "name": "Luke"
+        },
         "at": "2026-06-30"
       }
     }

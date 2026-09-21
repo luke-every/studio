@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
 
+import { AddPrototype } from "@/components/prototype/add-prototype";
 import { PrototypeTile } from "@/components/prototype/prototype-tile";
 import { Collection } from "@/components/ui/collection";
 import { ViewSwitcher } from "@/components/ui/view-switcher";
@@ -50,9 +51,12 @@ export default function ProjectPage() {
           </p>
         </div>
 
-        {contents.length > 0 ? (
-          <ViewSwitcher mode={mode} onChange={setMode} scope="prototypes" />
-        ) : null}
+        <div className="flex items-center gap-2">
+          <AddPrototype teamSlug={team.slug} projectSlug={project.slug} trigger="button" />
+          {contents.length > 0 ? (
+            <ViewSwitcher mode={mode} onChange={setMode} scope="prototypes" />
+          ) : null}
+        </div>
       </header>
 
       <div className="mt-8 border-t border-divider pt-7">

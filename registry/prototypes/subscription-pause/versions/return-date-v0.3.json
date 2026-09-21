@@ -6,7 +6,6 @@
   "title": "Calendar-first",
   "summary": "Straight to a date picker.",
   "why": "Honest and direct, but it asks for a decision before offering any help making it.",
-  "authorId": "tom",
   "createdAt": "2026-09-09",
   "preview": {
     "tint": [
@@ -15,5 +14,9 @@
     ],
     "caption": "v0.3"
   },
-  "deployment": null
+  "deployment": null,
+  "author": {
+    "login": "tom",
+    "name": "Tom"
+  }
 }

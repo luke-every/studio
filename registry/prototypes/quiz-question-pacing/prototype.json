@@ -6,8 +6,6 @@
   "description": "How many questions we can ask before people start guessing to get to the end.",
   "designQuestion": "Where is the line between thorough and tiring?",
   "context": "Drop-off climbs sharply after question seven, and the answers after it get noticeably less considered.",
-  "ownerId": "mira",
-  "collaboratorIds": [],
   "status": "exploring",
   "tags": [
     "onboarding"
@@ -24,7 +22,6 @@
       "id": "main",
       "title": "One question per screen",
       "premise": "Give each question the whole screen and let progress do the reassuring.",
-      "authorId": "mira",
       "status": "selected",
       "branch": "explore/main",
       "preview": {
@@ -33,19 +30,34 @@
           "#8b8880"
         ],
         "caption": "Six questions, paced"
+      },
+      "author": {
+        "login": "mira",
+        "name": "Mira"
       }
     }
   ],
   "selected": {
     "explorationId": "main",
     "versionId": "quiz-question-pacing-main-v0.3",
-    "by": "mira",
+    "by": {
+      "login": "mira",
+      "name": "Mira"
+    },
     "at": "2026-09-19"
   },
   "created": {
-    "by": "mira",
+    "by": {
+      "login": "mira",
+      "name": "Mira"
+    },
     "at": "2026-09-19"
   },
   "updatedAt": "2026-09-19",
-  "archived": false
+  "archived": false,
+  "owner": {
+    "login": "mira",
+    "name": "Mira"
+  },
+  "collaborators": []
 }

@@ -4,12 +4,10 @@ import { join } from "node:path";
 import {
   prototypeSchema,
   teamsFileSchema,
-  usersFileSchema,
   versionSchema,
   type PrototypeRecord,
   type ProjectRecord,
   type TeamRecord,
-  type UserRecord,
   type VersionRecord,
 } from "./schema";
 
@@ -29,7 +27,6 @@ import {
 const REGISTRY_ROOT = join(process.cwd(), "registry");
 
 export type RegistryData = {
-  users: UserRecord[];
   teams: TeamRecord[];
   projects: ProjectRecord[];
   prototypes: PrototypeRecord[];
@@ -47,7 +44,6 @@ function fail(problems: string[]): never {
 }
 
 async function read(): Promise<RegistryData> {
-  const { users } = usersFileSchema.parse(await readJson(join(REGISTRY_ROOT, "users.json")));
   const { teams, projects } = teamsFileSchema.parse(
     await readJson(join(REGISTRY_ROOT, "teams.json")),
   );
@@ -72,7 +68,7 @@ async function read(): Promise<RegistryData> {
     }
   }
 
-  const data = { users, teams, projects, prototypes, versions };
+  const data = { teams, projects, prototypes, versions };
   const problems = checkRelationships(data);
   if (problems.length > 0) fail(problems);
 
@@ -83,28 +79,23 @@ async function read(): Promise<RegistryData> {
  * Relationships schemas cannot express: every reference points at something
  * that exists, and the selected direction is a real saved state.
  */
+/**
+ * Relationships schemas cannot express: every reference points at something
+ * that exists, and the selected direction is a real saved state.
+ *
+ * People are no longer checked — they are GitHub accounts stored where they
+ * acted, so there is no list they could fail to appear in.
+ */
 export function checkRelationships(data: RegistryData): string[] {
   const problems: string[] = [];
-  const userIds = new Set(data.users.map((user) => user.id));
   const teamSlugs = new Set(data.teams.map((team) => team.slug));
   const projectSlugs = new Set(data.projects.map((project) => project.slug));
   const versionIds = new Set(data.versions.map((version) => version.id));
-
-  const person = (id: string, where: string) => {
-    if (!userIds.has(id)) problems.push(`${where} references unknown user "${id}"`);
-  };
-
-  for (const team of data.teams) {
-    person(team.leadId, `Team ${team.slug} lead`);
-    team.memberIds.forEach((id) => person(id, `Team ${team.slug} member`));
-    person(team.created.by, `Team ${team.slug} creator`);
-  }
 
   for (const project of data.projects) {
     if (!teamSlugs.has(project.teamSlug)) {
       problems.push(`Project ${project.slug} references unknown team "${project.teamSlug}"`);
     }
-    person(project.created.by, `Project ${project.slug} creator`);
   }
 
   for (const prototype of data.prototypes) {
@@ -118,10 +109,6 @@ export function checkRelationships(data: RegistryData): string[] {
         `Prototype ${prototype.slug} is filed into unknown project "${prototype.projectSlug}"`,
       );
     }
-    person(prototype.ownerId, `Prototype ${prototype.slug} owner`);
-    prototype.collaboratorIds.forEach((id) =>
-      person(id, `Prototype ${prototype.slug} collaborator`),
-    );
 
     const explorationIds = new Set(prototype.explorations.map((e) => e.id));
     if (!explorationIds.has(prototype.selected.explorationId)) {
@@ -134,7 +121,6 @@ export function checkRelationships(data: RegistryData): string[] {
         `Prototype ${prototype.slug} selects unknown version "${prototype.selected.versionId}"`,
       );
     }
-    person(prototype.selected.by, `Prototype ${prototype.slug} selection`);
 
     // Version numbers are chronological and never reused within a direction.
     const seen = new Map<string, Set<string>>();
@@ -144,8 +130,6 @@ export function checkRelationships(data: RegistryData): string[] {
           `Version ${version.id} references unknown exploration "${version.explorationId}"`,
         );
       }
-      person(version.authorId, `Version ${version.id} author`);
-
       const used = seen.get(version.explorationId) ?? new Set<string>();
       if (used.has(version.version)) {
         problems.push(

@@ -6,7 +6,6 @@
   "title": "Suggested dates before the calendar",
   "summary": "Three suggested return dates appear first; the full calendar is one tap further in.",
   "why": "Most people pause for a holiday or a month. Suggesting the common answer is faster than asking them to find it.",
-  "authorId": "sarah",
   "createdAt": "2026-09-16",
   "preview": {
     "tint": [
@@ -15,5 +14,9 @@
     ],
     "caption": "v0.4"
   },
-  "deployment": null
+  "deployment": null,
+  "author": {
+    "login": "sarah",
+    "name": "Sarah"
+  }
 }

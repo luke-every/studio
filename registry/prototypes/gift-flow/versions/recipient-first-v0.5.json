@@ -6,7 +6,6 @@
   "title": "Arrival before checkout",
   "summary": "The buyer previews what the recipient will see before paying.",
   "why": "The preview is the reassurance. Without it the buyer is trusting us with someone else's moment, blind.",
-  "authorId": "luke",
   "createdAt": "2026-06-04",
   "preview": {
     "tint": [
@@ -15,5 +14,9 @@
     ],
     "caption": "v0.5"
   },
-  "deployment": null
+  "deployment": null,
+  "author": {
+    "login": "luke",
+    "name": "Luke"
+  }
 }

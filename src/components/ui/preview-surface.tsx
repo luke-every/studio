@@ -42,9 +42,19 @@ export function PreviewSurface({
 }) {
   const body = (
     <>
+      {preview.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={preview.image}
+          alt=""
+          className="absolute inset-0 size-full object-cover"
+        />
+      ) : null}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.18] mix-blend-soft-light"
+        className={`pointer-events-none absolute inset-0 mix-blend-soft-light ${
+          preview.image ? "opacity-0" : "opacity-[0.18]"
+        }`}
         style={{
           backgroundImage:
             "radial-gradient(circle at 24% 16%, #fff 0, transparent 46%), radial-gradient(circle at 78% 74%, #000 0, transparent 52%)",

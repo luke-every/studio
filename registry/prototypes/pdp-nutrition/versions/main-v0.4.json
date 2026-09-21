@@ -6,7 +6,6 @@
   "title": "Four up front",
   "summary": "Protein, fibre, sugar and calories shown inline under the price.",
   "why": "Four seconds is not reading. It is looking for something specific.",
-  "authorId": "sarah",
   "createdAt": "2026-09-17",
   "preview": {
     "tint": [
@@ -15,5 +14,9 @@
     ],
     "caption": "Four numbers"
   },
-  "deployment": null
+  "deployment": null,
+  "author": {
+    "login": "sarah",
+    "name": "Sarah"
+  }
 }

@@ -7,11 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "registry:check": "tsx scripts/check-registry.ts",
-    "registry:push": "tsx scripts/push-registry.ts"
+    "registry:check": "tsx scripts/check-registry.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.116.0",
     "motion": "^13.4.0",
     "next": "16.3.5",
     "react": "19.2.8",
