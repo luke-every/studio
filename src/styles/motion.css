@@ -1,0 +1,52 @@
+/* ---------------------------------------------------------------------------
+ * Prototype Studio — motion tokens
+ *
+ * Motion is part of the architecture, not a finishing pass. Every duration and
+ * easing in the product resolves to a token here, so the entire feel of the
+ * interface is tunable from one file.
+ *
+ * Durations answer "how long", the vocabulary in lib/motion answers "what kind
+ * of change is this". CSS transitions read these variables directly; Motion
+ * for React reads the mirrored values in src/lib/motion/tokens.ts.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  /* --- Durations ---------------------------------------------------------- */
+  --dur-instant: 80ms;
+  --dur-fast: 160ms;
+  --dur-standard: 280ms;
+  --dur-deliberate: 460ms;
+  --dur-immersive: 620ms;
+
+  /* --- Easing ------------------------------------------------------------- */
+  /* Entering: decelerate into place. Leaving: accelerate away.
+   * Moving between two on-screen positions: symmetric. */
+  --curve-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  --curve-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+  --curve-exit: cubic-bezier(0.4, 0, 1, 1);
+  --curve-spatial: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* --- Distances ---------------------------------------------------------- */
+  /* Movement is small by default; spatial continuity does the explaining. */
+  --motion-lift: 2px;
+  --motion-travel-sm: 6px;
+  --motion-travel-md: 14px;
+  --motion-travel-lg: 28px;
+}
+
+/* Reduced motion collapses distance and shortens duration, but never removes
+ * the state change itself — the interface must still say what happened. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-fast: 0ms;
+    --dur-standard: 100ms;
+    --dur-deliberate: 120ms;
+    --dur-immersive: 140ms;
+
+    --motion-lift: 0px;
+    --motion-travel-sm: 0px;
+    --motion-travel-md: 0px;
+    --motion-travel-lg: 0px;
+  }
+}

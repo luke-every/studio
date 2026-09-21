@@ -1,26 +1,156 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
+@import "../styles/theme.css";
+@import "../styles/motion.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* ---------------------------------------------------------------------------
+ * Tailwind bridge
+ *
+ * Every utility the product uses resolves to a semantic token. There is no
+ * default Tailwind palette in play — `bg-red-500` should feel as wrong as a
+ * hex code, because both bypass the token layer.
+ * ------------------------------------------------------------------------- */
 @theme inline {
   --color-background: var(--background);
+  --color-background-sunken: var(--background-sunken);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-pressed: var(--surface-pressed);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-divider: var(--divider);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-muted: var(--accent-muted);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-scrim: var(--scrim);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-mono: var(--font-mono-stack), ui-monospace, SFMono-Regular, monospace;
+
+  --text-2xs: var(--fs-2xs);
+  --text-xs: var(--fs-xs);
+  --text-sm: var(--fs-sm);
+  --text-base: var(--fs-base);
+  --text-md: var(--fs-md);
+  --text-lg: var(--fs-lg);
+  --text-xl: var(--fs-xl);
+  --text-2xl: var(--fs-2xl);
+  --text-3xl: var(--fs-3xl);
+
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+
+  --shadow-raised: var(--elev-raised);
+  --shadow-floating: var(--elev-floating);
+  --shadow-overlay: var(--elev-overlay);
+
+  /* Media queries cannot resolve custom properties, so breakpoints are
+   * written literally here and mirrored as --bp-* in tokens.css for use in
+   * max-width and in JS. Change both together. */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 52rem;
+  --breakpoint-lg: 68rem;
+  --breakpoint-xl: 90rem;
+
+  --ease-standard: var(--curve-standard);
+  --ease-entrance: var(--curve-entrance);
+  --ease-exit: var(--curve-exit);
+  --ease-spatial: var(--curve-spatial);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ---------------------------------------------------------------------------
+ * Base
+ * ------------------------------------------------------------------------- */
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--fs-base);
+    line-height: var(--leading-normal);
+    letter-spacing: var(--tracking-normal);
+    /* A theme change is a transition between two visual states, not a swap. */
+    transition:
+      background-color var(--dur-standard) var(--curve-standard),
+      color var(--dur-standard) var(--curve-standard);
+  }
+
+  ::selection {
+    background-color: var(--accent-muted);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--r-xs);
+  }
+
+  /* Anything using the shared scrim/surface tokens follows the theme with the
+   * same timing as the page itself, so a theme change reads as one event. */
+  [data-theme-transition] {
+    transition:
+      background-color var(--dur-standard) var(--curve-standard),
+      border-color var(--dur-standard) var(--curve-standard),
+      color var(--dur-standard) var(--curve-standard);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .text-eyebrow {
+    font-size: var(--fs-2xs);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--foreground-subtle);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * View transitions
+ *
+ * Used only for the theme change: the old theme stays still and the new one is
+ * revealed over it as an expanding circle from the point of interaction. The
+ * default cross-fade is removed so the reveal is the only thing happening.
+ * ------------------------------------------------------------------------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
 }

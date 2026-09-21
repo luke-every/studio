@@ -1,0 +1,109 @@
+/* ---------------------------------------------------------------------------
+ * Prototype Studio — primitive tokens
+ *
+ * This file is the only place raw values live. Components never reference
+ * anything here directly; they consume the semantic tokens in theme.css and
+ * the motion tokens in motion.css.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  /* --- Palette: warm paper ----------------------------------------------- */
+  --paper-50: #fdfbf8;
+  --paper-100: #f8f4ee;
+  --paper-200: #f0eae1;
+  --paper-300: #e4dbcf;
+  --paper-400: #cfc2b2;
+
+  /* --- Palette: warm ink -------------------------------------------------- */
+  --ink-900: #17140f;
+  --ink-800: #211d17;
+  --ink-700: #2d2821;
+  --ink-600: #3d372e;
+  --ink-500: #6b6155;
+  --ink-400: #8d8376;
+
+  /* --- Palette: accents --------------------------------------------------- */
+  --clay-400: #d9835c;
+  --clay-500: #c4633d;
+  --clay-600: #a44e2c;
+  --moss-500: #5f7a52;
+  --moss-400: #7d9a6e;
+  --rust-500: #b2432f;
+  --rust-400: #d26854;
+
+  /* --- Alpha ramps (for borders, scrims, elevation on either theme) ------- */
+  --alpha-ink-04: color-mix(in oklab, var(--ink-900) 4%, transparent);
+  --alpha-ink-08: color-mix(in oklab, var(--ink-900) 8%, transparent);
+  --alpha-ink-12: color-mix(in oklab, var(--ink-900) 12%, transparent);
+  --alpha-ink-60: color-mix(in oklab, var(--ink-900) 60%, transparent);
+  --alpha-paper-06: color-mix(in oklab, var(--paper-50) 6%, transparent);
+  --alpha-paper-10: color-mix(in oklab, var(--paper-50) 10%, transparent);
+  --alpha-paper-16: color-mix(in oklab, var(--paper-50) 16%, transparent);
+
+  /* --- Spacing: a single 4px-based rhythm --------------------------------- */
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6.5rem;
+
+  /* Density multiplier — a designer can compress the whole UI from here. */
+  --density: 1;
+
+  /* --- Radii -------------------------------------------------------------- */
+  --r-xs: 0.25rem;
+  --r-sm: 0.5rem;
+  --r-md: 0.875rem;
+  --r-lg: 1.25rem;
+  --r-xl: 1.75rem;
+  --r-full: 999px;
+
+  /* --- Shadows: warm, low-contrast, never neutral grey -------------------- */
+  --elev-raised: 0 1px 2px var(--alpha-ink-04), 0 2px 8px -4px var(--alpha-ink-08);
+  --elev-floating: 0 2px 4px var(--alpha-ink-04), 0 12px 32px -12px var(--alpha-ink-12);
+  --elev-overlay: 0 8px 16px -8px var(--alpha-ink-08), 0 32px 64px -24px var(--alpha-ink-12);
+
+  /* --- Typography --------------------------------------------------------- */
+  --fs-2xs: 0.6875rem;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.9375rem;
+  --fs-md: 1.0625rem;
+  --fs-lg: 1.375rem;
+  --fs-xl: 1.875rem;
+  --fs-2xl: 2.5rem;
+  --fs-3xl: 3.5rem;
+
+  --leading-tight: 1.08;
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: -0.01em;
+  --tracking-wide: 0.04em;
+  --tracking-caps: 0.09em;
+
+  /* --- Z-index scale ------------------------------------------------------ */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-sticky: 20;
+  --z-focus-mode: 30;
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-popover: 60;
+  --z-command: 70;
+  --z-toast: 80;
+}
+
+/* Breakpoints live here as documentation and for JS parity; Tailwind's own
+ * screens are configured from the same values in globals.css. */
+:root {
+  --bp-sm: 40rem;
+  --bp-md: 52rem;
+  --bp-lg: 68rem;
+  --bp-xl: 90rem;
+}

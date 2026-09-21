@@ -1,0 +1,123 @@
+/* ---------------------------------------------------------------------------
+ * Prototype Studio — semantic tokens
+ *
+ * Components consume ONLY these. Changing the identity of the product means
+ * editing this file and tokens.css, never the components.
+ *
+ * Resolution order:
+ *   1. :root                              → light (the default)
+ *   2. prefers-color-scheme: dark         → dark, unless the user pinned light
+ *   3. [data-theme="dark" | "light"]      → an explicit choice always wins
+ *
+ * The inline script in ThemeScript stamps data-theme before first paint, so
+ * rule 3 is normally the one that applies; rules 1–2 keep the product correct
+ * with JavaScript disabled.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --background: var(--paper-100);
+  --background-sunken: var(--paper-200);
+  --foreground: var(--ink-900);
+  --foreground-muted: var(--ink-500);
+  --foreground-subtle: var(--ink-400);
+
+  --surface: var(--paper-50);
+  --surface-elevated: #ffffff;
+  --surface-inset: var(--paper-200);
+  --surface-hover: var(--alpha-ink-04);
+  --surface-pressed: var(--alpha-ink-08);
+
+  --border: var(--alpha-ink-12);
+  --border-strong: var(--ink-400);
+  --divider: var(--alpha-ink-08);
+
+  --accent: var(--clay-500);
+  --accent-hover: var(--clay-600);
+  --accent-foreground: var(--paper-50);
+  --accent-muted: color-mix(in oklab, var(--clay-500) 12%, transparent);
+
+  --destructive: var(--rust-500);
+  --destructive-foreground: var(--paper-50);
+  --success: var(--moss-500);
+  --success-foreground: var(--paper-50);
+
+  --focus-ring: var(--clay-500);
+  --scrim: color-mix(in oklab, var(--ink-900) 32%, transparent);
+
+  --shadow-color-mix: var(--alpha-ink-12);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: var(--ink-900);
+    --background-sunken: #100e0a;
+    --foreground: var(--paper-100);
+    --foreground-muted: color-mix(in oklab, var(--paper-100) 62%, transparent);
+    --foreground-subtle: color-mix(in oklab, var(--paper-100) 42%, transparent);
+
+    --surface: var(--ink-800);
+    --surface-elevated: var(--ink-700);
+    --surface-inset: #100e0a;
+    --surface-hover: var(--alpha-paper-06);
+    --surface-pressed: var(--alpha-paper-10);
+
+    --border: var(--alpha-paper-10);
+    --border-strong: var(--alpha-paper-16);
+    --divider: var(--alpha-paper-06);
+
+    --accent: var(--clay-400);
+    --accent-hover: #e89b76;
+    --accent-foreground: var(--ink-900);
+    --accent-muted: color-mix(in oklab, var(--clay-400) 16%, transparent);
+
+    --destructive: var(--rust-400);
+    --destructive-foreground: var(--ink-900);
+    --success: var(--moss-400);
+    --success-foreground: var(--ink-900);
+
+    --focus-ring: var(--clay-400);
+    --scrim: color-mix(in oklab, #000000 58%, transparent);
+
+    --elev-raised: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px -4px rgb(0 0 0 / 0.45);
+    --elev-floating: 0 2px 4px rgb(0 0 0 / 0.3), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+    --elev-overlay: 0 8px 16px -8px rgb(0 0 0 / 0.4), 0 32px 64px -24px rgb(0 0 0 / 0.7);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: var(--ink-900);
+  --background-sunken: #100e0a;
+  --foreground: var(--paper-100);
+  --foreground-muted: color-mix(in oklab, var(--paper-100) 62%, transparent);
+  --foreground-subtle: color-mix(in oklab, var(--paper-100) 42%, transparent);
+
+  --surface: var(--ink-800);
+  --surface-elevated: var(--ink-700);
+  --surface-inset: #100e0a;
+  --surface-hover: var(--alpha-paper-06);
+  --surface-pressed: var(--alpha-paper-10);
+
+  --border: var(--alpha-paper-10);
+  --border-strong: var(--alpha-paper-16);
+  --divider: var(--alpha-paper-06);
+
+  --accent: var(--clay-400);
+  --accent-hover: #e89b76;
+  --accent-foreground: var(--ink-900);
+  --accent-muted: color-mix(in oklab, var(--clay-400) 16%, transparent);
+
+  --destructive: var(--rust-400);
+  --destructive-foreground: var(--ink-900);
+  --success: var(--moss-400);
+  --success-foreground: var(--ink-900);
+
+  --focus-ring: var(--clay-400);
+  --scrim: color-mix(in oklab, #000000 58%, transparent);
+
+  --elev-raised: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px -4px rgb(0 0 0 / 0.45);
+  --elev-floating: 0 2px 4px rgb(0 0 0 / 0.3), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+  --elev-overlay: 0 8px 16px -8px rgb(0 0 0 / 0.4), 0 32px 64px -24px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
+}
