@@ -35,11 +35,12 @@ async function signature(password: string) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Prototypes are deliberately outside the door, so a prototype link can be
-  // shared with someone who does not have the word.
   const exempt =
     pathname === "/unlock" ||
+    // Prototypes are deliberately outside the door, and the API carries
+    // the password itself rather than a cookie.
     pathname.startsWith("/p/") ||
+    pathname.startsWith("/api/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico";
 

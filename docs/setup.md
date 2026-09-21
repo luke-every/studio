@@ -1,101 +1,85 @@
 # Setting up
 
-The studio runs on GitHub and Vercel. No database, no accounts, no sign-in.
-
 ```
-GitHub    the code, the registry, and the prototypes themselves
-Vercel    runs the Hub and serves the prototypes
-```
-
-## Three environment variables, set once in Vercel
-
-| Variable | What it is |
-| --- | --- |
-| `GITHUB_TOKEN` | A fine-grained token scoped to this repository with **Contents: read and write**. Used only for changes made in the app. |
-| `STUDIO_PASSWORD` | One shared word for the whole team. Not a login — no accounts, no sign-out. |
-| `REGISTRY_REPO` | Only needed outside Vercel. On Vercel the repository is detected. |
-
-Settings inside the app reports all three, and says what to fix.
-
-## Two ways work gets in
-
-**From Claude Code — the normal way.** Prototypes are built in their own
-folders, not in this repository, so `/push` is installed once per machine
-rather than living in the repo:
-
-```
-npm run skill:install
+Vercel Blob    the registry, and every prototype's files
+Vercel         runs the studio, which only ever reads
+GitHub         the studio's own code
 ```
 
-That copies the skill to `~/.claude/skills/push/` and records where the
-studio is in `~/.claude/prototype-studio.json`. From then on, `/push` works
-in any Claude Code session, in any folder.
+**Prototypes are content, not code.** They live in storage, so adding one
+never rebuilds or redeploys anything — it appears in seconds. The repository
+holds the application and nothing else.
+
+## Once, in Vercel
+
+1. **Storage** → **Create Database** → **Blob** → connect it to this project.
+   That sets `BLOB_READ_WRITE_TOKEN` for you; there is nothing to copy.
+2. **Settings → Environment Variables** → add `STUDIO_PASSWORD`, one shared
+   word for the team. It opens the studio and authorises `/push`.
+3. Redeploy so both take effect.
+
+Settings inside the app reports whether each is working.
+
+## Moving the old content across
+
+Only needed once, if prototypes were committed to the repository before:
+
+```
+BLOB_READ_WRITE_TOKEN=... npm run registry:migrate
+```
+
+It reads `registry/` and `public/p/` and writes them to the store.
+
+## Installing /push
+
+Prototypes are built in their own folders, so the skill is installed per
+machine rather than living in this repository. From a clone of it:
+
+```
+npm run skill:install -- --url https://<your-studio> --password <word>
+```
+
+That copies the skill to `~/.claude/skills/push/` and records the studio's
+address in `~/.claude/prototype-studio.json`. From then on `/push` works in
+any Claude Code session, in any folder.
 
 Typing `/push` while working on a prototype makes Claude work out what
-changed, write it up, save the version and push it. Under the hood it runs:
+changed, write it up, and upload it. No clone, no git, no deploy. Re-run the
+install command after pulling changes to the skill.
 
-```
-npm run proto:add -- --file <path> --name "Quiz results" --team acquisition \
-  --title "Tighter results layout" --changes "Cut the second card."
-```
+## Two ways in
 
-which copies the file to `public/p/<slug>/<version>/` and writes the
-registry records. Each version keeps its own copy, so older ones stay
-viewable. Because *you* make the commit, the version is attributed to you —
-this is where real authorship comes from, and why the studio needs no login.
+**`/push` from Claude Code** — the normal way. Attributed to whatever name
+Claude gives, normally the local git identity.
 
-Re-run `npm run skill:install` after pulling changes to the skill.
+**Add prototype in the app** — for anyone without a terminal. Takes an HTML
+file, a name, a team and a "Created by". Currently creates a prototype's
+first version only; later versions are `/push`'s job.
 
-**By hand in the app.** *Add prototype* on any team page takes an HTML file,
-a name, a team and a "Created by". The file is committed with the studio's
-token and served the same way. This is the only place the studio asks who you
-are, because it is the only place it cannot tell.
+## The API
 
-It currently only creates a prototype's first version. Adding a *later*
-version from the web interface is not built yet — that is `/push`'s job.
+Both go through the same two endpoints, authorised with the studio password
+in an `x-studio-password` header:
 
-## Prototypes are files, not links
-
-Every prototype lives in the repository and is served from this deployment:
-
-```
-public/p/quiz-results/editorial/index.html   →   /p/quiz-results/editorial
-```
-
-Tiles in the grid are the real thing, rendered small; the detail page is the
-real thing, usable. Nothing goes stale and nothing disappears when someone
-tidies up an account elsewhere.
-
-This is also what makes remixing somebody's prototype simple later: copying a
-folder is a real operation, copying a link is not.
+| | |
+| --- | --- |
+| `GET /api/prototypes` | what exists, so a push knows if it is a new version |
+| `POST /api/push` | an HTML file plus `name`, and `team` if it is new |
 
 ## The door
 
-`STUDIO_PASSWORD` puts one shared word in front of everything. Type it once
-per device. There is no account, nothing to remember, and no sign-out.
+`STUDIO_PASSWORD` puts one shared word in front of the studio. Type it once
+per device. No accounts, nothing to remember, no sign-out.
 
-Leave it unset locally. Set it in production: without it, anyone who finds
-the URL can add prototypes to the repository.
-
-Prototypes themselves at `/p/…` are deliberately outside the door, so a
-prototype link can be shared with someone who does not have the word.
+Prototypes are served from the store's own CDN, so a prototype link can be
+shared with someone who does not have the word.
 
 ## Running locally
 
 ```
 npm run dev
-npm run registry:check   # validate the registry without starting the app
 ```
 
-## What lives where
-
-| | |
-| --- | --- |
-| `registry/` | teams, projects, prototypes, versions — what everything means |
-| `public/p/<slug>/<exploration>/` | the prototypes themselves |
-| `scripts/add-prototype.ts` | the Claude Code route in |
-| `.claude/skills/push/` | the /push skill, installed per machine |
-| `src/lib/registry/read.ts` | reads the registry from this deployment |
-| `src/lib/registry/write.ts` | applies one change and commits it |
-| `src/lib/registry/github.ts` | the only place that talks to the GitHub API |
-| `src/lib/gate.ts` | the shared password |
+Without `BLOB_READ_WRITE_TOKEN` the studio reads the files in `registry/`
+instead — enough to work on the interface. Nothing can be saved in that
+mode, and Settings says so.

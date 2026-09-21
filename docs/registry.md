@@ -13,41 +13,36 @@ for what the code means. The Hub is the source of truth for nothing.**
 
 ## Shape
 
+Two kinds of object in Blob:
+
 ```
-registry/
-  users.json                         people, and only people
-  teams.json                         teams + the project folders inside them
-  prototypes/
-    quiz-results/
-      prototype.json                 identity, explorations, selected direction
-      versions/
-        editorial-v0.8.json          immutable — one file per version
-        editorial-v0.7.json
-        comparison-first-v0.3.json
+registry.json                  teams, projects, prototypes, versions
+p/<slug>/<version>/index.html  the prototype itself, served by the CDN
 ```
 
-One file per version is deliberate. An immutable record as an immutable file
-means immutability is enforced by *don't edit a file that already exists*
-rather than by discipline inside a growing array, and two people saving
-versions at the same time produce no merge conflict, because each save is a
-pure addition.
+One registry document rather than an object per record, because a read has
+to be one request to stay fast. It holds metadata only — never files — so it
+stays small. Writes are read-modify-write, which is fine for a handful of
+people saving rarely; the alternative costs every read a fan-out it does not
+need.
+
+Prototype files are written once per version and never replaced. The store
+refuses an upload to a path that already exists.
+
+**Why not the repository.** It was, and it was wrong: every upload rebuilt
+and redeployed the whole application for content the application had nothing
+to do with. A minute of latency, a repository that grew forever, and a merge
+conflict whenever two people saved at once. Content and code now move
+independently.
+
+**What that costs.** A prototype's files no longer have git history. The
+version records still carry the author, the date and what changed, which is
+the part anybody actually reads.
 
 ## What is not stored
 
-**Commit SHAs.** The registry lives in the same repository as the code, so
-the commit that introduced a version file *is* that version —
-`git log -1 -- registry/prototypes/<slug>/versions/<file>` resolves it, for
-free, forever, without a field that can drift. This also removes the
-ordering problem of recording a SHA inside the commit that produces it.
-
-**Anything per-person.** Which prototypes you opened recently, your view mode,
-who you are signed in as: browser state. Putting it in the registry would
-mean a commit every time somebody glanced at something.
-
-**Deployments as their own entity.** A version has a URL and a status. A
-deployment is an instance of a version; redeploying the same state never
-produces a new version number, so a separate record would distinguish
-nothing. It becomes an entity the day that stops being true.
+**Anything per-person.** Which prototypes you opened recently, your view
+mode. Browser state; it would be noise in a shared store.
 
 ## The four ideas that matter
 
@@ -67,10 +62,13 @@ remove the others; they are listed alongside it.
 
 ## Reading it
 
-`src/lib/registry/load.ts` is the only module that knows the registry is
-files. Everything else goes through `src/lib/registry/index.ts`, whose API is
-async even though the current read is synchronous — because the source will
-not stay files.
+`src/lib/registry/blob.ts` is the only module that knows where anything
+lives. Everything else goes through `src/lib/registry/index.ts`.
+
+Reads are cached under the `registry` tag and a write revalidates it, so a
+change is visible within seconds without every page view costing a fetch.
+Without a store configured the studio falls back to the files in
+`registry/`, which is enough to work on the interface locally.
 
 Every record is parsed through a Zod schema and the relationships between
 them are checked: references resolve, selected versions exist, version

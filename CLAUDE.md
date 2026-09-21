@@ -168,58 +168,31 @@ version parameter is read through `useSyncExternalStore`.
 
 ## Data rules
 
-Full detail in `docs/registry.md`. The rules that must not be violated when
-adding features:
+Full detail in `docs/registry.md`. The rules that must not be violated:
 
-1. **Git owns code history.** Never recreate it. A version does not store a
-   commit SHA — the commit containing the version file is the version.
-2. **The registry owns design meaning**: what the prototype is, what was
-   explored, what each version means, which direction is selected.
+1. **Prototypes are content, not code.** They live in Blob, never in the
+   repository. Adding one must never require a build or a deploy.
+2. **The app is a reader.** It renders what the store holds. Critical state
+   never lives only in UI state.
 3. **Versions are immutable.** New state means a new version, never an edit
-   and never a reused number.
-4. **Explorations are not versions.** A direction, versus a saved state.
-5. **Deployments are not versions.** Redeploying does not increment anything.
-6. **Current is not latest.** The selected version is an explicit human
-   choice, recorded with who and when.
-7. **Never delete design history.** Archive.
-8. **The Hub is not the source of truth.** Critical state never lives only in
-   UI state.
-9. **Keep storage replaceable.** Components talk to `src/lib/registry`.
-   Only `read.ts`, `write.ts` and `github.ts` know where data lives.
-10. **Keep infrastructure out of the UX.** Branches, SHAs, deployment ids
-    appear only where they are genuinely useful.
-11. **Per-person state stays client-side.** Recently opened, view mode,
-    current user. Never in the registry.
-12. **Every automation must be recoverable.** Never record a version whose
-    underlying commit does not exist; report what succeeded and what failed.
-13. **Prefer boring infrastructure.** Complexity is earned by a requirement.
-14. **GitHub and Vercel, nothing else.** The registry is files in the repo,
-    written as commits by the person making the change. No database. Do not
-    introduce another service without asking.
-
-15. **Nobody signs in.** There are no accounts and no user records. One
-    shared password opens the studio; one token does the app's writing.
-    Authorship comes from git commits for work pushed from Claude Code, and
-    from a "Created by" field for the one flow where the app cannot know.
-    Do not add authentication.
-16. **Prototypes are files, not links.** Each lives at
-    `public/p/<slug>/<exploration>/index.html` and is served from this
-    deployment. Previews render the real thing rather than a screenshot.
-
-Setup is in `docs/setup.md`.
-
-## Adding a prototype from Claude Code
-
-`/push` is the way work enters the studio — see `.claude/skills/push`. It
-works out what changed, writes the version notes, runs:
-
-```
-npm run proto:add -- --file ./thing.html --name "Thing" --team acquisition \
-  --title "headline" --changes "what is new" [--project slug] [--description "..."]
-```
-
-then commits and pushes. The commit is what attributes the version, which is
-why the studio needs no login.
+   and never a reused number. Each version keeps its own copy of its files,
+   which is what makes the history real rather than nominal.
+4. **Current is not latest** in principle — a prototype points at a version
+   explicitly, even though `/push` moves that pointer forward.
+5. **Never delete history.** Archive.
+6. **Keep storage replaceable.** Components talk to `src/lib/registry`; only
+   `blob.ts`, `read.ts` and `write.ts` know where anything lives.
+7. **Keep infrastructure out of the UX.** Storage keys, tokens and cache
+   tags appear nowhere in the interface.
+8. **Per-person state stays client-side.** Recently opened, view mode.
+9. **Nobody signs in.** One shared password opens the studio and authorises
+   the API. Authorship is a name, not an account. Do not add authentication.
+10. **Setup is two environment variables** — a Blob store and a password.
+    Do not add a third without asking.
+11. **Prefer boring infrastructure.** Complexity is earned by a requirement.
+12. **Every page must stay prerendered.** Nothing in `(studio)/layout.tsx`
+    or a page may read a cookie, a header or `useSearchParams` — any of
+    those puts a server round trip in front of every navigation.
 
 ---
 
