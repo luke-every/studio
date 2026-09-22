@@ -1,4 +1,3 @@
-import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 
 import * as registry from "@/lib/registry/write";
@@ -60,10 +59,6 @@ export async function POST(request: NextRequest) {
       by: text("author") ?? "Someone",
       html: await file.arrayBuffer(),
     });
-
-    // The fetch cache is cleared by the write; the rendered pages need
-    // telling too, or the studio shows the change only once they expire.
-    revalidatePath("/", "layout");
 
     return NextResponse.json({
       ok: true,

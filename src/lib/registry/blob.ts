@@ -57,8 +57,16 @@ async function registryUrl(): Promise<string | null> {
 /**
  * Read the registry.
  *
- * Cached by tag rather than by time: a write revalidates it, so a change
- * shows up in seconds without every page view costing a fetch.
+ * Read fresh, every time. The document is a few kilobytes of metadata, and
+ * the pages that read it are prerendered — so this runs when a page is
+ * generated, not when somebody looks at one.
+ *
+ * It used to be cached by tag, which put a stale registry in front of every
+ * reader: a push wrote the new version, the pages were regenerated, and they
+ * were regenerated from the cached copy that did not have it yet. A
+ * prototype took the cache's five minutes to appear rather than the seconds
+ * /push promises. Caching the document bought nothing that prerendering had
+ * not already bought, and cost the one thing the studio has to get right.
  */
 export async function readRegistryDocument(): Promise<RegistryDocument | null> {
   const url = await registryUrl();
@@ -66,9 +74,7 @@ export async function readRegistryDocument(): Promise<RegistryDocument | null> {
   // fresh store gets its teams without a migration step.
   if (!url) return null;
 
-  const response = await fetch(url, {
-    next: { tags: ["registry"], revalidate: 300 },
-  });
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Could not read the registry (${response.status}).`);
   }

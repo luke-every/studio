@@ -1,6 +1,6 @@
 import "server-only";
 
-import { revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 
 import {
   isBlobConfigured,
@@ -63,9 +63,9 @@ async function load(): Promise<RegistryDocument> {
 
 async function save(document: RegistryDocument) {
   await writeRegistryDocument(document);
-  // The studio reads through this tag, so the change is visible at once
-  // rather than whenever the cache happened to expire.
-  revalidateTag("registry", { expire: 0 });
+  // The pages are prerendered, so they hold the old registry until they are
+  // told to regenerate. They read the document fresh when they do.
+  revalidatePath("/", "layout");
 }
 
 export async function createTeam(input: {
