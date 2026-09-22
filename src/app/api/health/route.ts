@@ -32,6 +32,10 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
+    // Which build is answering. "The fix is deployed" is otherwise a guess,
+    // and a studio that looks unchanged after a push is exactly the thing
+    // this endpoint exists to tell you about.
+    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
     storage: isBlobConfigured() ? "configured" : "missing BLOB_READ_WRITE_TOKEN",
     blobVariables,
     reads,
