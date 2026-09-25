@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isBlobConfigured } from "@/lib/registry/blob";
+import { isContentRepoConfigured } from "@/lib/registry/github";
 import { getPrototypes, getTeams } from "@/lib/registry";
 
 /**
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
     // this endpoint exists to tell you about.
     commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
     storage: isBlobConfigured() ? "configured" : "missing BLOB_READ_WRITE_TOKEN",
+    contentRepo: isContentRepoConfigured() ? "configured" : "missing STUDIO_GITHUB_TOKEN or STUDIO_CONTENT_REPO",
     blobVariables,
     reads,
     teams,

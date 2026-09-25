@@ -13,12 +13,20 @@ for what the code means. The Hub is the source of truth for nothing.**
 
 ## Shape
 
-Two kinds of object in Blob:
+The registry document lives in Blob. A prototype's files live in a
+dedicated GitHub repository — the *content* repository, never this one:
 
 ```
-registry.json                  teams, projects, prototypes, versions
-p/<slug>/<version>/index.html  the prototype itself, served by the CDN
+Blob     registry.json                  teams, projects, prototypes, versions
+GitHub   p/<slug>/<version>/index.html  the version's entry point
+         p/<slug>/<version>/<...>       every other file in the folder pushed
 ```
+
+A version isn't forced into one file, and nothing about it is rewritten. The
+folder that was pushed is committed at the same relative paths it had
+locally, and served back the same way — a stylesheet loads, and whatever
+that stylesheet itself points at (a font, a background image) resolves too,
+because the served structure matches the pushed one exactly.
 
 One registry document rather than an object per record, because a read has
 to be one request to stay fast. It holds metadata only — never files — so it
@@ -26,18 +34,26 @@ stays small. Writes are read-modify-write, which is fine for a handful of
 people saving rarely; the alternative costs every read a fan-out it does not
 need.
 
-Prototype files are written once per version and never replaced. The store
-refuses an upload to a path that already exists.
+Every version is one commit, written through GitHub's Git Data API (a blob
+per file, one tree, one commit, move the branch ref) — never a local `git`
+checkout, and never this application's own repository. A version's path is
+checked for existence first and never replaced, the same as it was in Blob.
 
-**Why not the repository.** It was, and it was wrong: every upload rebuilt
-and redeployed the whole application for content the application had nothing
-to do with. A minute of latency, a repository that grew forever, and a merge
-conflict whenever two people saved at once. Content and code now move
-independently.
+**Why a *separate* repository, and why not just this one.** Prototypes used
+to live in this repository, and it was wrong: every upload rebuilt and
+redeployed the whole application for content the application had nothing to
+do with — a minute of latency, a repository that grew forever, a merge
+conflict whenever two people saved at once. Moving to Blob fixed that by
+taking content out of git entirely. Moving prototype files *back* into git —
+because a version being real, inspectable history is worth having — only
+stays safe as long as it's a repository Vercel never watches. If it were
+this repository, or a branch of it, every push would reintroduce exactly
+that redeploy.
 
-**What that costs.** A prototype's files no longer have git history. The
-version records still carry the author, the date and what changed, which is
-the part anybody actually reads.
+**What that gets back.** A prototype's files have real git history again —
+who committed what, and when, inspectable outside the studio entirely — on
+top of what the version records already carried (author, date, what
+changed).
 
 ## What is not stored
 
@@ -62,8 +78,10 @@ remove the others; they are listed alongside it.
 
 ## Reading it
 
-`src/lib/registry/blob.ts` is the only module that knows where anything
-lives. Everything else goes through `src/lib/registry/index.ts`.
+`src/lib/registry/blob.ts` knows where the registry document lives;
+`src/lib/registry/github.ts` knows where a prototype's own files live.
+Nothing else touches either directly — everything else goes through
+`src/lib/registry/index.ts`.
 
 Reads are cached under the `registry` tag and a write revalidates it, so a
 change is visible within seconds without every page view costing a fetch.

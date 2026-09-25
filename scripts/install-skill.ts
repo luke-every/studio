@@ -8,7 +8,7 @@
  *
  *   npm run skill:install -- --url https://studio.vercel.app --password <word>
  */
-import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -30,14 +30,18 @@ const config = {
 };
 
 const skillDir = join(home, ".claude", "skills", "push");
+const sourceDir = join(process.cwd(), ".claude", "skills", "push");
 mkdirSync(skillDir, { recursive: true });
-copyFileSync(join(process.cwd(), ".claude", "skills", "push", "SKILL.md"), join(skillDir, "SKILL.md"));
+copyFileSync(join(sourceDir, "SKILL.md"), join(skillDir, "SKILL.md"));
+copyFileSync(join(sourceDir, "push.mjs"), join(skillDir, "push.mjs"));
+rmSync(join(skillDir, "bundle.mjs"), { force: true }); // superseded by push.mjs
 
 mkdirSync(join(home, ".claude"), { recursive: true });
 writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
 console.log("Installed /push");
 console.log(`  skill   ${skillDir}/SKILL.md`);
+console.log(`  upload  ${skillDir}/push.mjs`);
 console.log(`  studio  ${configPath}`);
 
 if (!config.url || !config.password) {

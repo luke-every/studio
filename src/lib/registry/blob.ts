@@ -1,28 +1,20 @@
 import "server-only";
 
-import { head, list, put } from "@vercel/blob";
+import { list, put } from "@vercel/blob";
 
 import type { PrototypeRecord, ProjectRecord, TeamRecord, VersionRecord } from "./schema";
 
 /**
- * The store.
+ * The registry document.
  *
- * Prototypes are content, not code. Keeping them in the repository meant
- * every upload rebuilt and redeployed the whole application — a minute of
- * latency for something the application had nothing to do with, a repository
- * that grew forever, and a merge conflict whenever two people saved at once.
+ * Teams, projects, prototypes and versions — metadata only, never files. A
+ * prototype's own files live in the content repository (`github.ts`); this
+ * is just the record of what exists and what it means.
  *
- * So content lives in Vercel Blob and the application only reads it. Nothing
- * is deployed when a prototype is added; the studio simply shows what is
- * there.
- *
- * Two kinds of object:
- *
- *   registry.json                     teams, projects, prototypes, versions
- *   p/<slug>/<version>/index.html     the prototype itself, served by the CDN
- *
- * One registry document rather than an object per record, because a read has
- * to be one request to stay fast. It is small — metadata only, never files.
+ * One document rather than an object per record, because a read has to be
+ * one request to stay fast. Writes are read-modify-write: with a handful of
+ * people saving rarely this is fine, and the alternative — an object per
+ * record — costs every read a fan-out it does not need.
  */
 
 const REGISTRY_KEY = "registry.json";
@@ -87,9 +79,7 @@ export async function readRegistryDocument(): Promise<RegistryDocument | null> {
  *
  * `allowOverwrite` keeps the key stable so the URL does not change, and
  * `addRandomSuffix: false` is what makes the key predictable in the first
- * place. Writes are read-modify-write: with a handful of people saving
- * rarely this is fine, and the alternative — an object per record — costs
- * every read a fan-out it does not need.
+ * place.
  */
 export async function writeRegistryDocument(document: RegistryDocument) {
   await put(REGISTRY_KEY, `${JSON.stringify(document, null, 2)}\n`, {
@@ -99,31 +89,4 @@ export async function writeRegistryDocument(document: RegistryDocument) {
     allowOverwrite: true,
     cacheControlMaxAge: 0,
   });
-}
-
-/**
- * Upload a prototype's files. Returns the URL it is served from.
- *
- * Every version gets its own path and is never overwritten, which is what
- * makes going back through the history real rather than nominal.
- */
-export async function uploadPrototypeFile(
-  slug: string,
-  version: string,
-  html: ArrayBuffer | string,
-): Promise<string> {
-  const key = `p/${slug}/${version.replace(".", "-")}/index.html`;
-
-  const existing = await head(key).catch(() => null);
-  if (existing) {
-    throw new Error(`${version} of ${slug} already exists. Versions are never replaced.`);
-  }
-
-  const blob = await put(key, html, {
-    access: "public",
-    contentType: "text/html; charset=utf-8",
-    addRandomSuffix: false,
-  });
-
-  return blob.url;
 }

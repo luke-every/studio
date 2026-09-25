@@ -2,13 +2,8 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 
-import {
-  isBlobConfigured,
-  readRegistryDocument,
-  uploadPrototypeFile,
-  writeRegistryDocument,
-  type RegistryDocument,
-} from "./blob";
+import { isBlobConfigured, readRegistryDocument, writeRegistryDocument, type RegistryDocument } from "./blob";
+import { commitPrototypeVersion } from "./github";
 import { readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
 import type { PrototypeRecord, VersionRecord } from "./schema";
@@ -150,9 +145,15 @@ function nextVersion(existing: VersionRecord[]) {
 /**
  * Save a version.
  *
- * Creates the prototype if this is the first one. The files are uploaded to
- * their own path and never replaced, so every version stays viewable — that
- * is what makes the history real rather than nominal.
+ * Creates the prototype if this is the first one. Every version is one
+ * commit to the content repository and is never replaced, so every version
+ * stays viewable — that is what makes the history real rather than nominal.
+ *
+ * The entry isn't required to be self-contained. Whatever else the folder
+ * held is committed alongside it, at the same relative paths, so a local
+ * reference to a stylesheet, a script, an image, or something only a
+ * stylesheet itself references, still resolves once served — nothing is
+ * inlined and nothing is rewritten.
  */
 export async function saveVersion(input: {
   name: string;
@@ -164,6 +165,8 @@ export async function saveVersion(input: {
   changes?: string;
   by: string;
   html: ArrayBuffer | string;
+  /** Every other file in the folder, at its relative path. */
+  assets?: { path: string; content: ArrayBuffer }[];
   tint?: [string, string];
 }) {
   const document = await load();
@@ -184,7 +187,12 @@ export async function saveVersion(input: {
 
   const version = nextVersion(mine);
   const versionId = `${slug}-${version}`;
-  const url = await uploadPrototypeFile(slug, version, input.html);
+
+  const { entryUrl } = await commitPrototypeVersion(slug, version, [
+    { path: "index.html", content: input.html },
+    ...(input.assets ?? []),
+  ]);
+  const url = entryUrl;
 
   const record: VersionRecord = versionSchema.parse({
     id: versionId,

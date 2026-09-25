@@ -29,11 +29,15 @@ write the file so this is never asked again.
 
 ## 2. Work out what you are pushing
 
-**The file.** One self-contained HTML file. If the prototype is spread
-across several files, inline the CSS and JS into a single file first and
-push that — never push something that renders broken when served alone.
-Write the combined file to a temporary path; do not leave build artefacts in
-the person's folder.
+**The folder.** Upload it as it is — nothing needs inlining, bundling, or
+reading through by you first. That's the upload script's job (step 4): it
+walks the folder and sends every file at its real relative path, so a local
+reference anywhere in it (an HTML file's `<script src>`, a stylesheet's own
+`url(...)` to a font) still resolves once served. Just know which file is
+the entry (usually `index.html`) and which folder is the prototype's root.
+
+If the prototype is a real build with a compile step (bundled JS modules,
+a framework's build output), push the built output folder, not the source.
 
 **Whether it already exists.** Ask the studio:
 
@@ -69,23 +73,29 @@ improvements".
 
 ## 4. Upload
 
+One script does the whole thing: walks the folder and uploads every file in
+it, at its real relative path, in one request — nothing is read into your
+own context to do this, and nothing is inlined or rewritten.
+
 ```
-curl -s -X POST "<url>/api/push" \
-  -H "x-studio-password: <password>" \
-  -F "html=@/absolute/path/to/prototype.html" \
-  -F "name=Quiz results" \
-  -F "author=<the person's name>" \
-  -F "title=Tighter results layout" \
-  -F "changes=Cut the second card. Moved the CTA above the fold."
+node ~/.claude/skills/push/push.mjs \
+  --dir /absolute/path/to/the/prototype \
+  --name "Quiz results" \
+  --author "<the person's name>" \
+  --title "Tighter results layout" \
+  --changes "Cut the second card. Moved the CTA above the fold."
 ```
 
-Add `-F "slug=quiz-results"` for an existing prototype, `-F "team=acquisition"`
-for a new one, and optionally `-F "project=<slug>"` or `-F "description=..."`.
+Add `--entry app.html` if the entry isn't `index.html`, `--slug quiz-results`
+for an existing prototype, `--team acquisition` for a new one, and
+optionally `--project <slug>` or `--description "..."`.
 
 For the author, use the person's name as they would write it — their git
 `user.name` is a good default if you do not otherwise know it.
 
-The response carries the version that was saved and a link to it.
+It prints what it uploaded, the version that was saved, and a link to it.
+Trust that output — there is no need to open anything it wrote or sent to
+check it.
 
 ## 5. Tell them where it went
 
