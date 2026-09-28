@@ -71,6 +71,42 @@ export function contentRepoAccess() {
 }
 
 /**
+ * One file of a pushed version, straight from the content repository.
+ *
+ * Read by its path on the branch rather than through the registry. A
+ * prototype is often a hundred files and a video is dozens of range
+ * requests; looking each one up in the registry first cost two Blob
+ * operations per file, which rate-limited some of them and then exhausted
+ * the store entirely. Versions are never replaced, so the branch path
+ * always holds exactly what was pushed — nothing needs looking up.
+ *
+ * Authenticated, which gives the higher rate limit and means the content
+ * repository can be private. Returns null when the file isn't there, so a
+ * version from before the move to GitHub can still be found another way.
+ */
+export async function fetchPrototypeFile(
+  slug: string,
+  versionSegment: string,
+  path: string[],
+  range: string | null,
+): Promise<Response | null> {
+  const cfg = config();
+  if (!cfg) return null;
+  if (!/^[a-z0-9-]+$/.test(slug) || !/^v\d+-\d+$/.test(versionSegment)) return null;
+  if (path.some((segment) => !segment || segment === "." || segment === "..")) return null;
+
+  const file = (path.length ? path : ["index.html"]).map(encodeURIComponent).join("/");
+  const response = await fetch(
+    `https://raw.githubusercontent.com/${cfg.owner}/${cfg.name}/${cfg.branch}/p/${slug}/${versionSegment}/${file}`,
+    {
+      headers: { authorization: `Bearer ${cfg.token}`, ...(range ? { range } : {}) },
+      cache: "no-store",
+    },
+  );
+  return response.ok ? response : null;
+}
+
+/**
  * Confirm a commit /push made really holds this version, before the
  * registry points at it. The registry never records a version whose files
  * aren't there.
