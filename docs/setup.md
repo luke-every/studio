@@ -66,7 +66,9 @@ install command after pulling changes to the skill.
 ## Two ways in
 
 **`/push` from Claude Code** — the normal way. Attributed to whatever name
-Claude gives, normally the local git identity.
+Claude gives, normally the local git identity. It commits the files to the
+content repository directly, so there's no size limit beyond GitHub's 100MB
+a file.
 
 **Add prototype in the app** — for anyone without a terminal. Takes an HTML
 file, a name, a team and a "Created by". Currently creates a prototype's
@@ -74,8 +76,10 @@ first version only; later versions are `/push`'s job.
 
 ## The API
 
-`/push` goes through two endpoints, authorised with the studio password in
-an `x-studio-password` header. "Add prototype in the app" calls neither —
+`/push` goes through three endpoints, authorised with the studio password in
+an `x-studio-password` header: `/api/prototypes` to see what exists,
+`/api/push/start` to reserve a version and get the content repository, and
+`/api/push` to record the commit it made. "Add prototype in the app" calls neither —
 it's a write from inside the app itself, so it already knows its team.
 
 | | |

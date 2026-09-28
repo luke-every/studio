@@ -22,6 +22,16 @@ const CONTENT_TYPES: Record<string, string> = {
   ".ttf": "font/ttf",
   ".otf": "font/otf",
   ".txt": "text/plain; charset=utf-8",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".avif": "image/avif",
+  ".wasm": "application/wasm",
+  ".glb": "model/gltf-binary",
+  ".gltf": "model/gltf+json",
+  ".map": "application/json; charset=utf-8",
 };
 
 export function guessContentType(path: string): string {

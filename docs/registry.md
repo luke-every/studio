@@ -39,6 +39,27 @@ per file, one tree, one commit, move the branch ref) — never a local `git`
 checkout, and never this application's own repository. A version's path is
 checked for existence first and never replaced, the same as it was in Blob.
 
+**/push commits from the laptop, not through the studio.** A Vercel
+Function can't accept a request body over 4.5MB, and prototypes outgrow
+that quickly. So `/api/push/start` reserves the next version number and
+hands back the content repository; the skill writes the commit itself; and
+`/api/push` receives only the commit and the notes, checks the commit
+really holds `p/<slug>/<version>/index.html`, and records it. The only size
+limit left is GitHub's, 100MB a file. If someone else saved the same
+prototype in between, the number has moved on and `/api/push` refuses
+rather than record files under the wrong version.
+
+The token handed out is the content repository's own, behind the studio
+password. That password already authorises writing a prototype, and the
+token is scoped to that one repository, so it grants nothing new.
+
+Serving streams the file rather than buffering it — which is what gets a
+file past the same 4.5MB limit on the way out — and passes range requests
+through, which Safari needs to play a video.
+
+"Add prototype" in the app still sends its file through the studio, so it
+stays under that limit; it's for a single HTML file.
+
 **Why a *separate* repository, and why not just this one.** Prototypes used
 to live in this repository, and it was wrong: every upload rebuilt and
 redeployed the whole application for content the application had nothing to

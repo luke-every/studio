@@ -11,8 +11,11 @@ You are being asked to do the whole thing: work out what changed, write it
 up honestly, and upload it. The person should not have to tell you what they
 have been doing — you were there.
 
-This uploads over HTTP. There is no clone, no git, and nothing is deployed:
-the prototype appears in the studio within seconds. **Never run git here.**
+This uploads over HTTP — the files go straight to the studio's content
+repository on GitHub through its API, and the studio records the version.
+There is no clone, no local git, and nothing is deployed: the prototype
+appears in the studio within seconds. There's no size limit to work around —
+up to 100MB a file, as big a folder as it needs. **Never run git here.**
 The prototype folder may be its own repository and has nothing to do with
 the studio's.
 
@@ -73,9 +76,11 @@ improvements".
 
 ## 4. Upload
 
-One script does the whole thing: walks the folder and uploads every file in
-it, at its real relative path, in one request — nothing is read into your
-own context to do this, and nothing is inlined or rewritten.
+One script does the whole thing: asks the studio which version this will be,
+commits every file in the folder to the content repository at its real
+relative path, then tells the studio — nothing is read into your own
+context to do this, and nothing is inlined or rewritten. A large folder
+takes a little longer; let it run.
 
 ```
 node ~/.claude/skills/push/push.mjs \

@@ -3,7 +3,7 @@ import "server-only";
 import { revalidatePath } from "next/cache";
 
 import { isBlobConfigured, readRegistryDocument, writeRegistryDocument, type RegistryDocument } from "./blob";
-import { commitPrototypeVersion } from "./github";
+import { commitPrototypeVersion, verifyPrototypeVersion, versionPrefix } from "./github";
 import { readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
 import type { PrototypeRecord, VersionRecord } from "./schema";
@@ -142,20 +142,7 @@ function nextVersion(existing: VersionRecord[]) {
   return `v${(highest + 0.1).toFixed(1)}`;
 }
 
-/**
- * Save a version.
- *
- * Creates the prototype if this is the first one. Every version is one
- * commit to the content repository and is never replaced, so every version
- * stays viewable — that is what makes the history real rather than nominal.
- *
- * The entry isn't required to be self-contained. Whatever else the folder
- * held is committed alongside it, at the same relative paths, so a local
- * reference to a stylesheet, a script, an image, or something only a
- * stylesheet itself references, still resolves once served — nothing is
- * inlined and nothing is rewritten.
- */
-export async function saveVersion(input: {
+type VersionNotes = {
   name: string;
   slug?: string;
   teamSlug?: string;
@@ -164,15 +151,16 @@ export async function saveVersion(input: {
   title?: string;
   changes?: string;
   by: string;
-  html: ArrayBuffer | string;
-  /** Every other file in the folder, at its relative path. */
-  assets?: { path: string; content: ArrayBuffer }[];
   tint?: [string, string];
-}) {
-  const document = await load();
-  const slug = slugify(input.slug ?? input.name, "prototype");
-  const person = named(input.by);
+};
 
+/**
+ * Which prototype and version a save would become — the slug, the next
+ * version number, and whether the team exists for a prototype that's new.
+ * Checked before anything is written anywhere.
+ */
+function plan(document: RegistryDocument, input: { name: string; slug?: string; teamSlug?: string }) {
+  const slug = slugify(input.slug ?? input.name, "prototype");
   const existing = document.prototypes.find((prototype) => prototype.slug === slug);
   const mine = document.versions.filter((version) => version.prototypeSlug === slug);
 
@@ -185,16 +173,16 @@ export async function saveVersion(input: {
     }
   }
 
-  const version = nextVersion(mine);
+  return { slug, version: nextVersion(mine), existing };
+}
+
+/** Write the version record, and the prototype too if it's the first one. */
+async function record(document: RegistryDocument, input: VersionNotes, url: string) {
+  const { slug, version, existing } = plan(document, input);
+  const person = named(input.by);
   const versionId = `${slug}-${version}`;
 
-  const { entryUrl } = await commitPrototypeVersion(slug, version, [
-    { path: "index.html", content: input.html },
-    ...(input.assets ?? []),
-  ]);
-  const url = entryUrl;
-
-  const record: VersionRecord = versionSchema.parse({
+  const entry: VersionRecord = versionSchema.parse({
     id: versionId,
     prototypeSlug: slug,
     version,
@@ -204,7 +192,7 @@ export async function saveVersion(input: {
     createdAt: today(),
     url,
   });
-  document.versions.push(record);
+  document.versions.push(entry);
 
   const preview = {
     tint: input.tint ?? existing?.preview.tint ?? (["#e8e6e1", "#8b8880"] as [string, string]),
@@ -237,4 +225,70 @@ export async function saveVersion(input: {
 
   await save(document);
   return { slug, version, url };
+}
+
+/**
+ * Save a version.
+ *
+ * Creates the prototype if this is the first one. Every version is one
+ * commit to the content repository and is never replaced, so every version
+ * stays viewable — that is what makes the history real rather than nominal.
+ *
+ * The entry isn't required to be self-contained. Whatever else the folder
+ * held is committed alongside it, at the same relative paths, so a local
+ * reference to a stylesheet, a script, an image, or something only a
+ * stylesheet itself references, still resolves once served — nothing is
+ * inlined and nothing is rewritten.
+ *
+ * This path carries the files through the studio, so it's bound by a
+ * Vercel Function's 4.5MB request limit. It's for "Add prototype" in the
+ * app; /push commits to GitHub itself and uses `reserveVersion` and
+ * `recordPushedVersion` instead.
+ */
+export async function saveVersion(
+  input: VersionNotes & {
+    html: ArrayBuffer | string;
+    /** Every other file in the folder, at its relative path. */
+    assets?: { path: string; content: ArrayBuffer }[];
+  },
+) {
+  const document = await load();
+  const { slug, version } = plan(document, input);
+
+  const { entryUrl } = await commitPrototypeVersion(slug, version, [
+    { path: "index.html", content: input.html },
+    ...(input.assets ?? []),
+  ]);
+
+  return record(document, input, entryUrl);
+}
+
+/**
+ * The first half of /push: which version this will be, and where its files
+ * go. Nothing is written — /push commits the files to the content
+ * repository itself, then calls `recordPushedVersion`.
+ */
+export async function reserveVersion(input: { name: string; slug?: string; teamSlug?: string }) {
+  const document = await load();
+  const { slug, version } = plan(document, input);
+  return { slug, version, prefix: versionPrefix(slug, version) };
+}
+
+/**
+ * The second half of /push: the files are already committed, so check the
+ * commit really holds them and record the version. If someone else saved
+ * this prototype in between, the version number has moved on and this
+ * refuses rather than recording files under the wrong number.
+ */
+export async function recordPushedVersion(input: VersionNotes & { version: string; commit: string }) {
+  const document = await load();
+  const { slug, version } = plan(document, input);
+  if (version !== input.version) {
+    throw new StoreError(
+      `Someone saved ${slug} while this was uploading, so ${input.version} is no longer next. Push again.`,
+    );
+  }
+
+  const { entryUrl } = await verifyPrototypeVersion(slug, version, input.commit);
+  return record(document, input, entryUrl);
 }

@@ -36,6 +36,67 @@ export function isContentRepoConfigured() {
   return config() !== null;
 }
 
+function requireConfig(): Config {
+  const cfg = config();
+  if (!cfg) {
+    throw new Error(
+      "No content repository is connected. Set STUDIO_GITHUB_TOKEN and STUDIO_CONTENT_REPO in Vercel.",
+    );
+  }
+  return cfg;
+}
+
+/** Where a version's files sit inside the content repository. */
+export function versionPrefix(slug: string, version: string) {
+  return `p/${slug}/${version.replace(".", "-")}`;
+}
+
+function rawEntryUrl(cfg: Config, commitSha: string, prefix: string) {
+  return `https://raw.githubusercontent.com/${cfg.owner}/${cfg.name}/${commitSha}/${prefix}/index.html`;
+}
+
+/**
+ * The content repository, for /push to commit to directly.
+ *
+ * A Vercel Function can't take a request body over 4.5MB, so a prototype's
+ * files never pass through the studio on their way in: /push writes them to
+ * GitHub itself and the studio only records the version afterwards. Handed
+ * out behind the studio password, which already authorises writing a
+ * prototype — the token is scoped to the content repository and nothing
+ * else, so it grants nothing that password didn't.
+ */
+export function contentRepoAccess() {
+  const cfg = requireConfig();
+  return { token: cfg.token, owner: cfg.owner, repo: cfg.name, branch: cfg.branch };
+}
+
+/**
+ * Confirm a commit /push made really holds this version, before the
+ * registry points at it. The registry never records a version whose files
+ * aren't there.
+ */
+export async function verifyPrototypeVersion(
+  slug: string,
+  version: string,
+  commitSha: string,
+): Promise<{ entryUrl: string }> {
+  const cfg = requireConfig();
+  if (!/^[0-9a-f]{40}$/.test(commitSha)) {
+    throw new Error("That isn't a commit.");
+  }
+
+  const prefix = versionPrefix(slug, version);
+  const found = await fetch(
+    `${API}/repos/${cfg.owner}/${cfg.name}/contents/${prefix}/index.html?ref=${commitSha}`,
+    { headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github+json" } },
+  );
+  if (!found.ok) {
+    throw new Error(`Commit ${commitSha.slice(0, 7)} has no ${prefix}/index.html.`);
+  }
+
+  return { entryUrl: rawEntryUrl(cfg, commitSha, prefix) };
+}
+
 async function api(path: string, cfg: Config, init: RequestInit = {}) {
   const response = await fetch(`${API}${path}`, {
     ...init,
@@ -72,14 +133,8 @@ export async function commitPrototypeVersion(
   version: string,
   files: { path: string; content: ArrayBuffer | string }[],
 ): Promise<{ entryUrl: string }> {
-  const cfg = config();
-  if (!cfg) {
-    throw new Error(
-      "No content repository is connected. Set STUDIO_GITHUB_TOKEN and STUDIO_CONTENT_REPO in Vercel.",
-    );
-  }
-
-  const prefix = `p/${slug}/${version.replace(".", "-")}`;
+  const cfg = requireConfig();
+  const prefix = versionPrefix(slug, version);
 
   const existing = await fetch(
     `${API}/repos/${cfg.owner}/${cfg.name}/contents/${prefix}/index.html?ref=${cfg.branch}`,
@@ -123,7 +178,5 @@ export async function commitPrototypeVersion(
     body: JSON.stringify({ sha: commit.sha }),
   });
 
-  return {
-    entryUrl: `https://raw.githubusercontent.com/${cfg.owner}/${cfg.name}/${commit.sha as string}/${prefix}/index.html`,
-  };
+  return { entryUrl: rawEntryUrl(cfg, commit.sha as string, prefix) };
 }
