@@ -33,6 +33,23 @@
   --signal-stop: #9c4a3c;
   --signal-stop-soft: #c07d70;
 
+  /* --- Palette: preview tints ---------------------------------------------
+   * The gradients thumbnails paint in place of the prototype itself. Quiet
+   * and close to neutral, so a grid of them reads as a set of objects with
+   * the names doing the work — not as colour for its own sake. */
+  --tint-sand-from: #ece6dc;
+  --tint-sand-to: #b9ab94;
+  --tint-sage-from: #e3e7de;
+  --tint-sage-to: #99a590;
+  --tint-slate-from: #e1e5ea;
+  --tint-slate-to: #929cab;
+  --tint-clay-from: #ede2dc;
+  --tint-clay-to: #b89a8c;
+  --tint-heather-from: #e6e2ea;
+  --tint-heather-to: #a49cae;
+  --tint-stone-from: #e8e6e1;
+  --tint-stone-to: #8b8880;
+
   /* --- Alpha ramps (for borders, scrims, elevation on either theme) ------- */
   --alpha-ink-04: color-mix(in oklab, var(--ink-900) 4%, transparent);
   --alpha-ink-08: color-mix(in oklab, var(--ink-900) 8%, transparent);

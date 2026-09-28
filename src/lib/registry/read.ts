@@ -172,6 +172,7 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
       owner: record.owner,
       preview: {
         ...record.preview,
+        tint: previewTint(record.slug, record.preview.tint),
         url: current?.url ?? undefined,
       },
       versions,
@@ -214,4 +215,25 @@ export function compareVersions(a: string, b: string) {
   const [aMajor, aMinor] = parse(a);
   const [bMajor, bMinor] = parse(b);
   return aMajor === bMajor ? aMinor - bMinor : aMajor - bMajor;
+}
+
+/** What every save has written as a tint, since nothing ever chose one. */
+const DEFAULT_TINT = ["#e8e6e1", "#8b8880"];
+const PREVIEW_TINTS = 6;
+
+/**
+ * The gradient a prototype's thumbnail paints.
+ *
+ * Thumbnails show a gradient rather than the prototype itself, and every
+ * save stored the same grey — so a prototype that never had a tint chosen
+ * gets one of the theme's preview gradients, picked from its slug so it
+ * stays the same on every page and every visit. A tint somebody did set is
+ * left alone.
+ */
+function previewTint(slug: string, stored: [string, string]): [string, string] {
+  if (stored[0] !== DEFAULT_TINT[0] || stored[1] !== DEFAULT_TINT[1]) return stored;
+  let hash = 0;
+  for (const character of slug) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  const index = (hash % PREVIEW_TINTS) + 1;
+  return [`var(--preview-${index}-from)`, `var(--preview-${index}-to)`];
 }

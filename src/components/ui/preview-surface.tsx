@@ -7,10 +7,6 @@ import type { PreviewSource } from "@/lib/registry/types";
 
 type Size = "sm" | "md" | "lg";
 
-/** The viewport a prototype is rendered at before being scaled to fit. */
-const FRAME_WIDTH = 390;
-const FRAME_HEIGHT = Math.round((390 * 19.5) / 9);
-
 const corner: Record<Size, string> = {
   sm: "rounded-[var(--r-device-sm)]",
   md: "rounded-[var(--r-device)]",
@@ -25,8 +21,10 @@ const corner: Record<Size, string> = {
  * sits on the surface rather than being pasted onto it. One shape everywhere
  * is what makes a grid of them read as a set of screens.
  *
- * Today it paints a placeholder; when the data layer lands it hosts a live
- * prototype without anything around it changing.
+ * It paints the prototype's gradient rather than the prototype itself. A
+ * live prototype in every tile meant a grid of iframes — each one loading
+ * a whole prototype, and a phone-sized render shrunk until nothing in it
+ * was legible. The thing itself is one tap away, on its own page.
  */
 export function PreviewSurface({
   preview,
@@ -35,7 +33,6 @@ export function PreviewSurface({
   size = "md",
   caption = false,
   lifted = false,
-  interactive = false,
 }: {
   preview: PreviewSource;
   layoutId?: string;
@@ -44,41 +41,12 @@ export function PreviewSurface({
   caption?: boolean;
   /** Raises the shadow — for a preview that is being focused or hovered. */
   lifted?: boolean;
-  /** Lets the prototype inside be used, rather than only looked at. */
-  interactive?: boolean;
 }) {
-  // A prototype served from this deployment is shown as itself. Scaled to
-  // the tile with container units, so a grid of these is a grid of real
-  // screens rather than a grid of screenshots that will go stale.
-  const live = preview.url?.startsWith("/") ? preview.url : null;
-
   const body = (
     <>
-      {live ? (
-        <div className="absolute inset-0 [container-type:size]">
-          <iframe
-            src={live}
-            title={preview.caption}
-            loading="lazy"
-            tabIndex={interactive ? 0 : -1}
-            scrolling="no"
-            sandbox="allow-scripts allow-same-origin"
-            className={`absolute left-0 top-0 origin-top-left border-0 ${
-              interactive ? "" : "pointer-events-none"
-            }`}
-            style={{
-              width: `${FRAME_WIDTH}px`,
-              height: `${FRAME_HEIGHT}px`,
-              transform: `scale(calc(100cqw / ${FRAME_WIDTH}))`,
-            }}
-          />
-        </div>
-      ) : null}
       <div
         aria-hidden
-        className={`pointer-events-none absolute inset-0 mix-blend-soft-light ${
-          live ? "opacity-0" : "opacity-[0.18]"
-        }`}
+        className="pointer-events-none absolute inset-0 opacity-[0.18] mix-blend-soft-light"
         style={{
           backgroundImage:
             "radial-gradient(circle at 24% 16%, #fff 0, transparent 46%), radial-gradient(circle at 78% 74%, #000 0, transparent 52%)",

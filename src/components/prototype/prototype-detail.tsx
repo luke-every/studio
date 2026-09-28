@@ -86,25 +86,28 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-10">
         <div className="min-w-0">
-          {historic ? (
-            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-              <span className="text-foreground">
-                Looking at {selected.version}, not the current version.
-              </span>
-              <button
-                type="button"
-                onClick={() => choose(prototype.current)}
-                className="text-foreground-muted underline underline-offset-2 hover:text-foreground"
-              >
-                Back to {prototype.current.version}
-              </button>
-            </div>
-          ) : null}
-
           <PrototypeFrame
             url={selected.url}
             title={`${prototype.name} ${selected.version}`}
             className="h-[min(78dvh,52rem)] w-full"
+            leading={
+              historic ? (
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="text-foreground">
+                    Looking at {selected.version}, not the current version.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => choose(prototype.current)}
+                    className="text-foreground-muted underline underline-offset-2 hover:text-foreground"
+                  >
+                    Back to {prototype.current.version}
+                  </button>
+                </span>
+              ) : (
+                <span className="text-foreground-subtle">{selected.version}</span>
+              )
+            }
           />
         </div>
 

@@ -47,6 +47,21 @@
   --scrim: color-mix(in oklab, var(--ink-900) 32%, transparent);
 
   --shadow-color-mix: var(--alpha-ink-12);
+
+  /* A thumbnail is an object on the page, the same in either theme, so
+   * these are set once here and never redefined for dark. */
+  --preview-1-from: var(--tint-sand-from);
+  --preview-1-to: var(--tint-sand-to);
+  --preview-2-from: var(--tint-sage-from);
+  --preview-2-to: var(--tint-sage-to);
+  --preview-3-from: var(--tint-slate-from);
+  --preview-3-to: var(--tint-slate-to);
+  --preview-4-from: var(--tint-clay-from);
+  --preview-4-to: var(--tint-clay-to);
+  --preview-5-from: var(--tint-heather-from);
+  --preview-5-to: var(--tint-heather-to);
+  --preview-6-from: var(--tint-stone-from);
+  --preview-6-to: var(--tint-stone-to);
   color-scheme: light;
 }
 
