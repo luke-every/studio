@@ -1,10 +1,9 @@
 "use client";
 
 import { motion as m } from "motion/react";
-import { useState, type MouseEvent } from "react";
+import type { MouseEvent } from "react";
 
-import { MotionPopover } from "@/components/motion";
-import { useMotionLanguage } from "@/lib/motion";
+import { layoutId, useMotionLanguage } from "@/lib/motion";
 import { themePreferences, useTheme, type ThemePreference } from "@/lib/theme";
 
 const label: Record<ThemePreference, string> = {
@@ -14,63 +13,52 @@ const label: Record<ThemePreference, string> = {
 };
 
 /**
- * Part of the interface rather than a settings screen: one control in the
- * masthead, a menu that grows out of it, and a theme change revealed from the
- * point of the click.
+ * Light, dark or the system's choice — three options side by side, on the
+ * settings page.
+ *
+ * It used to be a menu at the foot of the side nav, which opened downward
+ * and off the bottom of the window. Three options don't need a menu; laid
+ * out in the page there is nothing to open and nowhere for it to fall.
+ * The change is still revealed from the point of the click.
  */
 export function ThemeSwitcher() {
-  const { preference, resolved, setPreference } = useTheme();
-  const [open, setOpen] = useState(false);
+  const { preference, setPreference } = useTheme();
   const motion = useMotionLanguage();
 
   const choose = (next: ThemePreference) => (event: MouseEvent<HTMLButtonElement>) => {
     setPreference(next, { x: event.clientX, y: event.clientY });
-    setOpen(false);
   };
 
   return (
-    <MotionPopover
-      open={open}
-      onClose={() => setOpen(false)}
-      className="w-36"
-      trigger={
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          className="flex h-6 items-center gap-1.5 rounded-[var(--r-sm)] border border-border px-2 text-xs text-foreground-muted transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover hover:text-foreground"
-        >
-          <span
-            aria-hidden
-            className="size-2.5 rounded-full border border-border-strong"
-            style={{ background: resolved === "dark" ? "var(--ink-700)" : "var(--paper-50)" }}
-          />
-          {label[preference]}
-        </button>
-      }
+    <div
+      role="radiogroup"
+      aria-label="Theme"
+      className="inline-flex rounded-[var(--r-sm)] border border-border p-0.5"
     >
-      <div role="menu">
-        {themePreferences.map((option) => (
+      {themePreferences.map((option) => {
+        const selected = preference === option;
+        return (
           <button
             key={option}
             type="button"
-            role="menuitemradio"
-            aria-checked={preference === option}
+            role="radio"
+            aria-checked={selected}
             onClick={choose(option)}
-            className="relative flex w-full items-center justify-between rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-sm text-foreground-muted transition-colors duration-[var(--dur-fast)] hover:bg-surface-hover hover:text-foreground"
+            className={`relative h-8 rounded-[var(--r-xs)] px-3 text-xs transition-colors duration-[var(--dur-fast)] ${
+              selected ? "text-foreground" : "text-foreground-muted hover:text-foreground"
+            }`}
           >
-            {label[option]}
-            {preference === option ? (
+            {selected ? (
               <m.span
-                layoutId="theme-choice"
+                layoutId={layoutId.themeIndicator}
                 transition={motion.enter("gentle")}
-                className="size-1.5 rounded-full bg-accent"
+                className="absolute inset-0 rounded-[var(--r-xs)] bg-surface-hover"
               />
             ) : null}
+            <span className="relative">{label[option]}</span>
           </button>
-        ))}
-      </div>
-    </MotionPopover>
+        );
+      })}
+    </div>
   );
 }

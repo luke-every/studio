@@ -1,23 +1,25 @@
+import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 import { studioPassword } from "@/lib/config";
 import { getPeople, getPrototypes } from "@/lib/registry";
 import { isBlobConfigured } from "@/lib/registry/blob";
+import { isContentRepoConfigured } from "@/lib/registry/github";
 import { avatarUrl } from "@/lib/registry/people";
-
-/**
- * Settings has to be rendered per request: it reports the live state of the
- * deployment, and a prerendered copy of that would report how things stood
- * when the build ran.
- */
-export const dynamic = "force-dynamic";
 
 /**
  * Settings.
  *
- * A status page, not a form. Two things have to be true for the studio to
- * work, and this says whether they are.
+ * The theme, then a status page: what has to be true for the studio to
+ * work, and whether it is.
+ *
+ * Prerendered like every other page, so it opens at once instead of
+ * waiting on a server round trip. Nothing here is lost by that: the
+ * environment variables it reports only change with a redeploy, which
+ * rebuilds it, and the people and the prototype count come from the
+ * registry, which regenerates this page on every save the same as the rest.
  */
 export default async function SettingsPage() {
   const store = isBlobConfigured();
+  const contentRepo = isContentRepoConfigured();
   const locked = Boolean(studioPassword());
   const people = await getPeople();
   const prototypes = await getPrototypes();
@@ -32,11 +34,28 @@ export default async function SettingsPage() {
         adding one never rebuilds or redeploys anything.
       </p>
 
+      <section className="mt-8 border-t border-divider pt-6">
+        <h2 className="text-sm font-medium text-foreground">Appearance</h2>
+        <p className="mt-1.5 text-xs text-foreground-subtle">
+          Kept in this browser, so it&rsquo;s yours alone.
+        </p>
+        <div className="mt-3">
+          <ThemeSwitcher />
+        </div>
+      </section>
+
       <Row
         title="Storage"
         state={store ? "ok" : "todo"}
         value={store ? `Connected · ${prototypes.length} prototypes` : "Not connected"}
-        note="A Vercel Blob store holds the registry and every prototype's files. Connect one under Storage in Vercel and it sets BLOB_READ_WRITE_TOKEN for you. Until then the studio shows the teams it ships with and nothing can be saved."
+        note="A Vercel Blob store holds the registry — the teams, prototypes and versions. Connect one under Storage in Vercel and it sets BLOB_READ_WRITE_TOKEN for you. Until then the studio shows the teams it ships with and nothing can be saved."
+      />
+
+      <Row
+        title="Prototype files"
+        state={contentRepo ? "ok" : "todo"}
+        value={contentRepo ? "Connected to the content repository" : "Not connected"}
+        note="Every version's files are one commit in a separate GitHub repository, which is never deployed. STUDIO_GITHUB_TOKEN and STUDIO_CONTENT_REPO, set in Vercel."
       />
 
       <Row
@@ -73,10 +92,11 @@ export default async function SettingsPage() {
       <section className="mt-10 border-t border-divider pt-7">
         <h2 className="text-eyebrow">How saving works</h2>
         <p className="mt-3 max-w-[64ch] text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
-          A prototype&rsquo;s files go straight to storage and appear here within
-          seconds. Nothing is committed, built or deployed — the app is only
-          ever a reader. Each version keeps its own copy of its files, so going
-          back through the history shows what was actually there at the time.
+          /push commits a prototype&rsquo;s files straight to the content
+          repository and it appears here within about a minute. Nothing about
+          the studio itself is built or deployed — the app is only ever a
+          reader. Each version keeps its own copy of its files, so going back
+          through the history shows what was actually there at the time.
         </p>
       </section>
     </div>

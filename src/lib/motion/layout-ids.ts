@@ -16,4 +16,5 @@ export const layoutId = {
   versionTitle: (slug: string, version: string) => `version-title:${slug}:${version}`,
   navIndicator: "nav-indicator",
   viewModeIndicator: "view-mode-indicator",
+  themeIndicator: "theme-indicator",
 } as const;

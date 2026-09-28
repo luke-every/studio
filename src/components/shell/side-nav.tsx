@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 
 import { useStudio } from "@/lib/data/studio-store";
 
@@ -115,10 +114,6 @@ export function SideNav() {
           everyone once the deploy finishes, in about a minute.
         </p>
       ) : null}
-
-      <div className="flex items-center justify-end gap-2 border-t border-divider px-1.5 pt-3">
-        <ThemeSwitcher />
-      </div>
     </nav>
   );
 }
