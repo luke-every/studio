@@ -29,17 +29,19 @@ type Props = {
   external?: boolean;
   /** Before the label. */
   icon?: ReactNode;
+  /** Working on it: the label breathes and the button can't be pressed again. */
+  loading?: boolean;
   children: ReactNode;
   className?: string;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children">;
 
-export function Button({ variant = "secondary", href, external, icon, children, className, ...rest }: Props) {
+export function Button({ variant = "secondary", href, external, icon, loading, children, className, ...rest }: Props) {
   const classes = `${base} ${look[variant]} h-10 gap-2 px-5 ${className ?? ""}`;
   const content = (
-    <>
+    <span className={`inline-flex items-center gap-2 ${loading ? "pulse-soft" : ""}`}>
       {icon}
       {children}
-    </>
+    </span>
   );
 
   if (href && external) {
@@ -57,7 +59,7 @@ export function Button({ variant = "secondary", href, external, icon, children, 
     );
   }
   return (
-    <button type="button" className={classes} {...rest}>
+    <button type="button" className={classes} {...rest} disabled={rest.disabled || loading} aria-busy={loading || undefined}>
       {content}
     </button>
   );
@@ -73,11 +75,14 @@ export function IconButton({
   href,
   external,
   tooltipAlign = "center",
+  loading,
   children,
   className,
   ...rest
 }: {
   label: string;
+  /** Working on it: the icon breathes. */
+  loading?: boolean;
   variant?: Extract<Look, "secondary" | "ghost">;
   href?: string;
   external?: boolean;
@@ -109,8 +114,8 @@ export function IconButton({
           {children}
         </Link>
       ) : (
-        <button type="button" aria-label={label} className={`${classes} peer`} {...rest}>
-          {children}
+        <button type="button" aria-label={label} aria-busy={loading || undefined} className={`${classes} peer`} {...rest}>
+          <span className={loading ? "pulse-soft" : ""}>{children}</span>
         </button>
       )}
       {tip}

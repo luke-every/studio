@@ -5,7 +5,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type ReactNode,
@@ -19,17 +21,17 @@ import {
   updatePrototype as updatePrototypeAction,
   type WriteResult,
 } from "@/lib/registry/actions";
+import { Toast, useToast } from "@/components/ui/toast";
 import { summariseTeam, type OpenTimes, type TeamSummary } from "@/lib/registry/select";
 import type { Project, Prototype, RegistrySnapshot } from "@/lib/registry/types";
 
 /**
  * The studio's working set.
  *
- * Reads come from the registry files in this deployment. Writes are commits
- * on the studio's repository, so a change lands in GitHub straight away and
- * reaches everyone else when Vercel has finished redeploying. Anything saved
- * but not yet deployed is listed in `publishing`, so whoever made it can
- * keep working and the interface can say plainly what is happening.
+ * Reads come from the registry, as a snapshot taken when the pages were made.
+ * A write goes to the registry and refreshes the pages, so it is live for
+ * everyone within seconds — and it never holds anyone up: a screen starts a
+ * save, carries on, and gets a toast when it lands.
  *
  * Nobody signs in. What you opened, and when, never leaves your browser.
  */
@@ -40,10 +42,17 @@ type StudioContextValue = {
   addTeam: (input: { name: string; remit: string; description: string }) => Promise<boolean>;
   addProject: (input: { teamSlug: string; name: string }) => Promise<boolean>;
   filePrototype: (prototypeSlug: string, projectSlug: string | null) => void;
-  /** Rename, move, set links or hide a prototype. Resolves true once it is saved. */
-  updatePrototype: (input: Parameters<typeof updatePrototypeAction>[0]) => Promise<boolean>;
-  /** Rename a version, as people see it. Resolves true once it is saved. */
-  renameVersion: (input: Parameters<typeof renameVersionAction>[0]) => Promise<boolean>;
+  /**
+   * Rename, move, set links or hide a prototype. Returns at once; the save
+   * carries on, marking `keys` as saving until it lands, then says so in a toast.
+   */
+  updatePrototype: (input: Parameters<typeof updatePrototypeAction>[0], keys: string[], message?: string) => void;
+  /** Rename a version, as people see it. Same way. */
+  renameVersion: (input: Parameters<typeof renameVersionAction>[0], keys: string[], message?: string) => void;
+  /** Which saves are in flight, by the keys they were started with. */
+  isSaving: (key: string) => boolean;
+  /** Say something short at the top of the screen. */
+  notify: (message: string) => void;
   markOpened: (prototypeSlug: string) => void;
   opened: OpenTimes;
   saving: boolean;
@@ -68,26 +77,22 @@ export function StudioProvider({
   const [pending, startTransition] = useTransition();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inFlight, setInFlight] = useState<string[]>([]);
+  // Saved, but the screen hasn't caught up yet: still showing as working, so
+  // the button doesn't flick back to how it was before the new data lands.
+  const [settling, setSettling] = useState<{ keys: string[]; before: RegistrySnapshot } | null>(null);
+  // The snapshot on screen, readable from callbacks that outlive a render.
+  const shown = useRef(snapshot);
+  useEffect(() => {
+    shown.current = snapshot;
+  }, [snapshot]);
+  const toast = useToast();
+  const [toastText, setToastText] = useState("");
   const [opened, setOpened] = useState<OpenTimes>({});
 
   // A save is live for everyone as soon as it lands, so all that is left is
   // to fetch the new snapshot for this screen.
   const after = useCallback(() => startTransition(() => router.refresh()), [router]);
-
-  const write = useCallback(
-    async (work: () => Promise<WriteResult>) => {
-      setSaving(true);
-      const result = await work();
-      setSaving(false);
-      if (!result.ok) {
-        setError(result.error);
-        return false;
-      }
-      after();
-      return true;
-    },
-    [after],
-  );
 
   const addTeam = useCallback<StudioContextValue["addTeam"]>(
     async (input) => {
@@ -133,14 +138,51 @@ export function StudioProvider({
     [after],
   );
 
+  const notify = useCallback(
+    (message: string) => {
+      setToastText(message);
+      toast.show();
+    },
+    [toast],
+  );
+
+  // A save that runs in the background: nothing waits for it. Its keys are
+  // marked while it runs so the buttons that caused it can show it, and the
+  // toast says when it is done. A failure goes to the banner.
+  const background = useCallback(
+    (work: () => Promise<WriteResult>, keys: string[], message: string) => {
+      setInFlight((current) => [...current, ...keys]);
+      void work().then((result) => {
+        setInFlight((current) => {
+          const next = [...current];
+          keys.forEach((key) => next.splice(next.indexOf(key), 1));
+          return next;
+        });
+        if (!result.ok) return setError(result.error);
+        setSettling({ keys, before: shown.current });
+        after();
+        notify(message);
+      });
+    },
+    [after, notify],
+  );
+
   const updatePrototype = useCallback<StudioContextValue["updatePrototype"]>(
-    (input) => write(() => updatePrototypeAction(input)),
-    [write],
+    (input, keys, message = "Saved") => background(() => updatePrototypeAction(input), keys, message),
+    [background],
   );
 
   const renameVersion = useCallback<StudioContextValue["renameVersion"]>(
-    (input) => write(() => renameVersionAction(input)),
-    [write],
+    (input, keys, message = "Saved") => background(() => renameVersionAction(input), keys, message),
+    [background],
+  );
+
+  const isSaving = useCallback(
+    (key: string) =>
+      inFlight.includes(key) ||
+      // Until the new snapshot arrives (or the refresh ends without one).
+      (pending && settling?.before === snapshot && settling.keys.includes(key)),
+    [inFlight, settling, pending, snapshot],
   );
 
   const dismissError = useCallback(() => setError(null), []);
@@ -161,16 +203,25 @@ export function StudioProvider({
       filePrototype,
       updatePrototype,
       renameVersion,
+      isSaving,
+      notify,
       markOpened,
       opened,
       saving: saving || pending,
       error,
       dismissError,
     }),
-    [snapshot, addTeam, addProject, filePrototype, updatePrototype, renameVersion, markOpened, opened, saving, pending, error, dismissError],
+    [snapshot, addTeam, addProject, filePrototype, updatePrototype, renameVersion, isSaving, notify, markOpened, opened, saving, pending, error, dismissError],
   );
 
-  return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
+  return (
+    <StudioContext.Provider value={value}>
+      {children}
+      <Toast state={toast.state} onDone={toast.done}>
+        {toastText}
+      </Toast>
+    </StudioContext.Provider>
+  );
 }
 
 export function useStudio() {

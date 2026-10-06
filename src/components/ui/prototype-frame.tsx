@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ExternalIcon, LinkIcon, SlidersIcon } from "@/components/shell/nav-icons";
 
 import { IconButton } from "./button";
-import { Toast, useToast } from "./toast";
+import { useStudio } from "@/lib/data/studio-store";
 
 /**
  * A prototype on a tile, the same grey tile the feed uses, 90% of the
@@ -32,14 +32,14 @@ export function PrototypeFrame({
   /** A picture of the prototype, shown while the real one loads. */
   poster?: string;
 }) {
-  const toast = useToast();
+  const { notify } = useStudio();
   const [controlsOpen, setControlsOpen] = useState(false);
 
   const copy = async () => {
     if (!url) return;
     try {
       await navigator.clipboard.writeText(new URL(url, window.location.origin).href);
-      toast.show();
+      notify("Link copied to clipboard");
     } catch {
       // Clipboard blocked: say nothing rather than claim a copy that didn't happen.
     }
@@ -95,10 +95,6 @@ export function PrototypeFrame({
           {controls}
         </div>
       ) : null}
-
-      <Toast state={toast.state} onDone={toast.done}>
-        Link copied to clipboard
-      </Toast>
     </div>
   );
 }

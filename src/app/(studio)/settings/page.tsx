@@ -1,3 +1,4 @@
+import { SetupGuide } from "@/components/onboarding/setup-guide";
 import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 import { studioPassword } from "@/lib/config";
 import { getPeople, getPrototypes } from "@/lib/registry";
@@ -31,6 +32,13 @@ export default async function SettingsPage() {
         Nobody signs in. Prototypes are stored separately from the app, so
         adding one never rebuilds or redeploys anything.
       </p>
+
+      <section className="mt-8 border-t border-divider pt-7">
+        <h2 className="text-eyebrow">Get set up to push</h2>
+        <div className="mt-3 max-w-[40rem]">
+          <SetupGuide />
+        </div>
+      </section>
 
       <section className="mt-8 border-t border-divider pt-6">
         <h2 className="text-sm font-medium text-foreground">Appearance</h2>

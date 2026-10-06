@@ -27,8 +27,11 @@ Read `~/.claude/prototype-studio.json`:
 { "url": "https://prototype-studio.vercel.app", "password": "…" }
 ```
 
-If it is missing or empty, ask for the studio's address and password, then
-write the file so this is never asked again.
+If it is missing or empty, this machine isn't set up yet. Tell the person to
+open the studio, tap "Get set up" (or open Settings), and paste the one command
+there into Terminal; it installs this skill and saves the address and password.
+If they would rather give them to you, ask for the address and password and
+write the file yourself.
 
 ## 2. Work out what you are pushing
 

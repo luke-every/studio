@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
    */
   outputFileTracingIncludes: {
     "/**": ["./registry/**/*.json"],
+    // The /push skill, handed out by /skill/push/<file>.
+    "/skill/push/[file]": ["./.claude/skills/push/*"],
   },
 };
 

@@ -5,9 +5,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogForm, fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
+import { linkProblem, type LinkKind } from "@/lib/links";
 import type { Prototype } from "@/lib/registry/types";
-
-export type LinkKind = "figma" | "notion";
 
 const KINDS: Record<LinkKind, { name: string; icon: string; placeholder: string }> = {
   figma: { name: "Figma", icon: "/icons/figma.png", placeholder: "https://www.figma.com/design/…" },
@@ -20,6 +19,7 @@ const KINDS: Record<LinkKind, { name: string; icon: string; placeholder: string 
  * is saved for everyone.
  */
 export function PrototypeLinks({ prototype }: { prototype: Prototype }) {
+  const { isSaving } = useStudio();
   const [adding, setAdding] = useState<LinkKind | null>(null);
   const urls: Record<LinkKind, string | undefined> = {
     figma: prototype.figmaUrl,
@@ -37,12 +37,12 @@ export function PrototypeLinks({ prototype }: { prototype: Prototype }) {
           );
 
           return urls[kind] ? (
-            <Button key={kind} href={urls[kind]} external icon={image}>
+            <Button key={kind} href={urls[kind]} external icon={image} className={isSaving(`link:${kind}`) ? "pulse-soft" : ""}>
               Open in {name}
             </Button>
           ) : (
-            <Button key={kind} icon={image} onClick={() => setAdding(kind)}>
-              Add {name} link
+            <Button key={kind} icon={image} loading={isSaving(`link:${kind}`)} onClick={() => setAdding(kind)}>
+              {isSaving(`link:${kind}`) ? "Saving…" : `Add ${name} link`}
             </Button>
           );
         })}
@@ -80,15 +80,22 @@ export function LinksDialog({
           : "Where the design and the write-up live. Leave one empty to remove it."
       }
       submitLabel="Save"
-      busyLabel="Saving…"
       onClose={onClose}
-      onSubmit={() =>
-        updatePrototype({
-          slug: prototype.slug,
-          ...(kinds.includes("figma") ? { figmaUrl: values.figma } : {}),
-          ...(kinds.includes("notion") ? { notionUrl: values.notion } : {}),
-        })
-      }
+      onSubmit={() => {
+        for (const kind of kinds) {
+          const problem = linkProblem(kind, values[kind]);
+          if (problem) return problem;
+        }
+        updatePrototype(
+          {
+            slug: prototype.slug,
+            ...(kinds.includes("figma") ? { figmaUrl: values.figma } : {}),
+            ...(kinds.includes("notion") ? { notionUrl: values.notion } : {}),
+          },
+          kinds.map((kind) => `link:${kind}`),
+          "Saved",
+        );
+      }}
     >
       {kinds.map((kind, index) => (
         <label key={kind} className="flex flex-col gap-1.5">

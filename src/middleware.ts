@@ -43,6 +43,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/fonts/") ||
+    // The installer and the skill files it fetches, run from a terminal.
+    pathname === "/install.sh" ||
+    pathname.startsWith("/skill/") ||
     pathname === "/favicon.ico";
 
   if (exempt) return NextResponse.next();

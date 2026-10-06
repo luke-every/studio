@@ -20,13 +20,16 @@ export function VersionMenu({
   currentId,
   onSelect,
   onRename,
+  saving,
 }: {
   versions: PrototypeVersion[];
   selectedId: string;
   currentId: string;
   onSelect: (version: PrototypeVersion) => void;
-  /** Resolves true once the new number is saved. */
-  onRename: (version: PrototypeVersion, label: string) => Promise<boolean>;
+  /** Starts saving the new number and returns at once. */
+  onRename: (version: PrototypeVersion, label: string) => void;
+  /** A rename is on its way. */
+  saving?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -35,7 +38,7 @@ export function VersionMenu({
 
   const label = (
     <>
-      <span className="flex items-center gap-1 text-sm font-medium text-foreground">
+      <span className={`flex items-center gap-1 text-sm font-medium text-foreground ${saving ? "pulse-soft" : ""}`}>
         {selected.version}
         {versions.length > 1 ? <ChevronDownIcon className="size-3.5 text-foreground-subtle" /> : null}
       </span>
@@ -43,10 +46,13 @@ export function VersionMenu({
     </>
   );
 
-  const save = async (event: FormEvent, version: PrototypeVersion) => {
+  const taken = (version: PrototypeVersion) =>
+    versions.some((other) => other.id !== version.id && other.version === draft.trim());
+
+  const save = (event: FormEvent, version: PrototypeVersion) => {
     event.preventDefault();
-    if (draft.trim() === version.version) return setEditing(null);
-    if (await onRename(version, draft.trim())) setEditing(null);
+    if (draft.trim() !== version.version && !taken(version)) onRename(version, draft.trim());
+    setEditing(null);
   };
 
   // One version: nothing to pick.
@@ -84,13 +90,14 @@ export function VersionMenu({
                   onKeyDown={(event) => event.key === "Escape" && (event.stopPropagation(), setEditing(null))}
                   aria-label="Version number"
                   placeholder="v0.8"
+                  aria-invalid={taken(version) || undefined}
                   autoFocus
                   className="min-w-0 flex-1 rounded-[var(--r-sm)] border border-border bg-surface px-2 py-1 text-sm text-foreground focus:border-border-strong focus:outline-none"
                 />
                 <button
                   type="submit"
                   aria-label="Save version number"
-                  disabled={!VERSION_NUMBER.test(draft.trim())}
+                  disabled={!VERSION_NUMBER.test(draft.trim()) || taken(version)}
                   className="grid size-7 place-items-center rounded-[var(--r-sm)] text-foreground hover:bg-surface-hover disabled:opacity-30"
                 >
                   <CheckIcon />

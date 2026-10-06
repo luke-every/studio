@@ -26,7 +26,7 @@ import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
  * else can open.
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
-  const { markOpened, renameVersion } = useStudio();
+  const { markOpened, renameVersion, isSaving } = useStudio();
   const fromUrl = useUrlVersion();
   // Chosen by id, so renaming a version doesn't lose it.
   const [chosenId, setChosenId] = useState<string | null>(null);
@@ -54,10 +54,9 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     showInAddressBar(version);
   };
 
-  const rename = async (version: PrototypeVersion, label: string) => {
-    const saved = await renameVersion({ slug: prototype.slug, versionId: version.id, label });
-    if (saved && version.id === selected.id) showInAddressBar({ ...version, version: label });
-    return saved;
+  const rename = (version: PrototypeVersion, label: string) => {
+    renameVersion({ slug: prototype.slug, versionId: version.id, label }, ["version"], "Renamed");
+    if (version.id === selected.id) showInAddressBar({ ...version, version: label });
   };
 
   // What the prototype offers to adjust, if anything. The choices belong to
@@ -92,6 +91,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
             currentId={prototype.current.id}
             onSelect={choose}
             onRename={rename}
+            saving={isSaving("version")}
           />
         }
       />

@@ -54,17 +54,27 @@ migration step.
 
 ## Installing /push
 
-Prototypes are built in their own folders, so the skill is installed per
-machine rather than living in this repository. From a clone of it:
+**Anyone else**, on their own, with no help: open the studio, tap "Get set up"
+in the corner (it's also in Settings) and paste the one command it shows into
+Terminal:
+
+```
+curl -fsSL https://<your-studio>/install.sh | sh
+```
+
+It puts the skill in `~/.claude/skills/push/`, asks for the studio password once
+and saves it with the studio's address in `~/.claude/prototype-studio.json`.
+They need Claude Code and Node.js — no GitHub account or key, because `/push`
+talks to the studio and the studio talks to GitHub. Run it again to update.
+The installer and the two skill files it downloads are served by the studio
+itself (`/install.sh`, `/skill/push/…`), outside the door, since a terminal has
+no cookie; they're the same code as this repository.
+
+**From a clone of this repository**, for working on the skill:
 
 ```
 npm run skill:install -- --url https://<your-studio> --password <word>
 ```
-
-That copies the skill — and the script it uses to upload a prototype's files
-— to `~/.claude/skills/push/`, and records the studio's address in
-`~/.claude/prototype-studio.json`. From then on `/push` works in any Claude
-Code session, in any folder.
 
 Typing `/push` while working on a prototype makes Claude work out what
 changed, write it up, and upload it. No clone, no git, no deploy. Re-run the

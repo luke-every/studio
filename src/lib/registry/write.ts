@@ -2,6 +2,8 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 
+import { linkProblem, type LinkKind } from "@/lib/links";
+
 import { isStoreConfigured, readRegistryDocument, writeRegistryDocument, type RegistryDocument } from "./store";
 import { commitPrototypeVersion, verifyPrototypeVersion, versionPrefix } from "./github";
 import { compareVersions, readSeed } from "./read";
@@ -68,28 +70,14 @@ async function save(document: RegistryDocument) {
   revalidatePath("/", "layout");
 }
 
-const LINK_HOSTS = {
-  figma: ["figma.com"],
-  notion: ["notion.so", "notion.site", "notion.com"],
-} as const;
-
 /**
- * A link somebody typed or pasted, checked before it is kept: it has to be a
- * web address, and for the place it claims to be. Returns the cleaned address.
+ * A link somebody typed or pasted, checked before it is kept. The dialog has
+ * already checked it; this is the check that counts.
  */
-export function cleanLink(kind: keyof typeof LINK_HOSTS, value: string) {
-  const label = kind === "figma" ? "Figma" : "Notion";
-  let url: URL;
-  try {
-    url = new URL(value.trim());
-  } catch {
-    throw new StoreError(`That doesn't look like a link. Paste the ${label} address.`);
-  }
-  const allowed = LINK_HOSTS[kind].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
-  if (url.protocol !== "https:" || !allowed) {
-    throw new StoreError(`That isn't a ${label} link.`);
-  }
-  return url.toString();
+export function cleanLink(kind: LinkKind, value: string) {
+  const problem = linkProblem(kind, value);
+  if (problem) throw new StoreError(problem);
+  return new URL(value.trim()).toString();
 }
 
 export async function createTeam(input: {

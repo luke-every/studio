@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 
 import { MotionModal } from "@/components/motion";
-import { useStudio } from "@/lib/data/studio-store";
 
 import { Button } from "./button";
 
@@ -13,15 +12,18 @@ export const fieldClass =
 
 /**
  * A small dialog with a form in it: a title, what it is for, the fields, and
- * Cancel and a button. `onSubmit` resolves true when it worked, and the
- * dialog closes; otherwise it stays, with what went wrong shown inside it so
- * nothing typed is lost.
+ * Cancel and a button.
+ *
+ * Pressing the button doesn't hold anything up. `onSubmit` checks what was
+ * typed and returns what's wrong with it, if anything, which is shown here
+ * and keeps the dialog open; otherwise the dialog closes at once and the
+ * save carries on behind it — the button that caused it shows it's working,
+ * and a toast says when it's done.
  */
 export function DialogForm({
   title,
   description,
   submitLabel,
-  busyLabel,
   disabled,
   destructive,
   onSubmit,
@@ -31,21 +33,19 @@ export function DialogForm({
   title: string;
   description?: string;
   submitLabel: string;
-  busyLabel: string;
   disabled?: boolean;
   destructive?: boolean;
-  onSubmit: () => Promise<boolean>;
+  onSubmit: () => string | null | void;
   onClose: () => void;
   children?: ReactNode;
 }) {
-  const { saving, error, dismissError } = useStudio();
+  const [problem, setProblem] = useState<string | null>(null);
 
-  // An error from somewhere else shouldn't greet a dialog that has just opened.
-  useEffect(() => dismissError, [dismissError]);
-
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (await onSubmit()) onClose();
+    const found = onSubmit();
+    if (found) return setProblem(found);
+    onClose();
   };
 
   return (
@@ -58,16 +58,16 @@ export function DialogForm({
 
         {children}
 
-        {error ? (
+        {problem ? (
           <p role="alert" className="text-sm text-destructive">
-            {error}
+            {problem}
           </p>
         ) : null}
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant={destructive ? "destructive" : "primary"} disabled={disabled || saving}>
-            {saving ? busyLabel : submitLabel}
+          <Button type="submit" variant={destructive ? "destructive" : "primary"} disabled={disabled}>
+            {submitLabel}
           </Button>
         </div>
       </form>

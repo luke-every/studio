@@ -19,6 +19,7 @@ const item =
 
 /** The ellipsis beside a prototype's title: rename it, move it, edit its links, delete it. */
 export function PrototypeMenu({ prototype }: { prototype: Prototype }) {
+  const { isSaving } = useStudio();
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
 
@@ -37,6 +38,7 @@ export function PrototypeMenu({ prototype }: { prototype: Prototype }) {
         trigger={
           <IconButton
             label="More"
+            loading={isSaving("prototype")}
             variant="ghost"
             tooltipAlign="end"
             onClick={() => setOpen((value) => !value)}
@@ -80,10 +82,9 @@ function RenameDialog({ prototype, onClose }: { prototype: Prototype; onClose: (
       title="Rename"
       description="Only the name changes. Its address and its versions stay as they are."
       submitLabel="Rename"
-      busyLabel="Renaming…"
       disabled={!name.trim() || name.trim() === prototype.name}
       onClose={onClose}
-      onSubmit={() => updatePrototype({ slug: prototype.slug, name })}
+      onSubmit={() => updatePrototype({ slug: prototype.slug, name }, ["prototype"], "Renamed")}
     >
       <input
         value={name}
@@ -109,10 +110,11 @@ function MoveDialog({ prototype, onClose }: { prototype: Prototype; onClose: () 
       title="Move"
       description="Choose a team, and a project inside it if you like."
       submitLabel="Move"
-      busyLabel="Moving…"
       disabled={unchanged}
       onClose={onClose}
-      onSubmit={() => updatePrototype({ slug: prototype.slug, teamSlug, projectSlug: projectSlug || null })}
+      onSubmit={() =>
+        updatePrototype({ slug: prototype.slug, teamSlug, projectSlug: projectSlug || null }, ["prototype"], "Moved")
+      }
     >
       <label className="flex flex-col gap-1.5">
         <span className="text-eyebrow">Team</span>
@@ -156,13 +158,12 @@ function DeleteDialog({ prototype, onClose }: { prototype: Prototype; onClose: (
       title={`Delete “${prototype.name}”?`}
       description="It disappears from the studio for everyone. Its versions and files stay safe in the content repository, and pushing to it again brings it back."
       submitLabel="Delete"
-      busyLabel="Deleting…"
       destructive
       onClose={onClose}
-      onSubmit={async () => {
-        const ok = await updatePrototype({ slug: prototype.slug, archived: true });
-        if (ok) router.push("/");
-        return ok;
+      onSubmit={() => {
+        // Straight home: there is nothing left here to wait for.
+        router.push("/");
+        updatePrototype({ slug: prototype.slug, archived: true }, ["prototype"], "Deleted");
       }}
     />
   );
