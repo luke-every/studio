@@ -52,7 +52,7 @@ export function ProjectOrb({ seed, className }: { seed: string; className?: stri
   return (
     <div
       aria-hidden
-      className={`relative isolate aspect-[5/3] overflow-hidden rounded-[var(--r-xl)] [transform:translateZ(0)] shadow-[inset_0_0_0_1px_var(--border)] ${className ?? ""}`}
+      className={`relative isolate aspect-[5/3] overflow-hidden rounded-[var(--r-thumb)] [transform:translateZ(0)] shadow-[inset_0_0_0_1px_var(--border)] ${className ?? ""}`}
     >
       <div
         className="absolute -inset-[10%] blur-md"

@@ -7,6 +7,7 @@ import { ExternalIcon, LinkIcon, SlidersIcon } from "@/components/shell/nav-icon
 import { IconButton } from "./button";
 import { useStudio } from "@/lib/data/studio-store";
 import type { Device } from "@/lib/phone";
+import { useMediaQuery } from "@/lib/use-media-query";
 
 /**
  * A prototype on a tile, the same grey tile the feed uses, 90% of the
@@ -53,8 +54,9 @@ export function PrototypeFrame({
 
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
-  // On a phone the preview always fits: there is no room to scroll around a phone-sized phone.
-  const [narrow, setNarrow] = useState(false);
+  // On a phone the preview is the width of the screen: no frame, no picking a
+  // size, just the phone filling the width and the page scrolling down it.
+  const narrow = useMediaQuery("(max-width: 639px)");
   useEffect(() => {
     const element = stage.current;
     if (!element) return;
@@ -64,18 +66,16 @@ export function PrototypeFrame({
     });
     observer.observe(element);
 
-    const query = window.matchMedia("(max-width: 639px)");
-    const onChange = () => setNarrow(query.matches);
-    onChange();
-    query.addEventListener("change", onChange);
-
-    return () => {
-      observer.disconnect();
-      query.removeEventListener("change", onChange);
-    };
+    return () => observer.disconnect();
   }, []);
   // Measured on the client only, so no frame is drawn on the server.
-  const scale = space ? (fit || narrow ? Math.min(space.width / device.width, space.height / device.height) : zoom) : null;
+  const scale = space
+    ? narrow
+      ? space.width / device.width
+      : fit
+        ? Math.min(space.width / device.width, space.height / device.height)
+        : zoom
+    : null;
 
   const copy = async () => {
     if (!url) return;
@@ -89,11 +89,11 @@ export function PrototypeFrame({
 
   return (
     <div
-      className={`relative mx-auto flex min-h-[var(--frame-height)] w-full flex-col rounded-[var(--r-tile)] bg-tile ${
+      className={`relative mx-auto flex w-full flex-col bg-tile max-sm:rounded-none sm:min-h-[var(--frame-height)] sm:rounded-[var(--r-tile)] ${
         // Scaled to fit, the tile is a set height and the phone is made to fit
         // it. Otherwise the tile is at least that tall and grows to hold a
-        // phone that is taller.
-        fit || narrow ? "h-[var(--frame-height)]" : ""
+        // phone that is taller. On a phone it is just as tall as the phone.
+        fit ? "sm:h-[var(--frame-height)]" : ""
       }`}
     >
       <div className="grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:absolute sm:inset-x-0 sm:top-0 sm:z-[var(--z-raised)]">
@@ -123,7 +123,7 @@ export function PrototypeFrame({
         ) : null}
       </div>
 
-      <div ref={stage} className="flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4 [scrollbar-width:thin] sm:py-16">
+      <div ref={stage} className="flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden pb-4 [scrollbar-width:thin] sm:px-4 sm:py-16">
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
           className={`relative isolate m-auto shrink-0 overflow-hidden rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${

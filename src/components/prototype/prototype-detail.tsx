@@ -76,7 +76,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const address = selected.url ? applyControls(selected.url, offered, values) : undefined;
 
   return (
-    <div className="w-full px-5 py-6 sm:px-8 sm:py-8">
+    <div className="w-full py-6 sm:px-8 sm:py-8">
       <PrototypeFrame
         url={address}
         device={device}
@@ -125,7 +125,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
         }
       />
 
-      <div className="mx-auto mt-8 w-full max-w-[var(--content-width)] pb-10">
+      <div className="mx-auto mt-8 w-full max-w-[var(--content-width)] px-5 pb-10 sm:px-0">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">

@@ -164,3 +164,20 @@ export function FitIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function MenuIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2.75 4.5h10.5M2.75 8h10.5M2.75 11.5h10.5" />
+    </Frame>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <circle cx="7.25" cy="7.25" r="4.25" />
+      <path d="m10.5 10.5 2.75 2.75" />
+    </Frame>
+  );
+}

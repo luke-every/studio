@@ -188,3 +188,13 @@
     animation: none !important;
   }
 }
+
+/* iOS Safari zooms the page when a field under 16px is focused, and doesn't
+ * zoom back. On touch screens no field is ever smaller than that. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}

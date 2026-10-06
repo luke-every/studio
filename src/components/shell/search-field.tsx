@@ -11,7 +11,7 @@ import { useSearch } from "@/lib/search-store";
  * arrival: tap once and start typing. There is no submit and no results page
  * — the view the user is already looking at narrows as they type.
  */
-export function SearchField() {
+export function SearchField({ tabIndex }: { tabIndex?: number }) {
   const { query, setQuery, clear, register } = useSearch();
 
   // "/" from anywhere puts the cursor here, the way it does in a browser.
@@ -59,6 +59,7 @@ export function SearchField() {
           }
         }}
         placeholder="Search prototypes"
+        tabIndex={tabIndex}
         aria-label="Search prototypes"
         className="h-12 w-full rounded-[var(--r-full)] bg-surface-hover pl-12 pr-12 text-base text-foreground placeholder:text-foreground-subtle focus:outline-none [&::-webkit-search-cancel-button]:hidden"
       />

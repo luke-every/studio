@@ -120,9 +120,13 @@
   --r-xl: 0.75rem;
   --r-full: 999px;
   --r-tag: 0.75rem;
-  --r-tile: 1.5rem;
+  /* Never under 16px: on a narrow screen the corners shrink with it instead of
+   * swallowing a tile, and from tablet width up they are the full size. */
+  --r-tile: clamp(1rem, 3vw, 1.5rem);
   /* Prototypes are phone screens, so their corners are device corners. */
-  --r-device: 1.375rem;
+  --r-device: clamp(1rem, 2.75vw, 1.375rem);
+  /* A project's thumbnail. */
+  --r-thumb: 1rem;
   --r-device-sm: 0.75rem;
 
   /* --- Shadows: warm, low-contrast, never neutral grey -------------------- */

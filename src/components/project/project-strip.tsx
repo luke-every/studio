@@ -48,7 +48,7 @@ export function ProjectStrip({ teamSlug }: { teamSlug: string }) {
             onClick={() => setCreating(true)}
             className="group flex w-[9.5rem] shrink-0 flex-col gap-2 text-left"
           >
-            <span className="grid aspect-[5/3] w-full place-items-center rounded-[var(--r-xl)] border border-dashed border-border-strong text-foreground-subtle transition-colors duration-[var(--dur-fast)] group-hover:border-foreground-muted group-hover:text-foreground-muted">
+            <span className="grid aspect-[5/3] w-full place-items-center rounded-[var(--r-thumb)] border border-dashed border-border-strong text-foreground-subtle transition-colors duration-[var(--dur-fast)] group-hover:border-foreground-muted group-hover:text-foreground-muted">
               <svg viewBox="0 0 16 16" aria-hidden className="size-4">
                 <path
                   d="M8 3v10M3 8h10"
