@@ -66,7 +66,13 @@ export function SetupGuide() {
         </li>
       </ol>
 
-      <p className="text-sm text-foreground-subtle">Run the command again any time to update /push.</p>
+      <p className="text-sm text-foreground-subtle">
+        Starting a new prototype in the team&rsquo;s style is /newprototype. The same command sets it up
+        when your GitHub account can see luke-every/team-conventions; if it can&rsquo;t yet, it tells you
+        what to do. /push works either way.
+      </p>
+
+      <p className="text-sm text-foreground-subtle">Run the command again any time to update.</p>
     </div>
   );
 }
