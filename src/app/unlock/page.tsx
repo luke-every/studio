@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
 import { isUnlocked, unlock } from "@/lib/gate";
 
 /**
@@ -39,12 +40,9 @@ export default async function UnlockPage({ searchParams }: PageProps<"/unlock">)
             autoComplete="off"
             className="w-full rounded-[var(--r-sm)] border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:border-border-strong focus:outline-none"
           />
-          <button
-            type="submit"
-            className="rounded-[var(--r-sm)] bg-accent px-3 py-2.5 text-sm text-accent-foreground"
-          >
+          <Button type="submit" variant="primary">
             Come in
-          </button>
+          </Button>
         </form>
 
         {wrong ? (

@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
       description: text("description"),
       title: text("title"),
       changes: text("changes"),
+      figmaUrl: text("figma"),
+      notionUrl: text("notion"),
       by: text("author") ?? "Someone",
     });
 

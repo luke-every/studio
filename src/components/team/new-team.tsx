@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { MotionModal } from "@/components/motion";
+import { Button } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
 import type { ViewMode } from "@/lib/use-view-mode";
 
@@ -105,20 +106,10 @@ function NewTeamDialog({ open, onClose }: { open: boolean; onClose: () => void }
         />
 
         <div className="flex items-center justify-end gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-[var(--r-sm)] px-3 py-1.5 text-sm text-foreground-muted transition-colors duration-[var(--dur-fast)] hover:text-foreground"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={!name.trim() || saving}
-            className="rounded-[var(--r-sm)] bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-40"
-          >
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={!name.trim() || saving}>
             {saving ? "Creating…" : "Create team"}
-          </button>
+          </Button>
         </div>
       </form>
     </MotionModal>

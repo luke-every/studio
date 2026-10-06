@@ -15,6 +15,9 @@ import {
   createProject as createProjectAction,
   createTeam as createTeamAction,
   filePrototype as filePrototypeAction,
+  renameVersion as renameVersionAction,
+  updatePrototype as updatePrototypeAction,
+  type WriteResult,
 } from "@/lib/registry/actions";
 import { summariseTeam, type OpenTimes, type TeamSummary } from "@/lib/registry/select";
 import type { Project, Prototype, RegistrySnapshot } from "@/lib/registry/types";
@@ -37,11 +40,13 @@ type StudioContextValue = {
   addTeam: (input: { name: string; remit: string; description: string }) => Promise<boolean>;
   addProject: (input: { teamSlug: string; name: string }) => Promise<boolean>;
   filePrototype: (prototypeSlug: string, projectSlug: string | null) => void;
+  /** Rename, move, set links or hide a prototype. Resolves true once it is saved. */
+  updatePrototype: (input: Parameters<typeof updatePrototypeAction>[0]) => Promise<boolean>;
+  /** Rename a version, as people see it. Resolves true once it is saved. */
+  renameVersion: (input: Parameters<typeof renameVersionAction>[0]) => Promise<boolean>;
   markOpened: (prototypeSlug: string) => void;
   opened: OpenTimes;
   saving: boolean;
-  /** Things saved to GitHub but not yet live for everyone. */
-  publishing: string[];
   error: string | null;
   dismissError: () => void;
 };
@@ -63,15 +68,25 @@ export function StudioProvider({
   const [pending, startTransition] = useTransition();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [publishing, setPublishing] = useState<string[]>([]);
   const [opened, setOpened] = useState<OpenTimes>({});
 
-  const after = useCallback(
-    (label: string) => {
-      setPublishing((current) => [...current, label]);
-      startTransition(() => router.refresh());
+  // A save is live for everyone as soon as it lands, so all that is left is
+  // to fetch the new snapshot for this screen.
+  const after = useCallback(() => startTransition(() => router.refresh()), [router]);
+
+  const write = useCallback(
+    async (work: () => Promise<WriteResult>) => {
+      setSaving(true);
+      const result = await work();
+      setSaving(false);
+      if (!result.ok) {
+        setError(result.error);
+        return false;
+      }
+      after();
+      return true;
     },
-    [router],
+    [after],
   );
 
   const addTeam = useCallback<StudioContextValue["addTeam"]>(
@@ -83,7 +98,7 @@ export function StudioProvider({
         setError(result.error);
         return false;
       }
-      after(`Team “${input.name}”`);
+      after();
       return true;
     },
     [after],
@@ -98,7 +113,7 @@ export function StudioProvider({
         setError(result.error);
         return false;
       }
-      after(`Project “${input.name}”`);
+      after();
       return true;
     },
     [after],
@@ -112,11 +127,23 @@ export function StudioProvider({
           setError(result.error);
           return;
         }
-        after("Filing");
+        after();
       })();
     },
     [after],
   );
+
+  const updatePrototype = useCallback<StudioContextValue["updatePrototype"]>(
+    (input) => write(() => updatePrototypeAction(input)),
+    [write],
+  );
+
+  const renameVersion = useCallback<StudioContextValue["renameVersion"]>(
+    (input) => write(() => renameVersionAction(input)),
+    [write],
+  );
+
+  const dismissError = useCallback(() => setError(null), []);
 
   const markOpened = useCallback<StudioContextValue["markOpened"]>((prototypeSlug) => {
     setOpened((current) =>
@@ -132,14 +159,15 @@ export function StudioProvider({
       addTeam,
       addProject,
       filePrototype,
+      updatePrototype,
+      renameVersion,
       markOpened,
       opened,
       saving: saving || pending,
-      publishing,
       error,
-      dismissError: () => setError(null),
+      dismissError,
     }),
-    [snapshot, addTeam, addProject, filePrototype, markOpened, opened, saving, pending, publishing, error],
+    [snapshot, addTeam, addProject, filePrototype, updatePrototype, renameVersion, markOpened, opened, saving, pending, error, dismissError],
   );
 
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;

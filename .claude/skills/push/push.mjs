@@ -19,7 +19,7 @@
  *   node push.mjs --dir . --name "Quiz results" --author "Luke" \
  *     --title "Tighter results layout" --changes "Cut the second card." \
  *     [--entry index.html] [--slug quiz-results] [--team acquisition] \
- *     [--project some-project] [--description "..."] [--version v0.5]
+ *     [--project some-project] [--description "..."] [--version v0.5] [--figma <url>] [--notion <url>]
  *
  * Studio address and password come from ~/.claude/prototype-studio.json
  * unless --studio-url / --studio-password override them.
@@ -93,6 +93,18 @@ const tooBig = files.filter((file) => file.size > MAX_FILE_BYTES);
 if (tooBig.length) {
   console.error(`GitHub won't take files over 100MB: ${tooBig.map((file) => file.path).join(", ")}`);
   process.exit(1);
+}
+// A prototype that stamps its own files with the time (`?v=${Date.now()}`)
+// gets a new address for every file on every load, so nothing it has loaded
+// can be reused — the studio caches each version for good, and this defeats it.
+const BUSTER = /\?\w+=\$\{[^}]*(?:Date\.now|Math\.random)\(\)[^}]*\}|\?\w*=?["']\s*\+\s*(?:Date\.now|Math\.random)\(\)/;
+const busting = files.filter(
+  (file) => /\.(m?js|html|css)$/.test(file.path) && file.size < 2_000_000 && BUSTER.test(readFileSync(file.filePath, "utf8")),
+);
+if (busting.length) {
+  console.warn(
+    `Heads up: ${busting.map((file) => file.path).join(", ")} adds the time to its own file addresses, so every load re-downloads everything and the prototype opens slowly in the studio. Pin it to a fixed string and push again.`,
+  );
 }
 const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 
@@ -206,7 +218,7 @@ for (let attempt = 1; !commitSha; attempt++) {
 
 // 3. Tell the studio.
 const notes = { name, version: start.version, commit: commitSha, slug: start.slug };
-for (const field of ["team", "project", "description", "author", "title", "changes"]) {
+for (const field of ["team", "project", "description", "author", "title", "changes", "figma", "notion"]) {
   const value = flag(field);
   if (value) notes[field] = value;
 }

@@ -14,7 +14,7 @@ import { TopNav } from "./top-nav";
  * thing that changes.
  */
 export function AppShell({ children }: { children: ReactNode }) {
-  const { publishing, error, dismissError } = useStudio();
+  const { error, dismissError } = useStudio();
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -28,11 +28,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           {error} <span className="text-foreground-subtle">Tap to dismiss</span>
         </button>
-      ) : publishing.length > 0 ? (
-        <p className="border-b border-border bg-surface-hover px-6 py-2 text-xs text-foreground-subtle">
-          Saved to GitHub. {publishing[publishing.length - 1]} will appear for everyone once the
-          deploy finishes, in about a minute.
-        </p>
       ) : null}
 
       <main className="min-w-0 flex-1">

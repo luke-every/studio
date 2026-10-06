@@ -53,6 +53,14 @@ export async function filePrototype(input: {
   return attempt(() => registry.filePrototype(input), ["/"]);
 }
 
+export async function updatePrototype(input: Parameters<typeof registry.updatePrototype>[0]) {
+  return attempt(() => registry.updatePrototype(input), ["/"]);
+}
+
+export async function renameVersion(input: Parameters<typeof registry.renameVersion>[0]) {
+  return attempt(() => registry.renameVersion(input), ["/"]);
+}
+
 /**
  * Adding a prototype by hand, from an HTML file. The file is uploaded to the
  * store and served from there, so the prototype is genuinely here — and

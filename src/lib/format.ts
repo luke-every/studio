@@ -42,3 +42,22 @@ export function formatStamp(iso: string, local = true): string {
 
   return `${day}, ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
+
+/**
+ * When something last changed, the way you'd say it: "Today, 14:00",
+ * "Yesterday, 09:30", and from the day before that the date, "3 Oct, 14:00".
+ * Days are the reader's own, so like `formatStamp` this is for the browser;
+ * `local = false` gives the server's date-only version.
+ */
+export function formatWhen(iso: string, local = true): string {
+  if (!local) return formatStamp(iso, false);
+
+  const date = new Date(iso);
+  const startOfDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const daysAgo = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
+  if (daysAgo !== 0 && daysAgo !== 1) return formatStamp(iso, true);
+
+  const day = daysAgo === 0 ? "Today" : "Yesterday";
+  if (!iso.includes("T")) return day;
+  return `${day}, ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+}

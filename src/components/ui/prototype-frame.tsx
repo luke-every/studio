@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ExternalIcon, LinkIcon, SlidersIcon } from "@/components/shell/nav-icons";
 
+import { IconButton } from "./button";
 import { Toast, useToast } from "./toast";
 
 /**
@@ -51,36 +52,22 @@ export function PrototypeFrame({
         {url ? (
           <div className="flex items-center gap-2">
             {controls ? (
-              <button
-                type="button"
+              <IconButton
+                label="Controls"
+                tooltipAlign="end"
                 onClick={() => setControlsOpen((open) => !open)}
-                aria-label="Controls"
                 aria-expanded={controlsOpen}
-                title="Controls"
-                className={`${iconButton} ${controlsOpen ? "!bg-accent !text-accent-foreground" : ""}`}
+                className={controlsOpen ? "!border-transparent !bg-accent !text-accent-foreground" : ""}
               >
                 <SlidersIcon className="size-[1.125rem]" />
-              </button>
+              </IconButton>
             ) : null}
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Open in a new tab"
-              title="Open in a new tab"
-              className={iconButton}
-            >
+            <IconButton label="Open in a new tab" href={url} external tooltipAlign="end">
               <ExternalIcon className="size-[1.125rem]" />
-            </a>
-            <button
-              type="button"
-              onClick={copy}
-              aria-label="Copy link"
-              title="Copy link"
-              className={iconButton}
-            >
+            </IconButton>
+            <IconButton label="Copy link" onClick={copy} tooltipAlign="end">
               <LinkIcon className="size-[1.125rem]" />
-            </button>
+            </IconButton>
           </div>
         ) : null}
       </div>
@@ -142,27 +129,19 @@ function FrameBody({ url, title, poster }: { url: string; title: string; poster?
       />
       {loaded ? null : poster && !posterFailed ? (
         // The same picture the tile shows, so the page looks right at once and
-        // the real prototype replaces it without a flash.
+        // the real prototype replaces it without a flash. It breathes while
+        // the prototype loads, so it doesn't look frozen.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={poster}
           alt=""
           draggable={false}
           onError={() => setPosterFailed(true)}
-          className="absolute inset-0 size-full bg-surface object-cover object-top"
+          className="pulse-soft absolute inset-0 size-full bg-surface object-cover object-top"
         />
       ) : (
-        <div aria-hidden className="absolute inset-0 flex animate-pulse flex-col gap-4 bg-surface p-5">
-          <div className="h-8 w-2/5 rounded-[var(--r-lg)] bg-tile" />
-          <div className="h-40 rounded-[var(--r-xl)] bg-tile" />
-          <div className="h-4 w-4/5 rounded-[var(--r-full)] bg-tile" />
-          <div className="h-4 w-3/5 rounded-[var(--r-full)] bg-tile" />
-          <div className="mt-auto h-12 rounded-[var(--r-full)] bg-tile" />
-        </div>
+        <div aria-hidden className="pulse-soft absolute inset-0 bg-surface" />
       )}
     </>
   );
 }
-
-const iconButton =
-  "grid size-10 place-items-center rounded-[var(--r-full)] bg-surface text-foreground-muted hover:text-foreground";

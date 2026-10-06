@@ -95,6 +95,10 @@ Add `--entry app.html` if the entry isn't `index.html`, `--slug quiz-results`
 for an existing prototype, `--team acquisition` for a new one, and
 optionally `--project <slug>` or `--description "..."`.
 
+If the person gives a Figma or Notion link for the prototype, add
+`--figma <url>` and/or `--notion <url>`. The studio shows them under the
+prototype, and keeps the last ones it was given. Only pass what you were given.
+
 The version number is normally the next one, chosen by the studio. If the
 person asks for a specific number ("push this as v1.0"), add `--version v1.0`.
 It must look like `v0.8` and be one that prototype doesn't already have —
@@ -103,6 +107,10 @@ the studio refuses a number that exists. Only pass it when asked; never to
 
 For the author, use the person's name as they would write it — their git
 `user.name` is a good default if you do not otherwise know it.
+
+If it prints a "Heads up" about the prototype adding the time to its own file
+addresses, tell the person in one line: it makes the prototype slow to open in
+the studio, and the fix is to pin that value to a fixed string.
 
 It prints what it uploaded, the version that was saved, and a link to it.
 Trust that output — there is no need to open anything it wrote or sent to

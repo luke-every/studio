@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { MotionModal } from "@/components/motion";
+import { Button } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
 import { createPrototype } from "@/lib/registry/actions";
 
@@ -37,13 +38,7 @@ export function AddPrototype({
   return (
     <>
       {trigger === "button" ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="rounded-[var(--r-sm)] border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-hover"
-        >
-          Add prototype
-        </button>
+        <Button onClick={() => setOpen(true)}>Add prototype</Button>
       ) : (
         <article>
           <button
@@ -245,20 +240,10 @@ function AddPrototypeDialog({
         ) : null}
 
         <div className="flex items-center justify-end gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-[var(--r-sm)] px-3 py-1.5 text-sm text-foreground-muted hover:text-foreground"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={!name.trim() || !teamSlug || !by.trim() || !html || saving}
-            className="rounded-[var(--r-sm)] bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-40"
-          >
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={!name.trim() || !teamSlug || !by.trim() || !html || saving}>
             {saving ? "Adding…" : "Add prototype"}
-          </button>
+          </Button>
         </div>
       </form>
     </MotionModal>

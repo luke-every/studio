@@ -32,11 +32,17 @@
   --motion-travel-sm: 6px;
   --motion-travel-md: 14px;
   --motion-travel-lg: 28px;
+  /* What a layer scales up from as it arrives. */
+  --motion-pop-scale: 0.96;
 
   /* --- Presets ------------------------------------------------------------ */
   /* hover-lift: tune its timing here, once, for every place it is used. */
   --lift-duration: var(--dur-standard);
   --lift-curve: var(--curve-standard);
+  /* pulse-soft: tune here. The delay means a load that's quick never pulses. */
+  --pulse-duration: 1.6s;
+  --pulse-delay: 0.25s;
+  --pulse-curve: ease-in-out;
   /* fade-in: tune here. */
   --fade-duration: 0.3s;
   --fade-curve: var(--curve-entrance);
@@ -56,6 +62,7 @@
     --motion-travel-sm: 0px;
     --motion-travel-md: 0px;
     --motion-travel-lg: 0px;
+    --motion-pop-scale: 1;
   }
 }
 
@@ -118,4 +125,69 @@
   &[data-ready] {
     opacity: 1;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * pulse-soft — something is loading: its opacity breathes gently so it
+ * doesn't look frozen. The animation starts only after `--pulse-delay`, so
+ * whatever is ready in an instant is never seen pulsing. Reduced motion
+ * turns it off — the loading state is then simply the placeholder.
+ * ------------------------------------------------------------------------- */
+@keyframes pulse-soft {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@utility pulse-soft {
+  animation: pulse-soft var(--pulse-duration) var(--pulse-curve) var(--pulse-delay) infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Layers arriving. Nothing here is linear: everything decelerates into place
+ * on `--curve-entrance`, so a layer lands rather than stops.
+ *
+ * layer-scrim   the dimmed, blurred page behind a layer fades in, blur and
+ *               all (the blur is on the element, so its opacity fades both)
+ * layer-in      a modal fades and settles up from slightly smaller and lower
+ * popover-in    a menu grows out of the control that opened it; set
+ *               `transform-origin` to that control's corner
+ *
+ * Animated while MOTION_ENABLED is off, like the other presets here. Reduced
+ * motion removes the scale and travel and keeps the fade.
+ * ------------------------------------------------------------------------- */
+@keyframes layer-scrim {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes layer-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-travel-sm)) scale(var(--motion-pop-scale));
+  }
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: scale(var(--motion-pop-scale));
+  }
+}
+
+@utility layer-scrim {
+  animation: layer-scrim var(--dur-standard) var(--curve-entrance) both;
+}
+
+@utility layer-in {
+  animation: layer-in var(--dur-standard) var(--curve-entrance) both;
+}
+
+@utility popover-in {
+  animation: popover-in var(--dur-fast) var(--curve-entrance) both;
 }

@@ -3,6 +3,7 @@
 import { useState, type MouseEvent } from "react";
 
 import { MotionPopover } from "@/components/motion";
+import { IconButton } from "@/components/ui/button";
 import { useTheme, type ThemePreference } from "@/lib/theme";
 
 import { MoonIcon, SunIcon, SystemIcon } from "./nav-icons";
@@ -31,16 +32,16 @@ export function ThemeMenu() {
       onClose={() => setOpen(false)}
       className="w-36"
       trigger={
-        <button
-          type="button"
+        <IconButton
+          label="Theme"
+          variant="ghost"
+          tooltipAlign="end"
           onClick={() => setOpen((value) => !value)}
-          aria-label="Theme"
           aria-haspopup="menu"
           aria-expanded={open}
-          className="grid size-9 place-items-center rounded-[var(--r-lg)] text-foreground-muted hover:bg-surface-hover hover:text-foreground"
         >
           <Current className="size-[1.125rem]" />
-        </button>
+        </IconButton>
       }
     >
       <div role="menu" aria-label="Theme" className="flex flex-col">

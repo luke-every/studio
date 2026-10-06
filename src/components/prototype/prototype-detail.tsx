@@ -4,12 +4,13 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { ControlsPanel } from "@/components/prototype/controls-panel";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
+import { PrototypeLinks } from "@/components/prototype/prototype-links";
+import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { applyControls, defaultValues, type ControlValues } from "@/lib/controls";
 import { useStudio } from "@/lib/data/studio-store";
 import { Stamp } from "@/components/ui/stamp";
-import { avatarUrl } from "@/lib/registry/people";
 import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
 
 /**
@@ -25,9 +26,10 @@ import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
  * else can open.
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
-  const { markOpened } = useStudio();
+  const { markOpened, renameVersion } = useStudio();
   const fromUrl = useUrlVersion();
-  const [chosen, setChosen] = useState<string | null>(null);
+  // Chosen by id, so renaming a version doesn't lose it.
+  const [chosenId, setChosenId] = useState<string | null>(null);
 
   useEffect(() => {
     markOpened(prototype.slug);
@@ -35,16 +37,27 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
   // The address bar is the source of truth for which version is on screen,
   // so a link to one is a link somebody else can open.
-  const wanted = chosen ?? fromUrl;
   const selected =
-    prototype.versions.find((version) => version.version === wanted) ?? prototype.current;
+    prototype.versions.find((version) => version.id === chosenId) ??
+    prototype.versions.find((version) => version.version === fromUrl) ??
+    prototype.current;
 
-  const choose = (version: PrototypeVersion) => {
-    setChosen(version.version);
+  const showInAddressBar = (version: PrototypeVersion) => {
     const url = new URL(window.location.href);
     if (version.id === prototype.current.id) url.searchParams.delete("v");
     else url.searchParams.set("v", version.version);
     window.history.replaceState(null, "", url);
+  };
+
+  const choose = (version: PrototypeVersion) => {
+    setChosenId(version.id);
+    showInAddressBar(version);
+  };
+
+  const rename = async (version: PrototypeVersion, label: string) => {
+    const saved = await renameVersion({ slug: prototype.slug, versionId: version.id, label });
+    if (saved && version.id === selected.id) showInAddressBar({ ...version, version: label });
+    return saved;
   };
 
   // What the prototype offers to adjust, if anything. The choices belong to
@@ -78,32 +91,31 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
             selectedId={selected.id}
             currentId={prototype.current.id}
             onSelect={choose}
+            onRename={rename}
           />
         }
       />
 
-      <div className="mt-6 px-1 pb-6">
-        <h1 className="text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
-          {prototype.name}
-        </h1>
-
-        <div className="mt-3 flex items-center gap-2 text-base text-foreground-muted">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={avatarUrl(prototype.owner)}
-            alt=""
-            width={20}
-            height={20}
-            className="size-5 rounded-full bg-surface-inset"
-          />
-          <span>{prototype.owner.name}</span>
-          <span aria-hidden>·</span>
-          <span><Stamp iso={prototype.updatedAt} /></span>
+      <div className="mx-auto mt-8 w-full max-w-[var(--content-width)] pb-10">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
+              {prototype.name}
+            </h1>
+            <p className="mt-2 text-base text-foreground-muted">
+              {prototype.owner.name} · Last updated <Stamp iso={prototype.updatedAt} relative />
+            </p>
+          </div>
+          <PrototypeMenu prototype={prototype} />
         </div>
 
-        <p className="mt-4 max-w-[68ch] text-base leading-[var(--leading-relaxed)] text-foreground-muted">
+        <p className="mt-5 text-base leading-[var(--leading-relaxed)] text-foreground-muted">
           {prototype.description || "A short description of what this prototype is and the question it is asking will go here."}
         </p>
+
+        <div className="mt-6">
+          <PrototypeLinks prototype={prototype} />
+        </div>
       </div>
     </div>
   );

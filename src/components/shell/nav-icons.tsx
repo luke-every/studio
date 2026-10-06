@@ -129,3 +129,21 @@ export function SlidersIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function EllipsisIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <circle cx="3.5" cy="8" r="0.75" fill="currentColor" />
+      <circle cx="8" cy="8" r="0.75" fill="currentColor" />
+      <circle cx="12.5" cy="8" r="0.75" fill="currentColor" />
+    </Frame>
+  );
+}
+
+export function PencilIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="m10.5 3.25 2.25 2.25M2.75 13.25l.5-2.5 7.25-7.25 2 2L5.25 12.75l-2.5.5Z" />
+    </Frame>
+  );
+}

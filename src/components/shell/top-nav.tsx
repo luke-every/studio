@@ -3,14 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { IconButton } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
 
 import { BellIcon, SettingsIcon } from "./nav-icons";
 import { SearchField } from "./search-field";
 import { ThemeMenu } from "./theme-menu";
-
-const iconButton =
-  "grid size-9 place-items-center rounded-[var(--r-lg)] text-foreground-muted hover:bg-surface-hover hover:text-foreground";
 
 function TeamLinks({ className }: { className: string }) {
   const pathname = usePathname();
@@ -66,19 +64,20 @@ export function TopNav() {
 
         <SearchField />
 
-        <nav aria-label="Studio" className="flex items-center gap-0.5 justify-self-end">
-          <button type="button" aria-label="Notifications" className={iconButton}>
+        <nav aria-label="Studio" className="flex items-center gap-1 justify-self-end">
+          <IconButton label="Notifications" variant="ghost" tooltipAlign="end">
             <BellIcon className="size-[1.125rem]" />
-          </button>
+          </IconButton>
           <ThemeMenu />
-          <Link
+          <IconButton
+            label="Settings"
+            variant="ghost"
             href="/settings"
-            aria-label="Settings"
-            aria-current={pathname.startsWith("/settings") ? "page" : undefined}
-            className={`${iconButton} ${pathname.startsWith("/settings") ? "bg-surface-hover text-foreground" : ""}`}
+            tooltipAlign="end"
+            className={pathname.startsWith("/settings") ? "bg-surface-hover !text-foreground" : ""}
           >
             <SettingsIcon className="size-[1.125rem]" />
-          </Link>
+          </IconButton>
         </nav>
       </div>
 

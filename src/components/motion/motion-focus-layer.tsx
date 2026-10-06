@@ -49,7 +49,7 @@ export function MotionFocusLayer({
           className="fixed inset-0 flex items-center justify-center p-4 outline-none sm:p-10"
           style={{ zIndex: "var(--z-focus-mode)" }}
         >
-          <MotionScrim onClick={onClose} register="immersive" />
+          <MotionScrim onClick={onClose} />
 
           <div className="relative flex w-full items-center justify-center">{children}</div>
 

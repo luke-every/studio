@@ -66,6 +66,7 @@
   --text-2xs: var(--fs-2xs);
   --text-xs: var(--fs-xs);
   --text-sm: var(--fs-sm);
+  --text-ui: var(--fs-ui);
   --text-nav: var(--fs-nav);
   --text-base: var(--fs-base);
   --text-md: var(--fs-md);

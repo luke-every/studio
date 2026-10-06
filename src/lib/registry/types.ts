@@ -20,8 +20,10 @@ export type PreviewSource = {
 /** A saved state of a prototype. Immutable once written. */
 export type PrototypeVersion = {
   id: string;
-  /** Chronological label, e.g. "v0.8". */
+  /** Chronological label, e.g. "v0.8" — what people see, and can rename. */
   version: string;
+  /** The version the files are stored under. Differs from `version` only after a rename. */
+  key: string;
   title: string;
   /** What is new or different in this version. */
   changes: string;
@@ -49,6 +51,8 @@ export type Prototype = {
   createdAt: string;
   updatedAt: string;
   archived: boolean;
+  figmaUrl?: string;
+  notionUrl?: string;
   repositoryPath?: string;
 };
 

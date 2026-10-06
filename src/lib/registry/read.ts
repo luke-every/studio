@@ -146,10 +146,11 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
   const prototypes: Prototype[] = data.prototypes.map((record) => {
     const versions: PrototypeVersion[] = data.versions
       .filter((version) => version.prototypeSlug === record.slug)
-      .sort((a, b) => compareVersions(b.version, a.version))
+      .sort((a, b) => compareVersions(b.label ?? b.version, a.label ?? a.version))
       .map((version) => ({
         id: version.id,
-        version: version.version,
+        version: version.label ?? version.version,
+        key: version.version,
         title: version.title,
         changes: version.changes,
         author: version.author,
@@ -181,6 +182,8 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
       createdAt: record.created.at,
       updatedAt: record.updatedAt,
       archived: record.archived,
+      figmaUrl: record.figmaUrl,
+      notionUrl: record.notionUrl,
       repositoryPath: record.repositoryPath,
     };
   });

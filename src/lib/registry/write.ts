@@ -68,6 +68,30 @@ async function save(document: RegistryDocument) {
   revalidatePath("/", "layout");
 }
 
+const LINK_HOSTS = {
+  figma: ["figma.com"],
+  notion: ["notion.so", "notion.site", "notion.com"],
+} as const;
+
+/**
+ * A link somebody typed or pasted, checked before it is kept: it has to be a
+ * web address, and for the place it claims to be. Returns the cleaned address.
+ */
+export function cleanLink(kind: keyof typeof LINK_HOSTS, value: string) {
+  const label = kind === "figma" ? "Figma" : "Notion";
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new StoreError(`That doesn't look like a link. Paste the ${label} address.`);
+  }
+  const allowed = LINK_HOSTS[kind].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+  if (url.protocol !== "https:" || !allowed) {
+    throw new StoreError(`That isn't a ${label} link.`);
+  }
+  return url.toString();
+}
+
 export async function createTeam(input: {
   name: string;
   remit: string;
@@ -141,7 +165,7 @@ export async function filePrototype(input: {
 /** "v0.10" follows "v0.9", which a string sort would get backwards. */
 function nextVersion(existing: VersionRecord[]) {
   const highest = existing.reduce((top, version) => {
-    const value = Number(version.version.replace(/^v/, ""));
+    const value = Number((version.label ?? version.version).replace(/^v/, ""));
     return Number.isNaN(value) ? top : Math.max(top, value);
   }, 0);
   return `v${(highest + 0.1).toFixed(1)}`;
@@ -159,6 +183,8 @@ type VersionNotes = {
   changes?: string;
   by: string;
   tint?: [string, string];
+  figmaUrl?: string;
+  notionUrl?: string;
 };
 
 /**
@@ -188,13 +214,15 @@ function plan(
     if (!/^v\d+\.\d+$/.test(input.version)) {
       throw new StoreError(`"${input.version}" isn't a version number. They look like v0.8.`);
     }
-    if (mine.some((existingVersion) => existingVersion.version === input.version)) {
+    // A number is taken if it is a version's name on screen or where its
+    // files are stored, so a rename can't collide with a later push.
+    if (mine.some((other) => other.version === input.version || other.label === input.version)) {
       throw new StoreError(`${slug} already has ${input.version}. Versions are never replaced — pick another number, or leave it out.`);
     }
     version = input.version;
   }
 
-  return { slug, version, existing, isLatest: mine.every((other) => compareVersions(version, other.version) > 0) };
+  return { slug, version, existing, isLatest: mine.every((other) => compareVersions(version, other.label ?? other.version) > 0) };
 }
 
 /** Write the version record, and the prototype too if it's the first one. */
@@ -228,8 +256,12 @@ async function record(document: RegistryDocument, input: VersionNotes, url: stri
       existing.preview = preview;
       existing.currentVersion = versionId;
       existing.updatedAt = now();
+      // Pushing to something that was removed brings it back.
+      existing.archived = false;
     }
     if (input.description?.trim()) existing.description = input.description.trim();
+    if (input.figmaUrl) existing.figmaUrl = cleanLink("figma", input.figmaUrl);
+    if (input.notionUrl) existing.notionUrl = cleanLink("notion", input.notionUrl);
     prototypeSchema.parse(existing);
   } else {
     const prototype: PrototypeRecord = prototypeSchema.parse({
@@ -244,6 +276,8 @@ async function record(document: RegistryDocument, input: VersionNotes, url: stri
       created: { by: person, at: today() },
       updatedAt: now(),
       archived: false,
+      figmaUrl: input.figmaUrl ? cleanLink("figma", input.figmaUrl) : undefined,
+      notionUrl: input.notionUrl ? cleanLink("notion", input.notionUrl) : undefined,
     });
     document.prototypes.push(prototype);
   }
@@ -319,4 +353,88 @@ export async function recordPushedVersion(input: VersionNotes & { version: strin
 
   const { entryUrl } = await verifyPrototypeVersion(slug, version, input.commit);
   return record(document, input, entryUrl);
+}
+
+/**
+ * Change what a prototype is called, where it sits, its links, or whether it is
+ * shown. Anything left out is left alone; a link given as empty is removed.
+ *
+ * "Removing" a prototype only hides it. History is never deleted: its versions
+ * and files stay where they are, and pushing to it again brings it back.
+ */
+export async function updatePrototype(input: {
+  slug: string;
+  name?: string;
+  teamSlug?: string;
+  projectSlug?: string | null;
+  figmaUrl?: string;
+  notionUrl?: string;
+  archived?: boolean;
+}) {
+  const document = await load();
+  const prototype = document.prototypes.find((item) => item.slug === input.slug);
+  if (!prototype) throw new StoreError(`No prototype called "${input.slug}".`);
+
+  if (input.name !== undefined) {
+    if (!input.name.trim()) throw new StoreError("A prototype needs a name.");
+    prototype.name = input.name.trim();
+  }
+
+  if (input.teamSlug !== undefined || input.projectSlug !== undefined) {
+    const teamSlug = input.teamSlug ?? prototype.teamSlug;
+    if (!document.teams.some((team) => team.slug === teamSlug)) {
+      throw new StoreError(`No team called "${teamSlug}".`);
+    }
+    // Moving to another team without choosing a project leaves it unfiled.
+    const projectSlug =
+      input.projectSlug !== undefined
+        ? input.projectSlug
+        : teamSlug === prototype.teamSlug
+          ? prototype.projectSlug
+          : null;
+    if (projectSlug && !document.projects.some((p) => p.slug === projectSlug && p.teamSlug === teamSlug)) {
+      throw new StoreError("That project isn't in that team.");
+    }
+    prototype.teamSlug = teamSlug;
+    prototype.projectSlug = projectSlug;
+  }
+
+  if (input.figmaUrl !== undefined) {
+    prototype.figmaUrl = input.figmaUrl.trim() ? cleanLink("figma", input.figmaUrl) : undefined;
+  }
+  if (input.notionUrl !== undefined) {
+    prototype.notionUrl = input.notionUrl.trim() ? cleanLink("notion", input.notionUrl) : undefined;
+  }
+  if (input.archived !== undefined) prototype.archived = input.archived;
+
+  prototypeSchema.parse(prototype);
+  await save(document);
+}
+
+/**
+ * Rename a version, for people. Only the name shown changes: the files stay
+ * under the number they were saved as, so every link to the version keeps
+ * working.
+ */
+export async function renameVersion(input: { slug: string; versionId: string; label: string }) {
+  const document = await load();
+  const target = document.versions.find(
+    (version) => version.id === input.versionId && version.prototypeSlug === input.slug,
+  );
+  if (!target) throw new StoreError("No such version.");
+
+  const label = input.label.trim();
+  if (!/^v\d+\.\d+$/.test(label)) {
+    throw new StoreError(`"${label}" isn't a version number. They look like v0.8.`);
+  }
+
+  const taken = document.versions.some(
+    (other) => other !== target && other.prototypeSlug === input.slug && (other.label ?? other.version) === label,
+  );
+  if (taken) throw new StoreError(`${input.slug} already has a version called ${label}.`);
+
+  // Back to the number it was saved as is the same as no rename.
+  target.label = label === target.version ? undefined : label;
+  versionSchema.parse(target);
+  await save(document);
 }
