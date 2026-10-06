@@ -11,14 +11,12 @@ import type { NextRequest } from "next/server";
  * or key is involved: /push talks to the studio, and the studio talks to
  * GitHub. Run again, it updates the skill and keeps the saved password.
  *
- * It also sets up /newprototype when it can. That one is different: the
- * starter app and the conventions live in a private repository (with licensed
- * fonts in it), so they are fetched with the person's own GitHub login rather
- * than handed out here. If they can't see that repository yet, /push is still
- * fully set up and the script says what to do for the rest.
+ * It also sets up /newprototype. The starter app and conventions are in a
+ * private repository with licensed fonts in it, so the studio hands them over
+ * (see /skill/newprototype/bundle) to anyone with the studio password — nobody
+ * has to be added to anything on GitHub. If that isn't possible yet, /push is
+ * still fully set up and the script says why.
  */
-
-const CONVENTIONS_REPO = "luke-every/team-conventions";
 
 export function GET(request: NextRequest) {
   const studio = request.nextUrl.origin;
@@ -67,15 +65,28 @@ node -e '
   );
 ' "$CONFIG" "$STUDIO" "$PASSWORD"
 
-# /newprototype: starts a prototype in the team's style. Needs your own GitHub
-# access to ${CONVENTIONS_REPO}; never fails the install.
+# /newprototype: starts a prototype in the team's style. The studio hands over
+# the starter app and conventions, using the same password. Never fails the install.
 CONVENTIONS="$HOME/Claude/team-conventions"
 NEWPROTOTYPE="no"
+NEWPROTOTYPE_WHY=""
 if [ -d "$CONVENTIONS/.git" ]; then
+  # Your own clone of the conventions: keep it, just bring it up to date.
   (cd "$CONVENTIONS" && git pull -q --ff-only) 2>/dev/null || true
-elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  mkdir -p "$HOME/Claude"
-  gh repo clone ${CONVENTIONS_REPO} "$CONVENTIONS" -- -q >/dev/null 2>&1 || true
+else
+  BUNDLE="$(mktemp)"
+  CODE=$(curl -sL -H "x-studio-password: $PASSWORD" -o "$BUNDLE" -w "%{http_code}" "$STUDIO/skill/newprototype/bundle" 2>/dev/null || echo 000)
+  if [ "$CODE" = "200" ] && tar -tzf "$BUNDLE" >/dev/null 2>&1; then
+    mkdir -p "$CONVENTIONS"
+    tar -xzf "$BUNDLE" -C "$CONVENTIONS" --strip-components=1
+  elif [ "$CODE" = "403" ]; then
+    NEWPROTOTYPE_WHY="The studio has no password yet, and the fonts in it are licensed. Ask Luke to set one."
+  elif [ "$CODE" = "401" ]; then
+    NEWPROTOTYPE_WHY="That password wasn't accepted. Fix it in ~/.claude/prototype-studio.json and run this again."
+  else
+    NEWPROTOTYPE_WHY="The studio couldn't hand it over right now (answer $CODE). Run this again in a minute."
+  fi
+  rm -f "$BUNDLE"
 fi
 if [ -d "$CONVENTIONS/skills/newprototype" ]; then
   cp -R "$CONVENTIONS/skills/newprototype" "$CLAUDE_DIR/skills/"
@@ -88,11 +99,8 @@ if [ "$NEWPROTOTYPE" = "yes" ]; then
   echo "/newprototype is ready too: in an empty folder, type /newprototype."
 else
   echo
-  echo "/newprototype (start a prototype in the team's style) isn't set up yet. It needs your own"
-  echo "GitHub access to ${CONVENTIONS_REPO}:"
-  echo "  1. Ask Luke to add your GitHub account to that repository."
-  echo "  2. Install the GitHub CLI (brew install gh) and run: gh auth login"
-  echo "  3. Run this command again."
+  echo "/newprototype (start a prototype in the team's style) isn't set up yet."
+  echo "$NEWPROTOTYPE_WHY"
 fi
 `;
 

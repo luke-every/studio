@@ -67,9 +67,8 @@ export function SetupGuide() {
       </ol>
 
       <p className="text-sm text-foreground-subtle">
-        Starting a new prototype in the team&rsquo;s style is /newprototype. The same command sets it up
-        when your GitHub account can see luke-every/team-conventions; if it can&rsquo;t yet, it tells you
-        what to do. /push works either way.
+        The same command also sets up /newprototype, for starting a new prototype in the team&rsquo;s
+        style. It uses the same password, so there&rsquo;s nothing else to install or ask for.
       </p>
 
       <p className="text-sm text-foreground-subtle">Run the command again any time to update.</p>
