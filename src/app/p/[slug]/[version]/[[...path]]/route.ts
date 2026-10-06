@@ -68,7 +68,28 @@ export async function GET(
     if (value) headers.set(name, value);
   }
 
+  // The page itself is served at /p/slug/v0-1 — Next won't serve the version
+  // with a trailing slash — so a relative link in it (style.css, img/a.png)
+  // would be looked for one folder too high. Pinning the base to the version's
+  // own folder fixes every prototype at once, and anything that already sets
+  // a base is left alone.
+  if (relativePath === "index.html" && path.length === 0 && upstream.status === 200) {
+    const html = await upstream.text();
+    headers.delete("content-length");
+    return new NextResponse(withBase(html, `/p/${slug}/${version}/`), { status: 200, headers });
+  }
+
   return new NextResponse(upstream.body, { status: upstream.status, headers });
+}
+
+/** `<base href>` as the first thing in the head, unless the page already has one. */
+function withBase(html: string, href: string) {
+  if (/<base[\s>]/i.test(html)) return html;
+  const tag = `<base href="${href}">`;
+  const head = html.match(/<head[^>]*>/i);
+  if (head) return html.replace(head[0], `${head[0]}${tag}`);
+  const root = html.match(/<html[^>]*>/i);
+  return root ? html.replace(root[0], `${root[0]}${tag}`) : `${tag}${html}`;
 }
 
 /** A version pushed before the move to GitHub, whose files are in Blob. */
