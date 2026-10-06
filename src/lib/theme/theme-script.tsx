@@ -7,7 +7,7 @@ import { THEME_STORAGE_KEY } from "./constants";
  */
 const script = `(function(){try{
 var k=${JSON.stringify(THEME_STORAGE_KEY)};
-var p=localStorage.getItem(k)||"system";
+var p=localStorage.getItem(k)||"light";
 var r=p==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):p;
 var e=document.documentElement;
 e.dataset.theme=r;

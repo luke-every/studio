@@ -13,12 +13,12 @@ for what the code means. The Hub is the source of truth for nothing.**
 
 ## Shape
 
-The registry document lives in Blob. A prototype's files live in a
-dedicated GitHub repository — the *content* repository, never this one:
+The registry document and a prototype's files all live in a dedicated
+GitHub repository — the *content* repository, never this one:
 
 ```
-Blob     registry.json                  teams, projects, prototypes, versions
-GitHub   p/<slug>/<version>/index.html  the version's entry point
+GitHub   registry.json                  teams, projects, prototypes, versions
+         p/<slug>/<version>/index.html  the version's entry point
          p/<slug>/<version>/<...>       every other file in the folder pushed
 ```
 
@@ -99,8 +99,8 @@ remove the others; they are listed alongside it.
 
 ## Reading it
 
-`src/lib/registry/blob.ts` knows where the registry document lives;
-`src/lib/registry/github.ts` knows where a prototype's own files live.
+`src/lib/registry/store.ts` knows the registry document;
+`src/lib/registry/github.ts` knows the content repository both live in.
 Nothing else touches either directly — everything else goes through
 `src/lib/registry/index.ts`.
 

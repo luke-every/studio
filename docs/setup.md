@@ -1,42 +1,40 @@
 # Setting up
 
 ```
-Vercel Blob     the registry — teams, projects, prototypes, versions
-GitHub (content) a prototype's own files, one commit per version
+GitHub (content) the registry — teams, projects, prototypes, versions —
+                and a prototype's own files, one commit per version
 Vercel          runs the studio, which only ever reads
 GitHub (this repo) the studio's own code
 ```
 
-**Prototypes are content, not code.** They live in storage — Blob for the
-registry, a dedicated GitHub repository for files — so adding one never
+**Prototypes are content, not code.** They live in a dedicated GitHub
+repository, registry and files alike, so adding one never
 rebuilds or redeploys anything. It appears in seconds. This repository holds
 the application and nothing else; no prototype's files are ever committed
 here.
 
 ## Once, in Vercel and GitHub
 
-1. **Storage** → **Create Database** → **Blob** → connect it to this project.
-   That sets `BLOB_READ_WRITE_TOKEN` for you; there is nothing to copy.
-2. **Settings → Environment Variables** → add `STUDIO_PASSWORD`, one shared
+1. **Settings → Environment Variables** → add `STUDIO_PASSWORD`, one shared
    word for the team. It opens the studio and authorises `/push`.
-3. **Create the content repository.** A new, empty GitHub repo — separate
+2. **Create the content repository.** A new, empty GitHub repo — separate
    from this one, e.g. `prototype-studio-content` — with at least one commit
    on its default branch (a README is enough; the studio always commits on
    top of an existing commit, never as the first one). Nothing here ever
    deploys, so it doesn't need to be connected to Vercel at all.
-4. **Create a token for it.** In GitHub, a fine-grained personal access
+3. **Create a token for it.** In GitHub, a fine-grained personal access
    token scoped to only that repository, with **Contents: Read and write**
    permission and nothing else. Give it whatever expiry you're comfortable
    rotating on.
-5. **Settings → Environment Variables** in Vercel → add:
-   - `STUDIO_GITHUB_TOKEN` — the token from step 4.
+4. **Settings → Environment Variables** in Vercel → add:
+   - `STUDIO_GITHUB_TOKEN` — the token from step 3.
    - `STUDIO_CONTENT_REPO` — `<owner>/<repo>`, e.g.
      `luke-every/prototype-studio-content`.
    - `STUDIO_CONTENT_BRANCH` — optional, defaults to `main`.
-6. Redeploy so all of it takes effect.
+5. Redeploy so all of it takes effect.
 
 `/api/health` (with the studio password) reports whether each is working —
-`storage` for Blob, `contentRepo` for GitHub.
+`contentRepo` for GitHub.
 
 ## Nothing to migrate
 
@@ -85,7 +83,8 @@ it's a write from inside the app itself, so it already knows its team.
 | | |
 | --- | --- |
 | `GET /api/prototypes` | what exists, so a push knows if it is a new version |
-| `POST /api/push` | the whole prototype folder plus `name`, and `team` if it is new. The entry is named `index.html`; every other file goes to the content repository at its own relative path |
+| `POST /api/push/start` | `name` (and `team` if new, `version` to choose the number by hand): which version this becomes, and the content repository to commit to |
+| `POST /api/push` | the commit `/push` made plus the notes (`name`, `version`, `commit`, `title`, `changes`…); the studio verifies the commit and records the version |
 
 ## The door
 
@@ -104,6 +103,14 @@ who does not have the word.
 npm run dev
 ```
 
-Without `BLOB_READ_WRITE_TOKEN` the studio reads the files in `registry/`
-instead — enough to work on the interface. Nothing can be saved in that
-mode, and Settings says so.
+Without the content repository variables the studio keeps its registry in
+`.local/registry.json` and serves prototype files from
+`.local/p/<slug>/<version>/` — enough to work on the whole interface, creating
+teams and projects included. `/push` and "Add prototype" still need the
+repository, since they commit files. `.local` is git-ignored and `.vercelignore`d.
+
+## Fonts
+
+The studio uses ABC Diatype from `public/fonts/` (the same files as
+`team-conventions`, which commits them). If they are missing the studio falls
+back to the system font rather than failing.

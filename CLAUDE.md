@@ -19,6 +19,10 @@ The vocabulary, tokens and primitives below all read that flag and stay in
 place, so motion can be reintroduced **one interaction at a time** and judged
 on its own merits. Do not flip the flag back on wholesale.
 
+Reintroduced so far: `hover-lift` (a CSS preset in `src/styles/motion.css`) on
+the feed tiles. It animates even with the flag off; its timing is
+`--lift-duration` / `--lift-curve`.
+
 Everything below describes how motion works when it is enabled.
 
 ---
@@ -170,8 +174,8 @@ version parameter is read through `useSyncExternalStore`.
 
 Full detail in `docs/registry.md`. The rules that must not be violated:
 
-1. **Prototypes are content, not code.** They live in Blob, never in the
-   repository. Adding one must never require a build or a deploy.
+1. **Prototypes are content, not code.** They live in the content repository, never in this
+   one. Adding one must never require a build or a deploy.
 2. **The app is a reader.** It renders what the store holds. Critical state
    never lives only in UI state.
 3. **Versions are immutable.** New state means a new version, never an edit
@@ -181,14 +185,14 @@ Full detail in `docs/registry.md`. The rules that must not be violated:
    explicitly, even though `/push` moves that pointer forward.
 5. **Never delete history.** Archive.
 6. **Keep storage replaceable.** Components talk to `src/lib/registry`; only
-   `blob.ts`, `read.ts` and `write.ts` know where anything lives.
+   `store.ts`, `github.ts`, `read.ts` and `write.ts` know where anything lives.
 7. **Keep infrastructure out of the UX.** Storage keys, tokens and cache
    tags appear nowhere in the interface.
 8. **Per-person state stays client-side.** Recently opened, view mode.
 9. **Nobody signs in.** One shared password opens the studio and authorises
    the API. Authorship is a name, not an account. Do not add authentication.
-10. **Setup is two environment variables** — a Blob store and a password.
-    Do not add a third without asking.
+10. **Setup is three environment variables** — a content repository token and
+    name, and a password. Do not add a fourth without asking.
 11. **Prefer boring infrastructure.** Complexity is earned by a requirement.
 12. **Every page must stay prerendered.** Nothing in `(studio)/layout.tsx`
     or a page may read a cookie, a header or `useSearchParams` — any of

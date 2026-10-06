@@ -1,14 +1,14 @@
 import "server-only";
 
-import { isBlobConfigured, readRegistryDocument, type RegistryDocument } from "./blob";
+import { isStoreConfigured, readRegistryDocument, type RegistryDocument } from "./store";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
 import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
 
 /**
  * Reading the registry.
  *
- * From Blob when it is configured, which is everywhere that matters, and
- * from the files in `registry/` otherwise — enough to run the interface
+ * From the content repository when it is configured, which is everywhere
+ * that matters, and from the files in `registry/` otherwise — enough to run the interface
  * locally without a store.
  *
  * Everything is validated on the way in. Invalid data throws rather than
@@ -57,7 +57,7 @@ export async function readSeed(): Promise<RegistryDocument> {
 export async function loadRegistry(): Promise<RegistryDocument> {
   // An empty studio and a broken one look identical to somebody using it,
   // so a read that fails is thrown rather than quietly returning nothing.
-  const raw = isBlobConfigured() ? ((await readRegistryDocument()) ?? (await readSeed())) : await readSeed();
+  const raw = isStoreConfigured() ? ((await readRegistryDocument()) ?? (await readSeed())) : await readSeed();
 
   const document: RegistryDocument = {
     teams: raw.teams.map((team) => teamsFileSchema.shape.teams.element.parse(team)),

@@ -32,6 +32,14 @@
   --motion-travel-sm: 6px;
   --motion-travel-md: 14px;
   --motion-travel-lg: 28px;
+
+  /* --- Presets ------------------------------------------------------------ */
+  /* hover-lift: tune its timing here, once, for every place it is used. */
+  --lift-duration: var(--dur-standard);
+  --lift-curve: var(--curve-standard);
+  /* fade-in: tune here. */
+  --fade-duration: 0.3s;
+  --fade-curve: var(--curve-entrance);
 }
 
 /* Reduced motion collapses distance and shortens duration, but never removes
@@ -48,5 +56,66 @@
     --motion-travel-sm: 0px;
     --motion-travel-md: 0px;
     --motion-travel-lg: 0px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Presets
+ *
+ * hover-lift — a surface answering the pointer: its fill deepens a touch. A
+ * property changing in place, so the `gentle` register's meaning, as plain CSS.
+ *
+ * This is deliberately animated even while MOTION_ENABLED is off: it is the
+ * first interaction reintroduced on its own merits. Reduced motion zeroes the
+ * duration, so the state still changes, instantly.
+ * ------------------------------------------------------------------------- */
+@utility hover-lift {
+  transition:
+    background-color var(--lift-duration) var(--lift-curve);
+
+  &:hover {
+    background-color: var(--tile-hover);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * toast — drops in from above its resting place and lifts away again. An
+ * object arriving and leaving, so `normal` timing in, `fast` out. Like
+ * hover-lift, animated while MOTION_ENABLED is off: reintroduced on its own.
+ * ------------------------------------------------------------------------- */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-travel-md) * -1));
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-travel-sm) * -1));
+  }
+}
+
+@utility toast-in {
+  animation: toast-in var(--dur-standard) var(--curve-entrance) both;
+}
+
+@utility toast-out {
+  animation: toast-out var(--dur-fast) var(--curve-exit) both;
+}
+
+/* ---------------------------------------------------------------------------
+ * fade-in — something that has just become ready eases in rather than
+ * flashing on. Set `data-ready` when it is. Timing is `--fade-duration` and
+ * `--fade-curve`. Animated while MOTION_ENABLED is off, like the others here;
+ * reduced motion shortens it to a near-instant change.
+ * ------------------------------------------------------------------------- */
+@utility fade-in {
+  opacity: 0;
+  transition: opacity var(--fade-duration) var(--fade-curve);
+
+  &[data-ready] {
+    opacity: 1;
   }
 }

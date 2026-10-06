@@ -3,6 +3,25 @@
 @import "../styles/theme.css";
 @import "../styles/motion.css";
 
+@font-face {
+  font-family: "ABC Diatype";
+  src: url("/fonts/ABCDiatype-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Diatype";
+  src: url("/fonts/ABCDiatype-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Diatype";
+  src: url("/fonts/ABCDiatype-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
 /* ---------------------------------------------------------------------------
  * Tailwind bridge
  *
@@ -23,6 +42,8 @@
   --color-surface-hover: var(--surface-hover);
   --color-surface-pressed: var(--surface-pressed);
 
+  --color-tile: var(--tile);
+
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-divider: var(--divider);
@@ -40,11 +61,12 @@
   --color-review: var(--review);
 
   /* One family, throughout. */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-family);
 
   --text-2xs: var(--fs-2xs);
   --text-xs: var(--fs-xs);
   --text-sm: var(--fs-sm);
+  --text-nav: var(--fs-nav);
   --text-base: var(--fs-base);
   --text-md: var(--fs-md);
   --text-lg: var(--fs-lg);
@@ -57,6 +79,8 @@
   --radius-md: var(--r-md);
   --radius-lg: var(--r-lg);
   --radius-xl: var(--r-xl);
+  --radius-tag: var(--r-tag);
+  --radius-tile: var(--r-tile);
   --radius-device: var(--r-device);
   --radius-device-sm: var(--r-device-sm);
 
@@ -91,7 +115,7 @@
   body {
     background-color: var(--background);
     color: var(--foreground);
-    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-family);
     font-size: var(--fs-base);
     line-height: var(--leading-normal);
     letter-spacing: var(--tracking-normal);

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local-only registry and prototype files used by `next dev`.
+    ".local/**",
   ]),
 ]);
 

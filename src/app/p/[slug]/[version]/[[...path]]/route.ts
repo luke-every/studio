@@ -54,6 +54,12 @@ export async function GET(
     // Nothing here should end up in a search index.
     "x-robots-tag": "noindex",
   });
+  // A tile's preview asks for `?preview`: the page as normal, minus video and
+  // audio, which are usually the bulk of what a prototype loads and are no
+  // use in a thumbnail. The policy on the page governs everything it loads.
+  if (relativePath === "index.html" && new URL(request.url).searchParams.has("preview")) {
+    headers.set("content-security-policy", "media-src 'none'");
+  }
   // fetch has already decompressed a gzipped body, so its length only
   // holds when upstream sent it uncompressed.
   const passThrough = upstream.headers.get("content-encoding") ? ["content-range"] : ["content-length", "content-range"];

@@ -36,7 +36,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
  * never a frame where the DOM and React disagree about which theme is painted.
  * ------------------------------------------------------------------------- */
 
-const SERVER_STATE: ThemeState = { preference: "system", resolved: "light" };
+const SERVER_STATE: ThemeState = { preference: "light", resolved: "light" };
 let snapshot: ThemeState = SERVER_STATE;
 const listeners = new Set<() => void>();
 
@@ -50,7 +50,7 @@ function resolve(preference: ThemePreference): ResolvedTheme {
 
 function readFromDom(): ThemeState {
   const root = document.documentElement;
-  const preference = (root.dataset.themePreference as ThemePreference | undefined) ?? "system";
+  const preference = (root.dataset.themePreference as ThemePreference | undefined) ?? "light";
   const resolved = (root.dataset.theme as ResolvedTheme | undefined) ?? resolve(preference);
   return { preference, resolved };
 }

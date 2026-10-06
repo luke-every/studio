@@ -18,6 +18,11 @@ const slug = z
   .max(80)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "must be a lowercase kebab-case slug");
 
+/** A date, or a date with the time of day — older records only have the date. */
+const isoTimestamp = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2}))?$/, "must be an ISO date or date-time");
+
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be an ISO date, YYYY-MM-DD");
 
 /**
@@ -96,7 +101,7 @@ export const versionSchema = z.object({
   /** What is new or different, in whatever detail is useful. */
   changes: z.string().default(""),
   author: authorSchema,
-  createdAt: isoDate,
+  createdAt: isoTimestamp,
   /** This version's own files. Older versions stay viewable. */
   url: location.optional(),
 });
@@ -113,7 +118,7 @@ export const prototypeSchema = z.object({
   /** The version shown by default. Normally the newest. */
   currentVersion: z.string().min(1),
   created: attributionSchema,
-  updatedAt: isoDate,
+  updatedAt: isoTimestamp,
   archived: z.boolean().default(false),
   /** Where the files live in the repository. */
   repositoryPath: z.string().optional(),

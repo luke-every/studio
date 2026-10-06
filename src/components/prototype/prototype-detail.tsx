@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import { VersionRail } from "@/components/prototype/version-rail";
+import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { useStudio } from "@/lib/data/studio-store";
-import { formatUpdated } from "@/lib/format";
+import { Stamp } from "@/components/ui/stamp";
 import { avatarUrl } from "@/lib/registry/people";
 import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
 
@@ -23,7 +22,7 @@ import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
  * else can open.
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
-  const { teams, markOpened } = useStudio();
+  const { markOpened } = useStudio();
   const fromUrl = useUrlVersion();
   const [chosen, setChosen] = useState<string | null>(null);
 
@@ -45,31 +44,27 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     window.history.replaceState(null, "", url);
   };
 
-  const team = teams.find((candidate) => candidate.slug === prototype.teamSlug);
-  const historic = selected.id !== prototype.current.id;
-
   return (
-    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-8 sm:px-8 sm:py-10">
-      <Link
-        href={`/teams/${prototype.teamSlug}`}
-        className="text-xs text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"
-      >
-        ← {team?.name ?? "Team"}
-      </Link>
+    <div className="w-full px-5 py-6 sm:px-8 sm:py-8">
+      <PrototypeFrame
+        url={selected.url}
+        title={`${prototype.name} ${selected.version}`}
+        leading={
+          <VersionMenu
+            versions={prototype.versions}
+            selectedId={selected.id}
+            currentId={prototype.current.id}
+            onSelect={choose}
+          />
+        }
+      />
 
-      <header className="mt-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
-            {prototype.name}
-          </h1>
-          {prototype.description ? (
-            <p className="mt-2 max-w-[68ch] text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
-              {prototype.description}
-            </p>
-          ) : null}
-        </div>
+      <div className="mt-6 px-1 pb-6">
+        <h1 className="text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
+          {prototype.name}
+        </h1>
 
-        <div className="flex items-center gap-2 text-xs text-foreground-subtle">
+        <div className="mt-3 flex items-center gap-2 text-base text-foreground-muted">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={avatarUrl(prototype.owner)}
@@ -80,48 +75,12 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           />
           <span>{prototype.owner.name}</span>
           <span aria-hidden>·</span>
-          <span>{formatUpdated(prototype.updatedAt)}</span>
-        </div>
-      </header>
-
-      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-10">
-        <div className="min-w-0">
-          <PrototypeFrame
-            url={selected.url}
-            title={`${prototype.name} ${selected.version}`}
-            className="h-[min(78dvh,52rem)] w-full"
-            leading={
-              historic ? (
-                <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="text-foreground">
-                    Looking at {selected.version}, not the current version.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => choose(prototype.current)}
-                    className="text-foreground-muted underline underline-offset-2 hover:text-foreground"
-                  >
-                    Back to {prototype.current.version}
-                  </button>
-                </span>
-              ) : (
-                <span className="text-foreground-subtle">{selected.version}</span>
-              )
-            }
-          />
+          <span><Stamp iso={prototype.updatedAt} /></span>
         </div>
 
-        <aside className="min-w-0">
-          <h2 className="text-eyebrow">Versions</h2>
-          <div className="mt-2">
-            <VersionRail
-              versions={prototype.versions}
-              selectedId={selected.id}
-              currentId={prototype.current.id}
-              onSelect={choose}
-            />
-          </div>
-        </aside>
+        <p className="mt-4 max-w-[68ch] text-base leading-[var(--leading-relaxed)] text-foreground-muted">
+          {prototype.description || "A short description of what this prototype is and the question it is asking will go here."}
+        </p>
       </div>
     </div>
   );

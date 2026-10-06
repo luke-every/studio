@@ -71,6 +71,18 @@ export function contentRepoAccess() {
 }
 
 /**
+ * With no repository connected, `next dev` serves a version's files from
+ * `.local/p/<slug>/<version>/` — the same folder layout, on this machine.
+ */
+async function readLocalFile(slug: string, versionSegment: string, path: string[]) {
+  const { readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const file = join(process.cwd(), ".local", "p", slug, versionSegment, ...(path.length ? path : ["index.html"]));
+  const bytes = await readFile(file).catch(() => null);
+  return bytes ? new Response(new Uint8Array(bytes)) : null;
+}
+
+/**
  * One file of a pushed version, straight from the content repository.
  *
  * Read by its path on the branch rather than through the registry. A
@@ -90,10 +102,11 @@ export async function fetchPrototypeFile(
   path: string[],
   range: string | null,
 ): Promise<Response | null> {
-  const cfg = config();
-  if (!cfg) return null;
   if (!/^[a-z0-9-]+$/.test(slug) || !/^v\d+-\d+$/.test(versionSegment)) return null;
   if (path.some((segment) => !segment || segment === "." || segment === "..")) return null;
+
+  const cfg = config();
+  if (!cfg) return process.env.NODE_ENV === "production" ? null : readLocalFile(slug, versionSegment, path);
 
   const file = (path.length ? path : ["index.html"]).map(encodeURIComponent).join("/");
   const response = await fetch(
@@ -151,6 +164,50 @@ async function api(path: string, cfg: Config, init: RequestInit = {}) {
     );
   }
   return response.json();
+}
+
+/**
+ * A file at the root of the content repository, as text. Null when it isn't
+ * there yet. Read through the contents API so it is never a stale CDN copy.
+ */
+export async function readRepoFile(path: string): Promise<string | null> {
+  const cfg = requireConfig();
+  const response = await fetch(
+    `${API}/repos/${cfg.owner}/${cfg.name}/contents/${path}?ref=${cfg.branch}`,
+    // No `cache` option, on purpose. Next doesn't cache a fetch by default, so
+    // this is read fresh whenever a page is generated — but `cache: "no-store"`
+    // would also opt every page that reads the registry out of prerendering,
+    // and turn each navigation into a server round trip.
+    { headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github.raw+json" } },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Could not read ${path} (${response.status}).`);
+  return response.text();
+}
+
+/**
+ * Create or replace one file with one commit. Replacing needs the sha of the
+ * file being replaced; if somebody else's write landed in between, GitHub
+ * refuses with a conflict, which surfaces as an error rather than a silent
+ * overwrite.
+ */
+export async function writeRepoFile(path: string, content: string, message: string) {
+  const cfg = requireConfig();
+  const url = `/repos/${cfg.owner}/${cfg.name}/contents/${path}`;
+
+  const current = await fetch(`${API}${url}?ref=${cfg.branch}`, {
+    headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github+json" },
+    cache: "no-store",
+  });
+  if (!current.ok && current.status !== 404) {
+    throw new Error(`Could not read ${path} (${current.status}).`);
+  }
+  const sha = current.ok ? ((await current.json()).sha as string) : undefined;
+
+  await api(url, cfg, {
+    method: "PUT",
+    body: JSON.stringify({ message, content: toBase64(content), branch: cfg.branch, sha }),
+  });
 }
 
 function toBase64(content: ArrayBuffer | string): string {

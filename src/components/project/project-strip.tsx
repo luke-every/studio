@@ -35,9 +35,9 @@ export function ProjectStrip({ teamSlug }: { teamSlug: string }) {
               <ProjectTile
                 key={project.slug}
                 href={`/teams/${teamSlug}/projects/${project.slug}`}
+                slug={project.slug}
                 name={project.name}
                 count={contents.length}
-                previews={contents.slice(0, 3).map((prototype) => prototype.preview)}
               />
             );
           })}
@@ -47,7 +47,7 @@ export function ProjectStrip({ teamSlug }: { teamSlug: string }) {
             onClick={() => setCreating(true)}
             className="group flex w-[9.5rem] shrink-0 flex-col gap-2 text-left"
           >
-            <span className="grid aspect-[5/3] w-full place-items-center rounded-[var(--r-lg)] border border-dashed border-border-strong text-foreground-subtle transition-colors duration-[var(--dur-fast)] group-hover:border-foreground-muted group-hover:text-foreground-muted">
+            <span className="grid aspect-[5/3] w-full place-items-center rounded-[var(--r-xl)] border border-dashed border-border-strong text-foreground-subtle transition-colors duration-[var(--dur-fast)] group-hover:border-foreground-muted group-hover:text-foreground-muted">
               <svg viewBox="0 0 16 16" aria-hidden className="size-4">
                 <path
                   d="M8 3v10M3 8h10"
@@ -58,8 +58,8 @@ export function ProjectStrip({ teamSlug }: { teamSlug: string }) {
               </svg>
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-sm text-foreground">New project</span>
-              <span className="block truncate text-xs text-foreground-subtle">
+              <span className="block truncate text-base text-foreground">New project</span>
+              <span className="block truncate text-sm text-foreground-subtle">
                 Group related work
               </span>
             </span>

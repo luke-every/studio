@@ -15,7 +15,7 @@
  * ------------------------------------------------------------------------- */
 
 :root {
-  --background: var(--paper-200);
+  --background: var(--paper-50);
   --background-sunken: var(--paper-300);
   --foreground: var(--ink-900);
   --foreground-muted: var(--ink-500);
@@ -26,6 +26,10 @@
   --surface-inset: var(--paper-200);
   --surface-hover: var(--alpha-ink-04);
   --surface-pressed: var(--alpha-ink-08);
+
+  /* A feed tile. */
+  --tile: var(--paper-300);
+  --tile-hover: color-mix(in oklab, var(--paper-300), var(--ink-900) 2%);
 
   --border: var(--alpha-ink-12);
   --border-strong: var(--ink-400);
@@ -79,6 +83,9 @@
     --surface-hover: var(--alpha-paper-06);
     --surface-pressed: var(--alpha-paper-10);
 
+    --tile: var(--ink-800);
+    --tile-hover: var(--ink-700);
+
     --border: var(--alpha-paper-10);
     --border-strong: var(--alpha-paper-16);
     --divider: var(--alpha-paper-06);
@@ -120,6 +127,9 @@
   --surface-inset: #100e0a;
   --surface-hover: var(--alpha-paper-06);
   --surface-pressed: var(--alpha-paper-10);
+
+  --tile: var(--ink-800);
+  --tile-hover: var(--ink-700);
 
   --border: var(--alpha-paper-10);
   --border-strong: var(--alpha-paper-16);

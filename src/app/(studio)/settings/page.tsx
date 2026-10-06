@@ -1,7 +1,6 @@
 import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 import { studioPassword } from "@/lib/config";
 import { getPeople, getPrototypes } from "@/lib/registry";
-import { isBlobConfigured } from "@/lib/registry/blob";
 import { isContentRepoConfigured } from "@/lib/registry/github";
 import { avatarUrl } from "@/lib/registry/people";
 
@@ -18,7 +17,6 @@ import { avatarUrl } from "@/lib/registry/people";
  * registry, which regenerates this page on every save the same as the rest.
  */
 export default async function SettingsPage() {
-  const store = isBlobConfigured();
   const contentRepo = isContentRepoConfigured();
   const locked = Boolean(studioPassword());
   const people = await getPeople();
@@ -46,16 +44,9 @@ export default async function SettingsPage() {
 
       <Row
         title="Storage"
-        state={store ? "ok" : "todo"}
-        value={store ? `Connected · ${prototypes.length} prototypes` : "Not connected"}
-        note="A Vercel Blob store holds the registry — the teams, prototypes and versions. Connect one under Storage in Vercel and it sets BLOB_READ_WRITE_TOKEN for you. Until then the studio shows the teams it ships with and nothing can be saved."
-      />
-
-      <Row
-        title="Prototype files"
         state={contentRepo ? "ok" : "todo"}
-        value={contentRepo ? "Connected to the content repository" : "Not connected"}
-        note="Every version's files are one commit in a separate GitHub repository, which is never deployed. STUDIO_GITHUB_TOKEN and STUDIO_CONTENT_REPO, set in Vercel."
+        value={contentRepo ? `Connected · ${prototypes.length} prototypes` : "Not connected"}
+        note="A separate GitHub repository, which is never deployed, holds the registry — the teams, prototypes and versions — and every version's files, one commit each. STUDIO_GITHUB_TOKEN and STUDIO_CONTENT_REPO, set in Vercel. Until then the studio shows the teams it ships with and nothing can be saved."
       />
 
       <Row

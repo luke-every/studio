@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json().catch(() => null)) as
-    | { name?: string; slug?: string; team?: string }
+    | { name?: string; slug?: string; team?: string; version?: string }
     | null;
   const name = body?.name?.trim();
   if (!name) {
@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       name,
       slug: body?.slug?.trim() || undefined,
       teamSlug: body?.team?.trim() || undefined,
+      version: body?.version?.trim() || undefined,
     });
     return NextResponse.json({ ...planned, repository: contentRepoAccess() });
   } catch (error) {

@@ -50,6 +50,30 @@
   --tint-stone-from: #e8e6e1;
   --tint-stone-to: #8b8880;
 
+  /* --- Palette: project orbs ------------------------------------------------
+   * Each project paints a soft, grainy sphere from one of these families,
+   * chosen from its slug so it never changes. Four colours a family, light
+   * to deep; the families share a saturation and a warmth so any two
+   * side by side still read as one set. */
+  --orb-ember-1: #fbd9a0;
+  --orb-ember-2: #f4a463;
+  --orb-ember-3: #e2693a;
+  --orb-ember-4: #a8421f;
+  --orb-orchid-1: #c9b8f5;
+  --orb-orchid-2: #f0a8e6;
+  --orb-orchid-3: #8fa6f4;
+  --orb-orchid-4: #9a7fe0;
+  --orb-cocoa-1: #c98f7a;
+  --orb-cocoa-2: #7a5448;
+  --orb-cocoa-3: #3d3433;
+  --orb-cocoa-4: #9fb0ee;
+  --orb-tide-1: #bfe9e4;
+  --orb-tide-2: #7cc6d6;
+  --orb-tide-3: #5f8fe6;
+  --orb-tide-4: #2f6d8f;
+  --orb-light: rgb(255 255 255 / 0.3);
+  --orb-shade: rgb(0 0 0 / 0.14);
+
   /* --- Alpha ramps (for borders, scrims, elevation on either theme) ------- */
   --alpha-ink-04: color-mix(in oklab, var(--ink-900) 4%, transparent);
   --alpha-ink-08: color-mix(in oklab, var(--ink-900) 8%, transparent);
@@ -72,6 +96,20 @@
   /* Density multiplier — a designer can compress the whole UI from here. */
   --density: 1;
 
+  /* --- Type --------------------------------------------------------------- */
+  /* One family. The files are licensed and supplied locally (public/fonts,
+   * never committed); without them the stack falls back to the system face. */
+  --font-family: "ABC Diatype", ui-sans-serif, system-ui, sans-serif;
+
+  /* --- Layout ------------------------------------------------------------- */
+  --nav-height: 4rem;
+  --search-width: 31.25rem;
+  --tile-height: 37.5rem;
+  /* The phone in a feed tile: 85% of the tile's height, at phone proportions. */
+  --tile-device-width: calc(var(--tile-height) * 0.85 * 9 / 19.5);
+  /* The prototype on its own page: never taller than the window, so all of it is in view. */
+  --frame-height: 90dvh;
+
   /* --- Radii -------------------------------------------------------------- */
   --r-xs: 0.125rem;
   --r-sm: 0.25rem;
@@ -79,6 +117,8 @@
   --r-lg: 0.5rem;
   --r-xl: 0.75rem;
   --r-full: 999px;
+  --r-tag: 0.75rem;
+  --r-tile: 1.5rem;
   /* Prototypes are phone screens, so their corners are device corners. */
   --r-device: 1.375rem;
   --r-device-sm: 0.75rem;
@@ -97,9 +137,10 @@
   --fs-2xs: 0.625rem;
   --fs-xs: 0.6875rem;
   --fs-sm: 0.75rem;
-  --fs-base: 0.8125rem;
-  --fs-md: 0.875rem;
-  --fs-lg: 1rem;
+  --fs-nav: 0.9375rem;
+  --fs-base: 1rem;
+  --fs-md: 1.0625rem;
+  --fs-lg: 1.125rem;
   --fs-xl: 1.25rem;
   --fs-2xl: 1.625rem;
   --fs-3xl: 2.25rem;

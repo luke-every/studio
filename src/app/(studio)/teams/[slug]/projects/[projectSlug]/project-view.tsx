@@ -3,15 +3,13 @@
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
 
+import { FeedGrid } from "@/components/home/feed-grid";
+import { FeedTile } from "@/components/home/feed-tile";
 import { AddPrototype } from "@/components/prototype/add-prototype";
-import { PrototypeTile } from "@/components/prototype/prototype-tile";
-import { Collection } from "@/components/ui/collection";
-import { ViewSwitcher } from "@/components/ui/view-switcher";
 import { useStudio } from "@/lib/data/studio-store";
 import { prototypesInProject } from "@/lib/registry/select";
 import { formatUpdated } from "@/lib/format";
 import { matchesPrototype, useSearch } from "@/lib/search-store";
-import { useViewMode } from "@/lib/use-view-mode";
 
 /**
  * A project folder: the prototypes filed into it, most recently opened
@@ -20,7 +18,6 @@ import { useViewMode } from "@/lib/use-view-mode";
 export function ProjectView() {
   const params = useParams<{ slug: string; projectSlug: string }>();
   const { teams, projects, prototypes, opened } = useStudio();
-  const [mode, setMode] = useViewMode("prototypes");
   const { query } = useSearch();
 
   const team = teams.find((candidate) => candidate.slug === params.slug);
@@ -34,7 +31,7 @@ export function ProjectView() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-8 sm:px-8 sm:py-10">
+    <div className="w-full px-5 py-8 sm:px-8 sm:py-10">
       <Link
         href={`/teams/${team.slug}`}
         className="text-xs text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"
@@ -56,19 +53,16 @@ export function ProjectView() {
 
         <div className="flex items-center gap-2">
           <AddPrototype teamSlug={team.slug} projectSlug={project.slug} trigger="button" />
-          {contents.length > 0 ? (
-            <ViewSwitcher mode={mode} onChange={setMode} scope="prototypes" />
-          ) : null}
         </div>
       </header>
 
       <div className="mt-8 border-t border-divider pt-7">
         {contents.length > 0 ? (
-          <Collection mode={mode}>
+          <FeedGrid>
             {contents.map((prototype) => (
-              <PrototypeTile key={prototype.slug} prototype={prototype} mode={mode} />
+              <FeedTile key={prototype.slug} prototype={prototype} team={team} />
             ))}
-          </Collection>
+          </FeedGrid>
         ) : (
           <div className="max-w-[44ch] py-10">
             <p className="text-md text-foreground">Nothing filed in here yet.</p>

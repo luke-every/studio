@@ -95,6 +95,12 @@ Add `--entry app.html` if the entry isn't `index.html`, `--slug quiz-results`
 for an existing prototype, `--team acquisition` for a new one, and
 optionally `--project <slug>` or `--description "..."`.
 
+The version number is normally the next one, chosen by the studio. If the
+person asks for a specific number ("push this as v1.0"), add `--version v1.0`.
+It must look like `v0.8` and be one that prototype doesn't already have —
+the studio refuses a number that exists. Only pass it when asked; never to
+"fix" an error.
+
 For the author, use the person's name as they would write it — their git
 `user.name` is a good default if you do not otherwise know it.
 

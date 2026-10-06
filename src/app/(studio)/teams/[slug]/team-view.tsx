@@ -1,17 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
 
+import { FeedGrid } from "@/components/home/feed-grid";
+import { FeedTile } from "@/components/home/feed-tile";
 import { ProjectStrip } from "@/components/project/project-strip";
 import { AddPrototype } from "@/components/prototype/add-prototype";
-import { PrototypeTile } from "@/components/prototype/prototype-tile";
-import { Collection } from "@/components/ui/collection";
-import { ViewSwitcher } from "@/components/ui/view-switcher";
 import { prototypesInTeam } from "@/lib/registry/select";
 import { useStudio } from "@/lib/data/studio-store";
 import { matchesPrototype, useSearch } from "@/lib/search-store";
-import { useViewMode } from "@/lib/use-view-mode";
 
 /**
  * A team, and the prototypes inside it.
@@ -22,7 +19,6 @@ import { useViewMode } from "@/lib/use-view-mode";
 export function TeamView() {
   const params = useParams<{ slug: string }>();
   const { teams, prototypes, opened } = useStudio();
-  const [mode, setMode] = useViewMode("prototypes");
   const { query } = useSearch();
 
   const team = teams.find((candidate) => candidate.slug === params.slug);
@@ -33,19 +29,8 @@ export function TeamView() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[var(--bp-xl)] px-5 py-8 sm:px-8 sm:py-10">
-      <Link
-        href="/"
-        className="text-xs text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"
-      >
-        ← Teams
-      </Link>
-
-      <h1 className="mt-5 text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
-        {team.name}
-      </h1>
-
-      <div className="mt-8">
+    <div className="w-full px-5 py-8 sm:px-8 sm:py-10">
+      <div>
         <ProjectStrip teamSlug={team.slug} />
       </div>
 
@@ -56,20 +41,14 @@ export function TeamView() {
           </h2>
           <div className="flex items-center gap-2">
             <AddPrototype teamSlug={team.slug} trigger="button" />
-            {contents.length > 0 ? (
-              <ViewSwitcher mode={mode} onChange={setMode} scope="prototypes" />
-            ) : null}
           </div>
         </div>
         {contents.length > 0 ? (
-          <Collection mode={mode}>
+          <FeedGrid>
             {contents.map((prototype) => (
-              <PrototypeTile key={prototype.slug} prototype={prototype} mode={mode} />
+              <FeedTile key={prototype.slug} prototype={prototype} team={team} />
             ))}
-            {mode === "grid" && !query.trim() ? (
-              <AddPrototype teamSlug={team.slug} />
-            ) : null}
-          </Collection>
+          </FeedGrid>
         ) : (
           <div className="max-w-[44ch] py-10">
             <p className="text-md text-foreground">

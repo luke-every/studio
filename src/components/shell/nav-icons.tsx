@@ -52,3 +52,70 @@ export function TeamDot({ tint }: { tint: string }) {
     />
   );
 }
+
+export function BellIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M4 11V7.25a4 4 0 0 1 8 0V11l1 1.5H3L4 11Z" />
+      <path d="M6.75 14a1.5 1.5 0 0 0 2.5 0" />
+    </Frame>
+  );
+}
+
+export function SunIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <circle cx="8" cy="8" r="2.75" />
+      <path d="M8 1.5v1.25M8 13.25v1.25M14.5 8h-1.25M2.75 8H1.5M12.6 3.4l-.9.9M4.3 11.7l-.9.9M12.6 12.6l-.9-.9M4.3 4.3l-.9-.9" />
+    </Frame>
+  );
+}
+
+export function MoonIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M13.25 9.5A5.5 5.5 0 0 1 6.5 2.75a5.5 5.5 0 1 0 6.75 6.75Z" />
+    </Frame>
+  );
+}
+
+export function SystemIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="2" y="3" width="12" height="8" rx="1" />
+      <path d="M5.5 13.5h5M8 11v2.5" />
+    </Frame>
+  );
+}
+
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="m4 6 4 4 4-4" />
+    </Frame>
+  );
+}
+
+export function ExternalIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M9 2.75h4.25V7M13 3 7.5 8.5M11.25 9.5v2.75a1 1 0 0 1-1 1h-6.5a1 1 0 0 1-1-1v-6.5a1 1 0 0 1 1-1H6.5" />
+    </Frame>
+  );
+}
+
+export function LinkIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M6.75 9.25a2.5 2.5 0 0 0 3.5 0l2.5-2.5a2.5 2.5 0 0 0-3.5-3.5l-.75.75M9.25 6.75a2.5 2.5 0 0 0-3.5 0l-2.5 2.5a2.5 2.5 0 0 0 3.5 3.5l.75-.75" />
+    </Frame>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="m3.5 8.5 3 3 6-7" />
+    </Frame>
+  );
+}

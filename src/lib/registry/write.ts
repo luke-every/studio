@@ -2,9 +2,9 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 
-import { isBlobConfigured, readRegistryDocument, writeRegistryDocument, type RegistryDocument } from "./blob";
+import { isStoreConfigured, readRegistryDocument, writeRegistryDocument, type RegistryDocument } from "./store";
 import { commitPrototypeVersion, verifyPrototypeVersion, versionPrefix } from "./github";
-import { readSeed } from "./read";
+import { compareVersions, readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
 import type { PrototypeRecord, VersionRecord } from "./schema";
 
@@ -23,6 +23,11 @@ export class StoreError extends Error {}
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** With the time, for the things people want to know the minute of. */
+function now() {
+  return new Date().toISOString();
 }
 
 export function slugify(name: string, fallback: string) {
@@ -46,9 +51,9 @@ function named(name: string | undefined, fallback = "Someone") {
 }
 
 async function load(): Promise<RegistryDocument> {
-  if (!isBlobConfigured()) {
+  if (!isStoreConfigured()) {
     throw new StoreError(
-      "No storage is connected, so nothing can be saved. Connect a Blob store in Vercel.",
+      "No content repository is connected, so nothing can be saved. Set STUDIO_GITHUB_TOKEN and STUDIO_CONTENT_REPO in Vercel.",
     );
   }
   // First write into a fresh store starts from the seed, so the teams that
@@ -145,6 +150,8 @@ function nextVersion(existing: VersionRecord[]) {
 type VersionNotes = {
   name: string;
   slug?: string;
+  /** A number chosen by hand. Left out, it is the next one after the highest. */
+  version?: string;
   teamSlug?: string;
   projectSlug?: string | null;
   description?: string;
@@ -159,7 +166,10 @@ type VersionNotes = {
  * version number, and whether the team exists for a prototype that's new.
  * Checked before anything is written anywhere.
  */
-function plan(document: RegistryDocument, input: { name: string; slug?: string; teamSlug?: string }) {
+function plan(
+  document: RegistryDocument,
+  input: { name: string; slug?: string; teamSlug?: string; version?: string },
+) {
   const slug = slugify(input.slug ?? input.name, "prototype");
   const existing = document.prototypes.find((prototype) => prototype.slug === slug);
   const mine = document.versions.filter((version) => version.prototypeSlug === slug);
@@ -173,12 +183,23 @@ function plan(document: RegistryDocument, input: { name: string; slug?: string; 
     }
   }
 
-  return { slug, version: nextVersion(mine), existing };
+  let version = nextVersion(mine);
+  if (input.version) {
+    if (!/^v\d+\.\d+$/.test(input.version)) {
+      throw new StoreError(`"${input.version}" isn't a version number. They look like v0.8.`);
+    }
+    if (mine.some((existingVersion) => existingVersion.version === input.version)) {
+      throw new StoreError(`${slug} already has ${input.version}. Versions are never replaced — pick another number, or leave it out.`);
+    }
+    version = input.version;
+  }
+
+  return { slug, version, existing, isLatest: mine.every((other) => compareVersions(version, other.version) > 0) };
 }
 
 /** Write the version record, and the prototype too if it's the first one. */
 async function record(document: RegistryDocument, input: VersionNotes, url: string) {
-  const { slug, version, existing } = plan(document, input);
+  const { slug, version, existing, isLatest } = plan(document, input);
   const person = named(input.by);
   const versionId = `${slug}-${version}`;
 
@@ -189,7 +210,7 @@ async function record(document: RegistryDocument, input: VersionNotes, url: stri
     title: input.title?.trim() || (version === "v0.1" ? "First version" : `Version ${version}`),
     changes: input.changes?.trim() ?? "",
     author: person,
-    createdAt: today(),
+    createdAt: now(),
     url,
   });
   document.versions.push(entry);
@@ -201,9 +222,13 @@ async function record(document: RegistryDocument, input: VersionNotes, url: stri
   };
 
   if (existing) {
-    existing.preview = preview;
-    existing.currentVersion = versionId;
-    existing.updatedAt = today();
+    // A version numbered below the latest (filling in history) is recorded
+    // but doesn't take over as the one people see.
+    if (isLatest) {
+      existing.preview = preview;
+      existing.currentVersion = versionId;
+      existing.updatedAt = now();
+    }
     if (input.description?.trim()) existing.description = input.description.trim();
     prototypeSchema.parse(existing);
   } else {
@@ -217,7 +242,7 @@ async function record(document: RegistryDocument, input: VersionNotes, url: stri
       preview,
       currentVersion: versionId,
       created: { by: person, at: today() },
-      updatedAt: today(),
+      updatedAt: now(),
       archived: false,
     });
     document.prototypes.push(prototype);
@@ -268,7 +293,12 @@ export async function saveVersion(
  * go. Nothing is written — /push commits the files to the content
  * repository itself, then calls `recordPushedVersion`.
  */
-export async function reserveVersion(input: { name: string; slug?: string; teamSlug?: string }) {
+export async function reserveVersion(input: {
+  name: string;
+  slug?: string;
+  teamSlug?: string;
+  version?: string;
+}) {
   const document = await load();
   const { slug, version } = plan(document, input);
   return { slug, version, prefix: versionPrefix(slug, version) };
@@ -282,12 +312,10 @@ export async function reserveVersion(input: { name: string; slug?: string; teamS
  */
 export async function recordPushedVersion(input: VersionNotes & { version: string; commit: string }) {
   const document = await load();
+  // The number was reserved before the upload. If someone else has taken it
+  // since, this refuses rather than recording files under a number that now
+  // means something else.
   const { slug, version } = plan(document, input);
-  if (version !== input.version) {
-    throw new StoreError(
-      `Someone saved ${slug} while this was uploading, so ${input.version} is no longer next. Push again.`,
-    );
-  }
 
   const { entryUrl } = await verifyPrototypeVersion(slug, version, input.commit);
   return record(document, input, entryUrl);
