@@ -27,6 +27,7 @@ export function PrototypeFrame({
   center,
   device,
   zoom = 1,
+  fit = false,
   controls,
   poster,
 }: {
@@ -34,12 +35,14 @@ export function PrototypeFrame({
   title: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
-  /** The phone picker, in the middle of the bar. */
-  center?: ReactNode;
+  /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at. */
+  center?: (info: { scale: number | null }) => ReactNode;
   /** The phone it is laid out for. */
   device: Device;
-  /** How much bigger or smaller than filling the frame; 1 is filling it. */
+  /** How big to draw it, as a multiple of the phone's real size; 1 is its exact size. */
   zoom?: number;
+  /** Scale it to the room there is instead; `zoom` is ignored while this is on. */
+  fit?: boolean;
   /** What the prototype lets you adjust. Without it there is no button. */
   controls?: ReactNode;
   /** A picture of the prototype, shown while the real one loads. */
@@ -50,6 +53,8 @@ export function PrototypeFrame({
 
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
+  // On a phone the preview always fits: there is no room to scroll around a phone-sized phone.
+  const [narrow, setNarrow] = useState(false);
   useEffect(() => {
     const element = stage.current;
     if (!element) return;
@@ -58,9 +63,19 @@ export function PrototypeFrame({
       setSpace({ width, height });
     });
     observer.observe(element);
-    return () => observer.disconnect();
+
+    const query = window.matchMedia("(max-width: 639px)");
+    const onChange = () => setNarrow(query.matches);
+    onChange();
+    query.addEventListener("change", onChange);
+
+    return () => {
+      observer.disconnect();
+      query.removeEventListener("change", onChange);
+    };
   }, []);
-  const scale = space ? Math.min(space.width / device.width, space.height / device.height) * zoom : null;
+  // Measured on the client only, so no frame is drawn on the server.
+  const scale = space ? (fit || narrow ? Math.min(space.width / device.width, space.height / device.height) : zoom) : null;
 
   const copy = async () => {
     if (!url) return;
@@ -73,11 +88,18 @@ export function PrototypeFrame({
   };
 
   return (
-    <div className="relative mx-auto flex h-[var(--frame-height)] min-h-[var(--frame-height)] w-full flex-col rounded-[var(--r-tile)] bg-tile">
+    <div
+      className={`relative mx-auto flex min-h-[var(--frame-height)] w-full flex-col rounded-[var(--r-tile)] bg-tile ${
+        // Scaled to fit, the tile is a set height and the phone is made to fit
+        // it. Otherwise the tile is at least that tall and grows to hold a
+        // phone that is taller.
+        fit || narrow ? "h-[var(--frame-height)]" : ""
+      }`}
+    >
       <div className="grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:absolute sm:inset-x-0 sm:top-0 sm:z-[var(--z-raised)]">
         <div className="min-w-0 justify-self-start rounded-[var(--r-tag)] bg-surface">{leading}</div>
         {/* Picking a phone makes no sense on a phone. */}
-        <div className="hidden justify-self-center sm:block">{center}</div>
+        <div className="hidden justify-self-center sm:block">{center?.({ scale })}</div>
         {url ? (
           <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
             {controls ? (
@@ -101,7 +123,7 @@ export function PrototypeFrame({
         ) : null}
       </div>
 
-      <div ref={stage} className="flex min-h-0 flex-1 overflow-auto px-4 pb-4 [scrollbar-width:thin] sm:py-16">
+      <div ref={stage} className="flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4 [scrollbar-width:thin] sm:py-16">
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
           className={`relative isolate m-auto shrink-0 overflow-hidden rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${

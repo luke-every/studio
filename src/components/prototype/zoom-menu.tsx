@@ -8,8 +8,17 @@ import { ZOOMS } from "@/lib/phone";
 
 const percent = (zoom: number) => `${Math.round(zoom * 100)}%`;
 
-/** How big the preview is drawn. 100% is the phone filling the frame; the rest scale from there. */
-export function ZoomMenu({ zoom, onChange }: { zoom: number; onChange: (zoom: number) => void }) {
+/** How big the preview is drawn. 100% is the phone's real size on screen. */
+export function ZoomMenu({
+  zoom,
+  fitted,
+  onChange,
+}: {
+  zoom: number;
+  /** While the preview is scaled to fit: the size that works out to. Then no size is picked. */
+  fitted?: number | null;
+  onChange: (zoom: number) => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -27,7 +36,7 @@ export function ZoomMenu({ zoom, onChange }: { zoom: number; onChange: (zoom: nu
           aria-label="Zoom"
           className="flex items-center gap-2 whitespace-nowrap rounded-[var(--r-tag)] bg-surface px-3 py-2 text-sm hover:bg-surface-hover"
         >
-          <span className="font-medium text-foreground">{percent(zoom)}</span>
+          <span className="font-medium text-foreground">{percent(fitted ?? zoom)}</span>
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
         </button>
       }
@@ -38,7 +47,7 @@ export function ZoomMenu({ zoom, onChange }: { zoom: number; onChange: (zoom: nu
             <button
               type="button"
               role="option"
-              aria-selected={option === zoom}
+              aria-selected={fitted == null && option === zoom}
               onClick={() => {
                 onChange(option);
                 setOpen(false);
@@ -47,7 +56,7 @@ export function ZoomMenu({ zoom, onChange }: { zoom: number; onChange: (zoom: nu
             >
               <span className="flex-1 font-medium text-foreground">{percent(option)}</span>
               <span className="grid size-4 place-items-center">
-                {option === zoom ? <CheckIcon className="text-foreground" /> : null}
+                {fitted == null && option === zoom ? <CheckIcon className="text-foreground" /> : null}
               </span>
             </button>
           </li>

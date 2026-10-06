@@ -55,7 +55,13 @@ export function useDevice() {
   return [device, (next: Device) => set(next.id)] as const;
 }
 
-/** How far they have zoomed the preview, as a multiple of fitting the frame. */
+/** Whether they have the preview scaled to fit the frame, rather than at a size. */
+export function useFit() {
+  const [stored, set] = useStored("proto.fit");
+  return [stored === "1", (next: boolean) => set(next ? "1" : "0")] as const;
+}
+
+/** How big they have the preview, as a multiple of the phone's real size. */
 export function useZoom() {
   const [stored, set] = useStored("proto.zoom");
   const zoom = Number(stored);

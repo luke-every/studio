@@ -156,3 +156,11 @@ export function PencilIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function FitIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2.75 6V3.5a.75.75 0 0 1 .75-.75H6M10 2.75h2.5a.75.75 0 0 1 .75.75V6M13.25 10v2.5a.75.75 0 0 1-.75.75H10M6 13.25H3.5a.75.75 0 0 1-.75-.75V10" />
+    </Frame>
+  );
+}

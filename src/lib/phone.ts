@@ -29,8 +29,9 @@ export const PHONE_WIDTH = DEFAULT_DEVICE.width;
 export const PHONE_HEIGHT = DEFAULT_DEVICE.height;
 
 /**
- * How far the preview can be zoomed, as a multiple of fitting the frame: 100%
- * is the whole phone filling the room there is, the default.
+ * How big the preview is drawn, as a multiple of the phone's real size: at 100%
+ * an iPhone 14 is 390 pixels wide on screen. "Fit" is separate, and shrinks or
+ * grows the phone to the room there is instead.
  */
 export const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 export const DEFAULT_ZOOM = 1;
