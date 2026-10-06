@@ -20,6 +20,7 @@ export function PrototypeFrame({
   title,
   leading,
   controls,
+  poster,
 }: {
   url?: string;
   title: string;
@@ -27,6 +28,8 @@ export function PrototypeFrame({
   leading: ReactNode;
   /** What the prototype lets you adjust. Without it there is no button. */
   controls?: ReactNode;
+  /** A picture of the prototype, shown while the real one loads. */
+  poster?: string;
 }) {
   const toast = useToast();
   const [controlsOpen, setControlsOpen] = useState(false);
@@ -85,7 +88,7 @@ export function PrototypeFrame({
       <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4 sm:py-6">
         <div className="relative h-full w-full overflow-hidden rounded-[var(--r-device)] bg-surface sm:w-auto sm:aspect-[9/19.5]">
           {url ? (
-            <FrameBody key={url} url={url} title={title} />
+            <FrameBody key={url} url={url} title={title} poster={poster} />
           ) : (
             <div className="grid size-full place-items-center">
               <p className="max-w-[30ch] px-6 text-center text-sm leading-[var(--leading-relaxed)] text-foreground-subtle">
@@ -114,7 +117,8 @@ export function PrototypeFrame({
 }
 
 /** Remounted per url, so every version starts from the skeleton. */
-function FrameBody({ url, title }: { url: string; title: string }) {
+function FrameBody({ url, title, poster }: { url: string; title: string; poster?: string }) {
+  const [posterFailed, setPosterFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
 
@@ -136,7 +140,18 @@ function FrameBody({ url, title }: { url: string; title: string }) {
         // out into the page around it.
         sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
       />
-      {loaded ? null : (
+      {loaded ? null : poster && !posterFailed ? (
+        // The same picture the tile shows, so the page looks right at once and
+        // the real prototype replaces it without a flash.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={poster}
+          alt=""
+          draggable={false}
+          onError={() => setPosterFailed(true)}
+          className="absolute inset-0 size-full bg-surface object-cover object-top"
+        />
+      ) : (
         <div aria-hidden className="absolute inset-0 flex animate-pulse flex-col gap-4 bg-surface p-5">
           <div className="h-8 w-2/5 rounded-[var(--r-lg)] bg-tile" />
           <div className="h-40 rounded-[var(--r-xl)] bg-tile" />

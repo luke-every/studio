@@ -36,6 +36,15 @@ here.
 `/api/health` (with the studio password) reports whether each is working —
 `contentRepo` for GitHub.
 
+## Preview pictures
+
+A prototype's tile shows a picture, not the running prototype. A workflow in
+the content repository takes it on GitHub a minute or so after a push — no
+browser needed on anyone's machine. Copy `content-repo/.github/` into the root
+of the content repository once (see `content-repo/README.md`); it needs nothing
+else, and is free on a public repository. Until a version has its picture, its
+tile shows the running prototype instead.
+
 ## Nothing to migrate
 
 The teams in `registry/teams.json` are a seed. A fresh store has nothing in

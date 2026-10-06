@@ -1,0 +1,51 @@
+# Takes a picture of every pushed prototype version, for its tile in Prototype
+# Studio. Runs when a push touches p/, or by hand from the Actions tab.
+# Pushes made with GITHUB_TOKEN don't trigger workflows, so committing the
+# pictures back doesn't start another run.
+name: Preview images
+
+on:
+  push:
+    branches: [main]
+    paths: ["p/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: previews
+  cancel-in-progress: false
+
+jobs:
+  previews:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install a browser
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Take previews
+        run: node .github/scripts/preview.mjs
+
+      - name: Commit them
+        run: |
+          git config user.name "Prototype Studio"
+          git config user.email "studio@users.noreply.github.com"
+          git add p
+          git diff --cached --quiet && exit 0
+          git commit -m "Preview images"
+          # Someone may have pushed meanwhile; build on top of it and try again.
+          for attempt in 1 2 3 4; do
+            git pull --rebase && git push && exit 0
+            sleep 3
+          done
+          exit 1

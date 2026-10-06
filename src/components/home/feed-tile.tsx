@@ -2,15 +2,15 @@ import Link from "next/link";
 
 import type { Prototype, Team } from "@/lib/registry/types";
 
-import { LivePreview } from "./live-preview";
+import { TilePicture } from "./tile-picture";
 
 /**
  * One prototype in the feed: a tall tile with the prototype at its centre
  * and its version in the corner, then who it belongs to and what it is,
  * underneath.
  *
- * The phone holds the prototype itself, running but untouchable. Until it
- * has loaded there is only the tile, and the prototype fades in over it. The
+ * The phone holds a picture of the prototype, taken when it was pushed, or the
+ * prototype itself, running but untouchable, until that picture exists. The
  * team's icon links to the team; everything else opens the prototype. They
  * are siblings, never nested.
  */
@@ -32,7 +32,7 @@ export function FeedTile({ prototype, team }: { prototype: Prototype; team: Team
           className="relative aspect-[9/19.5] w-[min(100%,var(--tile-device-width))] overflow-hidden rounded-[var(--r-device)]"
         >
           {prototype.current.url ? (
-            <LivePreview src={prototype.current.url} title={`${prototype.name} ${prototype.current.version}`} />
+            <TilePicture url={prototype.current.url} title={`${prototype.name} ${prototype.current.version}`} />
           ) : null}
         </div>
       </Link>

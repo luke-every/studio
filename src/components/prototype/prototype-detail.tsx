@@ -59,6 +59,9 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     <div className="w-full px-5 py-6 sm:px-8 sm:py-8">
       <PrototypeFrame
         url={address}
+        // The tile's picture shows the default setup, so only use it as the
+        // placeholder while the prototype is at its defaults.
+        poster={selected.url && address === selected.url ? `${selected.url}/studio-preview.jpg` : undefined}
         controls={
           offered ? (
             <ControlsPanel
