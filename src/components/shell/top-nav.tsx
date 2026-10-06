@@ -5,47 +5,18 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { IconButton } from "@/components/ui/button";
-import { useStudio } from "@/lib/data/studio-store";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useSearch } from "@/lib/search-store";
 
 import { MobileMenu } from "./mobile-menu";
 import { BellIcon, SearchIcon, SettingsIcon } from "./nav-icons";
 import { SearchField } from "./search-field";
+import { TeamMenu } from "./team-menu";
 import { ThemeMenu } from "./theme-menu";
 
-function TeamLinks({ className }: { className: string }) {
-  const pathname = usePathname();
-  const { teams } = useStudio();
-
-  return (
-    <nav aria-label="Teams" className={className}>
-      {teams
-        .filter((team) => !team.archived)
-        .map((team) => {
-          const active = pathname === `/teams/${team.slug}` || pathname.startsWith(`/teams/${team.slug}/`);
-          return (
-            <Link
-              key={team.slug}
-              href={`/teams/${team.slug}`}
-              aria-current={active ? "page" : undefined}
-              className={`shrink-0 rounded-[var(--r-full)] px-3 py-1.5 text-nav ${
-                active
-                  ? "bg-accent font-medium text-accent-foreground"
-                  : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
-              }`}
-            >
-              {team.name}
-            </Link>
-          );
-        })}
-    </nav>
-  );
-}
-
 /**
- * The studio's one bar: logo on the left, search in the middle, and on the
- * right notifications, theme and settings. It sticks to the top of the
+ * The studio's one bar: the logo and a team picker on the left, search in the
+ * middle, and on the right notifications, theme and settings. It sticks to the top of the
  * window while the page scrolls under it.
  */
 export function TopNav() {
@@ -79,7 +50,7 @@ export function TopNav() {
               P
             </span>
           </Link>
-          <TeamLinks className="hidden items-center gap-0.5 md:flex" />
+          <TeamMenu />
         </div>
 
         {/* A phone covers the whole bar with it while it's open. */}
@@ -120,9 +91,6 @@ export function TopNav() {
           <MobileMenu />
         </div>
       </div>
-
-      {/* No room beside the logo on a phone, so the teams get a row of their own. */}
-      <TeamLinks className="flex items-center gap-0.5 overflow-x-auto px-4 pb-2 sm:px-6 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" />
     </header>
   );
 }

@@ -54,8 +54,8 @@ export function PrototypeFrame({
 
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
-  // On a phone the preview is the width of the screen: no frame, no picking a
-  // size, just the phone filling the width and the page scrolling down it.
+  // On a phone it is a preview, not a place to work: always scaled to fit the
+  // screen, with no picking a size.
   const narrow = useMediaQuery("(max-width: 639px)");
   useEffect(() => {
     const element = stage.current;
@@ -70,11 +70,9 @@ export function PrototypeFrame({
   }, []);
   // Measured on the client only, so no frame is drawn on the server.
   const scale = space
-    ? narrow
-      ? space.width / device.width
-      : fit
-        ? Math.min(space.width / device.width, space.height / device.height)
-        : zoom
+    ? fit || narrow
+      ? Math.min(space.width / device.width, space.height / device.height)
+      : zoom
     : null;
 
   const copy = async () => {
@@ -89,10 +87,10 @@ export function PrototypeFrame({
 
   return (
     <div
-      className={`relative mx-auto flex w-full flex-col bg-tile max-sm:rounded-none sm:min-h-[var(--frame-height)] sm:rounded-[var(--r-tile)] ${
+      className={`relative mx-auto flex min-h-[var(--frame-height)] w-full flex-col rounded-[var(--r-tile)] bg-tile max-sm:h-[var(--frame-height)] max-sm:rounded-none ${
         // Scaled to fit, the tile is a set height and the phone is made to fit
         // it. Otherwise the tile is at least that tall and grows to hold a
-        // phone that is taller. On a phone it is just as tall as the phone.
+        // phone that is taller. On a phone it is always the set height.
         fit ? "sm:h-[var(--frame-height)]" : ""
       }`}
     >
@@ -123,7 +121,7 @@ export function PrototypeFrame({
         ) : null}
       </div>
 
-      <div ref={stage} className="flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden pb-4 [scrollbar-width:thin] sm:px-4 sm:py-16">
+      <div ref={stage} className="flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4 [scrollbar-width:thin] sm:py-16">
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
           className={`relative isolate m-auto shrink-0 overflow-hidden rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${
