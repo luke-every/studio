@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { ExternalIcon, LinkIcon } from "@/components/shell/nav-icons";
+import { ExternalIcon, LinkIcon, SlidersIcon } from "@/components/shell/nav-icons";
 
 import { Toast, useToast } from "./toast";
 
@@ -19,13 +19,17 @@ export function PrototypeFrame({
   url,
   title,
   leading,
+  controls,
 }: {
   url?: string;
   title: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
+  /** What the prototype lets you adjust. Without it there is no button. */
+  controls?: ReactNode;
 }) {
   const toast = useToast();
+  const [controlsOpen, setControlsOpen] = useState(false);
 
   const copy = async () => {
     if (!url) return;
@@ -43,6 +47,18 @@ export function PrototypeFrame({
         <div className="min-w-0 rounded-[var(--r-tag)] bg-surface">{leading}</div>
         {url ? (
           <div className="flex items-center gap-2">
+            {controls ? (
+              <button
+                type="button"
+                onClick={() => setControlsOpen((open) => !open)}
+                aria-label="Controls"
+                aria-expanded={controlsOpen}
+                title="Controls"
+                className={`${iconButton} ${controlsOpen ? "!bg-accent !text-accent-foreground" : ""}`}
+              >
+                <SlidersIcon className="size-[1.125rem]" />
+              </button>
+            ) : null}
             <a
               href={url}
               target="_blank"
@@ -80,6 +96,15 @@ export function PrototypeFrame({
           )}
         </div>
       </div>
+
+      {controls && controlsOpen ? (
+        <div
+          className="absolute right-4 top-[4.5rem] max-h-[calc(100%-6rem)] w-72 overflow-y-auto rounded-[var(--r-xl)] bg-surface p-4"
+          style={{ zIndex: "var(--z-raised)" }}
+        >
+          {controls}
+        </div>
+      ) : null}
 
       <Toast state={toast.state} onDone={toast.done}>
         Link copied to clipboard

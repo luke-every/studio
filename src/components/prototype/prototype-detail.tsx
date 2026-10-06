@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
+import { ControlsPanel } from "@/components/prototype/controls-panel";
+import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
+import { applyControls, defaultValues, type ControlValues } from "@/lib/controls";
 import { useStudio } from "@/lib/data/studio-store";
 import { Stamp } from "@/components/ui/stamp";
 import { avatarUrl } from "@/lib/registry/people";
@@ -44,10 +47,27 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     window.history.replaceState(null, "", url);
   };
 
+  // What the prototype offers to adjust, if anything. The choices belong to
+  // the version on screen, so switching version starts again from defaults.
+  const offered = usePrototypeControls(selected.url);
+  const [picked, setPicked] = useState<{ id: string; values: ControlValues }>({ id: "", values: {} });
+  const mine = picked.id === selected.id ? picked.values : {};
+  const values = { ...defaultValues(offered), ...mine };
+  const address = selected.url ? applyControls(selected.url, offered, values) : undefined;
+
   return (
     <div className="w-full px-5 py-6 sm:px-8 sm:py-8">
       <PrototypeFrame
-        url={selected.url}
+        url={address}
+        controls={
+          offered ? (
+            <ControlsPanel
+              controls={offered}
+              values={values}
+              onChange={(id, value) => setPicked({ id: selected.id, values: { ...mine, [id]: value } })}
+            />
+          ) : undefined
+        }
         title={`${prototype.name} ${selected.version}`}
         leading={
           <VersionMenu
