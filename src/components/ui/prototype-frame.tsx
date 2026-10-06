@@ -6,12 +6,16 @@ import { ExternalIcon, LinkIcon, SlidersIcon } from "@/components/shell/nav-icon
 
 import { IconButton } from "./button";
 import { useStudio } from "@/lib/data/studio-store";
+import type { Device } from "@/lib/phone";
 
 /**
  * A prototype on a tile, the same grey tile the feed uses, 90% of the
  * window tall so all of it is in view. The prototype sits in the middle as
- * a phone, centered on the tile; `leading` (the version) is at the top left and open-in-a-new-tab
- * and copy link at the top right.
+ * a phone, centered on the tile. Along the top: `leading` (the version) on
+ * the left, `center` (which phone) in the middle, and the buttons on the right.
+ *
+ * The prototype is laid out at the phone's own size and then scaled to fit the
+ * tile, so it looks the same on a laptop as on a big screen.
  *
  * The prototype loads behind a skeleton, which comes back whenever the url
  * changes, so choosing another version reads as the thing refreshing.
@@ -20,6 +24,9 @@ export function PrototypeFrame({
   url,
   title,
   leading,
+  center,
+  device,
+  zoom = 1,
   controls,
   poster,
 }: {
@@ -27,6 +34,12 @@ export function PrototypeFrame({
   title: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
+  /** The phone picker, in the middle of the bar. */
+  center?: ReactNode;
+  /** The phone it is laid out for. */
+  device: Device;
+  /** How much bigger or smaller than filling the frame; 1 is filling it. */
+  zoom?: number;
   /** What the prototype lets you adjust. Without it there is no button. */
   controls?: ReactNode;
   /** A picture of the prototype, shown while the real one loads. */
@@ -34,6 +47,20 @@ export function PrototypeFrame({
 }) {
   const { notify } = useStudio();
   const [controlsOpen, setControlsOpen] = useState(false);
+
+  const stage = useRef<HTMLDivElement>(null);
+  const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const element = stage.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSpace({ width, height });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const scale = space ? Math.min(space.width / device.width, space.height / device.height) * zoom : null;
 
   const copy = async () => {
     if (!url) return;
@@ -47,10 +74,12 @@ export function PrototypeFrame({
 
   return (
     <div className="relative mx-auto flex h-[var(--frame-height)] min-h-[var(--frame-height)] w-full flex-col rounded-[var(--r-tile)] bg-tile">
-      <div className="flex min-h-16 items-center justify-between gap-3 px-4 sm:absolute sm:inset-x-0 sm:top-0 sm:z-[var(--z-raised)]">
-        <div className="min-w-0 rounded-[var(--r-tag)] bg-surface">{leading}</div>
+      <div className="grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:absolute sm:inset-x-0 sm:top-0 sm:z-[var(--z-raised)]">
+        <div className="min-w-0 justify-self-start rounded-[var(--r-tag)] bg-surface">{leading}</div>
+        {/* Picking a phone makes no sense on a phone. */}
+        <div className="hidden justify-self-center sm:block">{center}</div>
         {url ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
             {controls ? (
               <IconButton
                 label="Controls"
@@ -72,10 +101,15 @@ export function PrototypeFrame({
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4 sm:py-6">
-        <div className="relative h-full w-full overflow-hidden rounded-[var(--r-device)] bg-surface sm:w-auto sm:aspect-[9/19.5]">
+      <div ref={stage} className="flex min-h-0 flex-1 overflow-auto px-4 pb-4 [scrollbar-width:thin] sm:py-16">
+        <div
+          style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
+          className={`relative isolate m-auto shrink-0 overflow-hidden rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${
+            scale ? "" : "h-full"
+          }`}
+        >
           {url ? (
-            <FrameBody key={url} url={url} title={title} poster={poster} />
+            <FrameBody key={url} url={url} title={title} poster={poster} scale={scale} device={device} />
           ) : (
             <div className="grid size-full place-items-center">
               <p className="max-w-[30ch] px-6 text-center text-sm leading-[var(--leading-relaxed)] text-foreground-subtle">
@@ -100,7 +134,19 @@ export function PrototypeFrame({
 }
 
 /** Remounted per url, so every version starts from the skeleton. */
-function FrameBody({ url, title, poster }: { url: string; title: string; poster?: string }) {
+function FrameBody({
+  url,
+  title,
+  poster,
+  scale,
+  device,
+}: {
+  url: string;
+  title: string;
+  poster?: string;
+  scale: number | null;
+  device: Device;
+}) {
   const [posterFailed, setPosterFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -112,17 +158,20 @@ function FrameBody({ url, title, poster }: { url: string; title: string; poster?
 
   return (
     <>
+      {scale ? (
       <iframe
         ref={frame}
         src={url}
         title={title}
         onLoad={() => setLoaded(true)}
-        className="size-full border-0"
+        style={{ width: device.width, height: device.height, transform: `scale(${scale})` }}
+        className="origin-top-left border-0"
         // Same-origin now that the studio serves these, so the frame is
         // sandboxed: a prototype can do everything it needs and cannot reach
         // out into the page around it.
         sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
       />
+      ) : null}
       {loaded ? null : poster && !posterFailed ? (
         // The same picture the tile shows, so the page looks right at once and
         // the real prototype replaces it without a flash. It breathes while

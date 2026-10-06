@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
-/** The width a prototype lays itself out at: a phone. */
-const PHONE_WIDTH = 390;
-const PHONE_HEIGHT = 844;
+import { PHONE_HEIGHT, PHONE_WIDTH } from "@/lib/phone";
+
 
 /**
  * Previews that may be loading at once. A feed of six would otherwise open

@@ -31,7 +31,14 @@ export function ProjectOrb({ seed, className }: { seed: string; className?: stri
   const random = seeded(seed);
   const family = families[Math.floor(random() * families.length)];
   // Walk the four colours in a shuffled order so neighbouring blobs differ.
-  const order = [1, 2, 3, 4].sort(() => random() - 0.5);
+  // Fisher–Yates rather than sort(() => random() - 0.5): that comparator is
+  // inconsistent, so engines (Node on the server, Safari in the browser)
+  // order the result differently and the page would hydrate to another orb.
+  const order = [1, 2, 3, 4];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
   let next = 0;
   const colour = () => `var(--orb-${family}-${order[next++ % 4]})`;
 

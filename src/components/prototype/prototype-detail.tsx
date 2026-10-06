@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
+import { DeviceMenu } from "@/components/prototype/device-menu";
+import { ZoomMenu } from "@/components/prototype/zoom-menu";
 import { ControlsPanel } from "@/components/prototype/controls-panel";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { PrototypeLinks } from "@/components/prototype/prototype-links";
@@ -10,6 +12,8 @@ import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { applyControls, defaultValues, type ControlValues } from "@/lib/controls";
 import { useStudio } from "@/lib/data/studio-store";
+import { DEFAULT_DEVICE } from "@/lib/phone";
+import { useDevice, useZoom } from "@/lib/use-device";
 import { Stamp } from "@/components/ui/stamp";
 import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
 
@@ -27,6 +31,8 @@ import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const { markOpened, renameVersion, isSaving } = useStudio();
+  const [device, chooseDevice] = useDevice();
+  const [zoom, chooseZoom] = useZoom();
   const fromUrl = useUrlVersion();
   // Chosen by id, so renaming a version doesn't lose it.
   const [chosenId, setChosenId] = useState<string | null>(null);
@@ -71,9 +77,21 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     <div className="w-full px-5 py-6 sm:px-8 sm:py-8">
       <PrototypeFrame
         url={address}
-        // The tile's picture shows the default setup, so only use it as the
-        // placeholder while the prototype is at its defaults.
-        poster={selected.url && address === selected.url ? `${selected.url}/studio-preview.jpg` : undefined}
+        device={device}
+        zoom={zoom}
+        center={
+          <div className="flex items-center gap-2">
+            <DeviceMenu device={device} onChange={chooseDevice} />
+            <ZoomMenu zoom={zoom} onChange={chooseZoom} />
+          </div>
+        }
+        // The tile's picture is of the default phone and setup, so it is only
+        // the placeholder while the prototype is shown that way.
+        poster={
+          selected.url && address === selected.url && device.id === DEFAULT_DEVICE.id
+            ? `${selected.url}/studio-preview.jpg`
+            : undefined
+        }
         controls={
           offered ? (
             <ControlsPanel
