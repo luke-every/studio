@@ -263,7 +263,7 @@ export function PrototypeFrame({
         ref={stage}
         // Clicking the tile around the phone lets go of what was picked. A click inside the prototype never reaches here.
         onClick={() => dev && deselect()}
-        className={`flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4 [scrollbar-width:thin] sm:pb-16 ${dev ? "sm:pr-[calc(var(--dev-panel-width)+2rem)]" : ""}`}>
+        className={`flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4 [scrollbar-width:thin] sm:pb-16 ${showingFlow ? "invisible" : ""} ${dev ? "sm:pr-[calc(var(--dev-panel-width)+2rem)]" : ""}`}>
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
           className={`relative isolate m-auto shrink-0 overflow-hidden rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${

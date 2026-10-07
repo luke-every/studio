@@ -170,7 +170,7 @@ export function FlowCanvas({
         backgroundSize: `${24 * view.scale}px ${24 * view.scale}px`,
         backgroundPosition: `${view.x}px ${view.y}px`,
       }}
-      className="absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] bg-tile active:cursor-grabbing"
+      className="absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] active:cursor-grabbing"
     >
       <div className="absolute left-0 top-0 origin-top-left" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, visibility: size ? undefined : "hidden" }}>
         {flow.screens.map((screen) => {
