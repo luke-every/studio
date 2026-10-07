@@ -46,6 +46,7 @@ export async function middleware(request: NextRequest) {
     // The installer and the skill files it fetches, run from a terminal.
     pathname === "/install.sh" ||
     pathname.startsWith("/skill/") ||
+    pathname.startsWith("/remix/") ||
     pathname === "/favicon.ico";
 
   if (exempt) return NextResponse.next();

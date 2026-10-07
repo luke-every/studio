@@ -1,5 +1,6 @@
 "use client";
 
+import { barControl } from "@/components/ui/button";
 import { useState, type FormEvent } from "react";
 
 import { MotionPopover } from "@/components/motion";
@@ -56,7 +57,7 @@ export function VersionMenu({
   };
 
   // One version: nothing to pick.
-  if (versions.length < 2) return <div className="px-3 py-1.5">{label}</div>;
+  if (versions.length < 2) return <div className={`${barControl} flex-col !items-start !justify-center !gap-0`}>{label}</div>;
 
   return (
     <MotionPopover
@@ -73,7 +74,7 @@ export function VersionMenu({
           onClick={() => setOpen((value) => !value)}
           aria-haspopup="listbox"
           aria-expanded={open}
-          className="rounded-[var(--r-tag)] px-3 py-1.5 text-left hover:bg-surface-hover"
+          className={`${barControl} flex-col !items-start !justify-center !gap-0 text-left`}
         >
           {label}
         </button>

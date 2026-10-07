@@ -165,6 +165,39 @@ export function FitIcon(props: IconProps) {
   );
 }
 
+export function WireframeIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="2.75" y="2.75" width="10.5" height="10.5" rx="1.25" strokeDasharray="2 2" />
+      <path d="m2.75 11 3-3 2.5 2.5L10 8.5l3.25 3.25" />
+    </Frame>
+  );
+}
+
+export function UndoIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M5.5 3.5 2.75 6.25 5.5 9M3 6.25h5.5a4 4 0 0 1 0 8H6" />
+    </Frame>
+  );
+}
+
+export function RedoIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="m10.5 3.5 2.75 2.75L10.5 9M13 6.25H7.5a4 4 0 0 0 0 8H10" />
+    </Frame>
+  );
+}
+
+export function ShuffleIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2.5 4.5h2c3.2 0 4 7 7.2 7h1.8M2.5 11.5h2c1 0 1.7-.8 2.4-1.9M9.1 6.4c.7-1 1.4-1.9 2.6-1.9h1.8M11.5 2.75l2 1.75-2 1.75M11.5 9.75l2 1.75-2 1.75" />
+    </Frame>
+  );
+}
+
 export function MenuIcon(props: IconProps) {
   return (
     <Frame {...props}>

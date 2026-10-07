@@ -21,6 +21,14 @@ const look = {
 
 type Look = keyof typeof look;
 
+/**
+ * What every control in the prototype's top bar looks like: the same height,
+ * padding, frame and type as a secondary Button, so a row of menus and
+ * buttons reads as one set.
+ */
+export const barControl =
+  "flex h-10 items-center gap-2 whitespace-nowrap rounded-[var(--r-full)] border border-border bg-surface px-5 text-ui font-medium text-foreground hover:bg-surface-hover";
+
 type Props = {
   /** `destructive` is a primary button for something that can't be taken back. */
   variant?: "primary" | "secondary" | "destructive";

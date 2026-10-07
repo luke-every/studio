@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
 import { CheckIcon, ChevronDownIcon } from "@/components/shell/nav-icons";
+import { barControl } from "@/components/ui/button";
 import { DEVICES, type Device } from "@/lib/phone";
 
 /** Which phone the prototype is previewed on: its name and size, and a list of the common ones. */
@@ -23,10 +24,10 @@ export function DeviceMenu({ device, onChange }: { device: Device; onChange: (de
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label="Preview on"
-          className="flex items-center gap-2 whitespace-nowrap rounded-[var(--r-tag)] bg-surface px-3 py-2 text-sm hover:bg-surface-hover"
+          className={barControl}
         >
-          <span className="font-medium text-foreground">{device.name}</span>
-          <span className="text-foreground-subtle">
+          <span>{device.name}</span>
+          <span className="font-normal text-foreground-subtle">
             {device.width} × {device.height}
           </span>
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />

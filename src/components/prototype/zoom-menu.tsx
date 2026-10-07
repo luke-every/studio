@@ -1,5 +1,6 @@
 "use client";
 
+import { barControl } from "@/components/ui/button";
 import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
@@ -34,9 +35,9 @@ export function ZoomMenu({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label="Zoom"
-          className="flex items-center gap-2 whitespace-nowrap rounded-[var(--r-tag)] bg-surface px-3 py-2 text-sm hover:bg-surface-hover"
+          className={barControl}
         >
-          <span className="font-medium text-foreground">{percent(fitted ?? zoom)}</span>
+          <span>{percent(fitted ?? zoom)}</span>
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
         </button>
       }

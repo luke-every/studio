@@ -52,6 +52,12 @@
 
   --shadow-color-mix: var(--alpha-ink-12);
 
+  /* Wireframe view: what a prototype is flattened to. The same in either
+   * theme, because it styles the prototype, not the studio around it. */
+  /* Pictures, a step darker than the prototype's own greyed blocks so the two read apart. */
+  --wireframe-image: var(--paper-500);
+  --wireframe-line: var(--ink-400);
+
   /* A thumbnail is an object on the page, the same in either theme, so
    * these are set once here and never redefined for dark. */
   --preview-1-from: var(--tint-sand-from);

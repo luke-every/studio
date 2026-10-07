@@ -15,6 +15,7 @@
   --paper-200: #f2f1ee;
   --paper-300: #e6e4e0;
   --paper-400: #d2cfca;
+  --paper-500: #b9b6b0;
 
   /* --- Palette: ink -------------------------------------------------------- */
   --ink-900: #121211;
@@ -111,6 +112,7 @@
   --frame-height: 90dvh;
   /* What is written under a prototype: narrow enough to read. */
   --content-width: 45rem;
+  --dev-panel-width: 20rem;
 
   /* --- Radii -------------------------------------------------------------- */
   --r-xs: 0.125rem;

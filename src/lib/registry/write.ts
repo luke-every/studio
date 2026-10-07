@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { linkProblem, type LinkKind } from "@/lib/links";
 
 import { isStoreConfigured, readRegistryDocument, writeRegistryDocument, type RegistryDocument } from "./store";
-import { commitPrototypeVersion, verifyPrototypeVersion, versionPrefix } from "./github";
+import { commitPrototypeVersion, fetchPrototypeFile, verifyPrototypeVersion, versionPrefix } from "./github";
+import { applierScript, describeEdits, mergeEdits, type Edit, type EditsFile } from "@/lib/edits";
 import { compareVersions, readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
 import type { PrototypeRecord, VersionRecord } from "./schema";
@@ -308,6 +309,73 @@ export async function saveVersion(
   ]);
 
   return record(document, input, entryUrl);
+}
+
+/**
+ * Save visual edits as the next version of a prototype.
+ *
+ * The new version starts as a copy of the one the edits were made on, so it
+ * keeps its own files and the old one is untouched. Added to it are
+ * `edits.json` (what changed, and which version it was made on), a script
+ * that applies it, and any replaced images; the page loads that script.
+ * Edits already on the version being edited are kept underneath.
+ */
+export async function saveEditedVersion(input: {
+  slug: string;
+  baseVersionId: string;
+  edits: Edit[];
+  images: { path: string; content: ArrayBuffer }[];
+  by: string;
+}) {
+  const document = await load();
+  const prototype = document.prototypes.find((item) => item.slug === input.slug);
+  const base = document.versions.find((item) => item.id === input.baseVersionId && item.prototypeSlug === input.slug);
+  if (!prototype || !base) throw new StoreError("That version isn't in the studio any more.");
+  if (!input.edits.length) throw new StoreError("There's nothing to save yet.");
+  if (!input.by.trim()) throw new StoreError("Add your name so the studio knows who made these edits.");
+
+  const { slug, version } = plan(document, { name: prototype.name, slug: input.slug });
+  const segment = base.version.replace(".", "-");
+
+  const entry = await fetchPrototypeFile(slug, segment, [], null);
+  if (!entry) throw new StoreError(`Couldn't read the files of ${base.label ?? base.version}.`);
+  const html = await entry.text();
+
+  const earlier = await fetchPrototypeFile(slug, segment, ["edits.json"], null);
+  const before = earlier ? ((await earlier.json().catch(() => null)) as EditsFile | null) : null;
+  const edits = mergeEdits(before?.edits ?? [], input.edits);
+  const file: EditsFile = { base: base.label ?? base.version, edits };
+
+  const tag = '<script src="studio-edits.js"></script>';
+  const page = html.includes("studio-edits.js")
+    ? html
+    : /<\/body>/i.test(html)
+      ? html.replace(/<\/body>(?![\s\S]*<\/body>)/i, `${tag}</body>`)
+      : `${html}${tag}`;
+
+  const { entryUrl } = await commitPrototypeVersion(
+    slug,
+    version,
+    [
+      { path: "index.html", content: page },
+      { path: "studio-edits.js", content: applierScript(edits) },
+      { path: "edits.json", content: `${JSON.stringify(file, null, 2)}\n` },
+      ...input.images,
+    ],
+    base.version,
+  );
+
+  return record(
+    document,
+    {
+      name: prototype.name,
+      slug,
+      title: "Visual edits",
+      changes: describeEdits(input.edits),
+      by: input.by,
+    },
+    entryUrl,
+  );
 }
 
 /**

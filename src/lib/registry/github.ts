@@ -225,8 +225,18 @@ export async function commitPrototypeVersion(
   slug: string,
   version: string,
   files: { path: string; content: ArrayBuffer | string }[],
+  /**
+   * Start from another version's files: every file of it is carried over at
+   * the same path unless `files` replaces it. In git that is a tree entry
+   * pointing at the same blob, so nothing is downloaded or uploaded again.
+   */
+  from?: string,
 ): Promise<{ entryUrl: string }> {
-  const cfg = requireConfig();
+  const cfg = config();
+  if (!cfg) {
+    if (process.env.NODE_ENV === "production") requireConfig();
+    return commitLocalVersion(slug, version, files, from);
+  }
   const prefix = versionPrefix(slug, version);
 
   const existing = await fetch(
@@ -242,7 +252,22 @@ export async function commitPrototypeVersion(
   const baseCommit = await api(`/repos/${cfg.owner}/${cfg.name}/git/commits/${baseCommitSha}`, cfg);
   const baseTreeSha = baseCommit.tree.sha as string;
 
-  const tree = await Promise.all(
+  const replaced = new Set(files.map((file) => file.path));
+  const carried: { path: string; mode: string; type: string; sha: string }[] = [];
+  if (from) {
+    const base = await api(
+      `/repos/${cfg.owner}/${cfg.name}/git/trees/${cfg.branch}:${versionPrefix(slug, from)}?recursive=1`,
+      cfg,
+    );
+    if (base.truncated) throw new Error(`${from} of ${slug} has too many files to copy.`);
+    for (const entry of base.tree as { path: string; mode: string; type: string; sha: string }[]) {
+      if (entry.type === "blob" && !replaced.has(entry.path)) {
+        carried.push({ path: `${prefix}/${entry.path}`, mode: entry.mode, type: "blob", sha: entry.sha });
+      }
+    }
+  }
+
+  const written = await Promise.all(
     files.map(async (file) => {
       const blob = await api(`/repos/${cfg.owner}/${cfg.name}/git/blobs`, cfg, {
         method: "POST",
@@ -254,13 +279,13 @@ export async function commitPrototypeVersion(
 
   const newTree = await api(`/repos/${cfg.owner}/${cfg.name}/git/trees`, cfg, {
     method: "POST",
-    body: JSON.stringify({ base_tree: baseTreeSha, tree }),
+    body: JSON.stringify({ base_tree: baseTreeSha, tree: [...carried, ...written] }),
   });
 
   const commit = await api(`/repos/${cfg.owner}/${cfg.name}/git/commits`, cfg, {
     method: "POST",
     body: JSON.stringify({
-      message: `Push ${slug} ${version}`,
+      message: from ? `Edit ${slug} ${from} as ${version}` : `Push ${slug} ${version}`,
       tree: newTree.sha,
       parents: [baseCommitSha],
     }),
@@ -272,4 +297,31 @@ export async function commitPrototypeVersion(
   });
 
   return { entryUrl: rawEntryUrl(cfg, commit.sha as string, prefix) };
+}
+
+/**
+ * Without a repository, `next dev` keeps a version's files in
+ * `.local/p/<slug>/<version>/`, copying the version it starts from.
+ */
+async function commitLocalVersion(
+  slug: string,
+  version: string,
+  files: { path: string; content: ArrayBuffer | string }[],
+  from?: string,
+): Promise<{ entryUrl: string }> {
+  const { cp, mkdir, access, writeFile } = await import("node:fs/promises");
+  const { dirname, join } = await import("node:path");
+  const root = join(process.cwd(), ".local", "p", slug);
+  const folder = join(root, version.replace(".", "-"));
+
+  if (await access(folder).then(() => true, () => false)) {
+    throw new Error(`${version} of ${slug} already exists. Versions are never replaced.`);
+  }
+  if (from) await cp(join(root, from.replace(".", "-")), folder, { recursive: true });
+  for (const file of files) {
+    const target = join(folder, file.path);
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, typeof file.content === "string" ? file.content : new Uint8Array(file.content));
+  }
+  return { entryUrl: `/p/${slug}/${version.replace(".", "-")}` };
 }

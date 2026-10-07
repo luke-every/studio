@@ -8,6 +8,7 @@ import { ZoomMenu } from "@/components/prototype/zoom-menu";
 import { ControlsPanel } from "@/components/prototype/controls-panel";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { PrototypeLinks } from "@/components/prototype/prototype-links";
+import { RemixButton } from "@/components/prototype/remix-button";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
@@ -112,7 +113,9 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
             />
           ) : undefined
         }
+        edit={{ slug: prototype.slug, versionId: selected.id }}
         title={`${prototype.name} ${selected.version}`}
+        actions={<RemixButton slug={prototype.slug} version={selected.version} name={prototype.name} />}
         leading={
           <VersionMenu
             versions={prototype.versions}
