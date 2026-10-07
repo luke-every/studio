@@ -7,6 +7,7 @@ import { MotionModal } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
 import { createPrototype } from "@/lib/registry/actions";
+import { useUser } from "@/lib/use-user";
 
 /**
  * Adding a prototype by hand.
@@ -93,7 +94,9 @@ function AddPrototypeDialog({
   const [teamSlug, setTeamSlug] = useState(initialTeam ?? teams[0]?.slug ?? "");
   const [projectSlug, setProjectSlug] = useState(initialProject ?? "");
   const [name, setName] = useState("");
-  const [by, setBy] = useState("");
+  const user = useUser();
+  const [typed, setBy] = useState("");
+  const by = user.name || typed;
   const [html, setHtml] = useState<File | null>(null);
   const [description, setDescription] = useState("");
   const [changes, setChanges] = useState("");
@@ -169,14 +172,16 @@ function AddPrototypeDialog({
           />
         </Field>
 
-        <Field label="Created by" required hint="Your name, so the studio knows whose this is.">
-          <input
-            value={by}
-            onChange={(event) => setBy(event.target.value)}
-            placeholder="Sarah"
-            className={inputClass}
-          />
-        </Field>
+        {user.name ? null : (
+          <Field label="Created by" required hint="Your name, so the studio knows whose this is.">
+            <input
+              value={by}
+              onChange={(event) => setBy(event.target.value)}
+              placeholder="Sarah"
+              className={inputClass}
+            />
+          </Field>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Team" required>

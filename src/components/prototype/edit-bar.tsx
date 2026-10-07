@@ -7,6 +7,7 @@ import { RedoIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { Button, IconButton } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
 import { saveEdits } from "@/lib/registry/actions";
+import { useUser } from "@/lib/use-user";
 
 const NAME_KEY = "studio.name";
 const rememberedName = () => {
@@ -20,11 +21,15 @@ const rememberedName = () => {
 /**
  * What edit mode keeps in the top bar: undo, redo, and one Save. Saving makes
  * a new version; nothing is written to the one being looked at. The first
- * time, it asks whose edits these are, and remembers.
+ * time, a guest is asked whose edits these are, and it remembers.
  */
 export function EditBar({ session, slug, baseVersionId }: { session: EditSession; slug: string; baseVersionId: string }) {
   const { notify } = useStudio();
-  const [name, setName] = useState(rememberedName);
+  const user = useUser();
+  const [typed, setTyped] = useState(rememberedName);
+  // Who you chose at the door is who the edits are credited to; a guest says their name once.
+  const name = user.name || typed;
+  const setName = setTyped;
   const [asking, setAsking] = useState(false);
   const [saving, setSaving] = useState(false);
   const count = session.edits.length;

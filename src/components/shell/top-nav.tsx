@@ -13,13 +13,14 @@ import { BellIcon, SearchIcon, SettingsIcon } from "./nav-icons";
 import { SearchField } from "./search-field";
 import { TeamMenu } from "./team-menu";
 import { ThemeMenu } from "./theme-menu";
+import { UserMenu } from "./user-menu";
 
 /**
  * The studio's one bar: the logo and a team picker on the left, search in the
- * middle, and on the right notifications, theme and settings. It sticks to the top of the
+ * middle, and on the right notifications, theme, settings and the user. It sticks to the top of the
  * window while the page scrolls under it.
  */
-export function TopNav() {
+export function TopNav({ onSwitchUser }: { onSwitchUser: () => void }) {
   const pathname = usePathname();
   const { clear } = useSearch();
   const mobile = useMediaQuery("(max-width: 639px)");
@@ -82,12 +83,14 @@ export function TopNav() {
           >
             <SettingsIcon className="size-[1.125rem]" />
           </IconButton>
+          <UserMenu onSwitch={onSwitchUser} />
         </nav>
 
         <div className="flex items-center gap-1 sm:hidden">
           <IconButton label="Search" variant="ghost" tooltipAlign="end" onClick={openSearch}>
             <SearchIcon className="size-[1.125rem]" />
           </IconButton>
+          <UserMenu onSwitch={onSwitchUser} />
           <MobileMenu />
         </div>
       </div>

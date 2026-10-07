@@ -34,6 +34,15 @@
   --signal-stop: #9c4a3c;
   --signal-stop-soft: #c07d70;
 
+  /* --- Palette: user gradients --------------------------------------------
+   * Each person's gradient is derived from their name: the hue is theirs,
+   * the lightness and chroma are shared so they sit together as a set. */
+  --avatar-lightness-from: 0.82;
+  --avatar-lightness-to: 0.62;
+  --avatar-chroma: 0.12;
+  --avatar-hue-spread: 55;
+  --avatar-ink: oklch(1 0 0 / 0.9);
+
   /* --- Palette: preview tints ---------------------------------------------
    * The gradients thumbnails paint in place of the prototype itself. Quiet
    * and close to neutral, so a grid of them reads as a set of objects with

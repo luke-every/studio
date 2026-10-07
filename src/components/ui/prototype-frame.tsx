@@ -214,8 +214,8 @@ export function PrototypeFrame({
             {/* On the left, the version and what is about the prototype; in the middle, the phone it is shown on; on the right, what to do with it. */}
             <div className="flex min-w-0 items-center gap-2 justify-self-start">
               {leading}
-              {url ? actions : null}
-              {url && controls ? (
+              {url && !showingFlow ? actions : null}
+              {url && controls && !showingFlow ? (
                 <IconButton
                   label="Controls"
                   onClick={() => setControlsOpen((open) => !open)}
@@ -231,14 +231,13 @@ export function PrototypeFrame({
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
                 {flow && addressed ? (
-                  <IconButton
-                    label={showingFlow ? "Back to the prototype" : "Flow"}
-                    onClick={() => setFlowOpen((open) => !open)}
-                    aria-pressed={showingFlow}
-                    className={showingFlow ? "!border-transparent !bg-accent !text-accent-foreground" : ""}
-                  >
-                    <FlowIcon className="size-[1.125rem]" />
-                  </IconButton>
+                  showingFlow ? (
+                    <Button onClick={() => setFlowOpen(false)}>Back to prototype</Button>
+                  ) : (
+                    <IconButton label="Flow" onClick={() => setFlowOpen(true)}>
+                      <FlowIcon className="size-[1.125rem]" />
+                    </IconButton>
+                  )
                 ) : null}
                 {edit && view !== "dev" && !showingFlow ? (
                   <span className="hidden sm:block">
@@ -246,9 +245,11 @@ export function PrototypeFrame({
                   </span>
                 ) : null}
                 {showingFlow ? null : <ViewMenu view={view} onChange={setView} canDev={!narrow} />}
-                <IconButton label="Open in a new tab" href={newTab} external tooltipAlign="end">
-                  <ExternalIcon className="size-[1.125rem]" />
-                </IconButton>
+                {showingFlow ? null : (
+                  <IconButton label="Open in a new tab" href={newTab} external tooltipAlign="end">
+                    <ExternalIcon className="size-[1.125rem]" />
+                  </IconButton>
+                )}
               </div>
             ) : null}
           </>

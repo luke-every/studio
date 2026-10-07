@@ -27,9 +27,6 @@ export function DeviceMenu({ device, onChange }: { device: Device; onChange: (de
           className={barControl}
         >
           <span>{device.name}</span>
-          <span className="font-normal text-foreground-subtle">
-            {device.width} × {device.height}
-          </span>
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
         </button>
       }

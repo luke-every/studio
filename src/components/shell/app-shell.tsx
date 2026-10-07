@@ -1,12 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { RouteTransition } from "@/components/motion";
 import { SetupPrompt } from "@/components/onboarding/setup-prompt";
 import { useStudio } from "@/lib/data/studio-store";
+import { useUser } from "@/lib/use-user";
 
 import { TopNav } from "./top-nav";
+import { UserPicker } from "./user-picker";
 
 /**
  * The studio frame: a sticky bar across the top, content beneath it.
@@ -16,10 +18,12 @@ import { TopNav } from "./top-nav";
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { error, dismissError } = useStudio();
+  const { ready, current } = useUser();
+  const [switching, setSwitching] = useState(false);
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <TopNav />
+      <TopNav onSwitchUser={() => setSwitching(true)} />
 
       {error ? (
         <button
@@ -36,6 +40,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="min-w-0 flex-1">
         <RouteTransition>{children}</RouteTransition>
       </main>
+
+      <UserPicker open={ready && (current === null || switching)} onClose={() => setSwitching(false)} />
     </div>
   );
 }

@@ -106,6 +106,22 @@ if (flowArg) {
     console.error("A flow needs a `screens` list of at least two screens.");
     process.exit(1);
   }
+  const ids = new Set(flow.screens.map((screen) => screen.id));
+  const problems = [
+    ...(ids.size < flow.screens.length ? ["two screens share an id"] : []),
+    ...(flow.edges ?? []).filter((edge) => !ids.has(edge.from) || !ids.has(edge.to)).map((edge) => `an arrow goes ${edge.from} → ${edge.to}, and one of them isn't a screen`),
+  ];
+  if (problems.length) {
+    console.error(`The flow has problems: ${problems.join("; ")}.`);
+    process.exit(1);
+  }
+  // A parameter nothing in the files reads can't open its screen: it would show the first one.
+  const keys = new Set(flow.screens.flatMap((screen) => Object.keys(screen.params ?? {})));
+  const sources = files.filter((file) => /\.(m?js|html)$/.test(file.path) && file.size < 5_000_000).map((file) => readFileSync(file.filePath, "utf8"));
+  const unread = [...keys].filter((key) => !sources.some((text) => text.includes(key)));
+  if (unread.length) {
+    console.warn(`Heads up: nothing in the files reads ${unread.map((key) => `?${key}=`).join(", ")}, so those screens would open on the first one. Add the handling, rebuild and push again.`);
+  }
   const existing = files.find((file) => file.path === "studio.json");
   let manifest = {};
   if (existing) {

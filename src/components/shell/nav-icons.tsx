@@ -224,3 +224,13 @@ export function SearchIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function UserIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <circle cx="8" cy="8" r="6.25" />
+      <circle cx="8" cy="6.5" r="2" />
+      <path d="M3.9 12.6c.9-1.6 2.4-2.4 4.1-2.4s3.2.8 4.1 2.4" />
+    </Frame>
+  );
+}

@@ -166,14 +166,14 @@ export function FlowCanvas({
         window.setTimeout(() => (drag.current = null), 0);
       }}
       style={{
-        backgroundImage: "radial-gradient(var(--border-strong) 1px, transparent 1px)",
+        backgroundImage: "radial-gradient(var(--border) 1px, transparent 1px)",
         backgroundSize: `${24 * view.scale}px ${24 * view.scale}px`,
         backgroundPosition: `${view.x}px ${view.y}px`,
       }}
       className="absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] bg-tile active:cursor-grabbing"
     >
-      <div className="absolute left-0 top-0 origin-top-left" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
-        {flow.screens.map((screen, index) => {
+      <div className="absolute left-0 top-0 origin-top-left" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, visibility: size ? undefined : "hidden" }}>
+        {flow.screens.map((screen) => {
           const spot = at(screen.id);
           return (
             <button
@@ -198,7 +198,7 @@ export function FlowCanvas({
               }}
               className="absolute block overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface text-left"
             >
-              <ScreenFrame index={index} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}preview`} device={device} />
+              <ScreenFrame src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}preview`} device={device} />
             </button>
           );
         })}
@@ -272,9 +272,10 @@ export function FlowCanvas({
  * One screen, live, at the phone's own size and scaled down. It loads only
  * once it has come near the visible part of the canvas, and then stays.
  */
-function ScreenFrame({ src, device, index }: { src: string; device: Device; index: number }) {
+function ScreenFrame({ src, device }: { src: string; device: Device }) {
   const holder = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const element = holder.current;
@@ -282,8 +283,7 @@ function ScreenFrame({ src, device, index }: { src: string; device: Device; inde
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          // Staggered, so a dozen screens don't all ask for their files in the same instant.
-          window.setTimeout(() => setNear(true), index * 150);
+          setNear(true);
           observer.disconnect();
         }
       },
@@ -291,22 +291,23 @@ function ScreenFrame({ src, device, index }: { src: string; device: Device; inde
     );
     observer.observe(element);
     return () => observer.disconnect();
-  }, [index]);
+  }, []);
 
   return (
-    <div ref={holder} className="size-full">
+    <div ref={holder} className="relative size-full">
       {near ? (
         <iframe
           src={src}
           title="Screen"
           tabIndex={-1}
+          onLoad={() => setLoaded(true)}
           style={{ width: device.width, height: device.height, transform: `scale(${SCREEN_SCALE})` }}
           className="pointer-events-none block origin-top-left border-0"
           sandbox="allow-scripts allow-forms allow-same-origin"
         />
-      ) : (
-        <div aria-hidden className="pulse-soft size-full bg-surface" />
-      )}
+      ) : null}
+      {/* Blank and breathing until the screen has loaded, so it never flashes half-drawn. */}
+      {loaded ? null : <div aria-hidden className="pulse-soft absolute inset-0 bg-surface" />}
     </div>
   );
 }

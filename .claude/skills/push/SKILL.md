@@ -62,25 +62,16 @@ not listed, it is new and also needs a `team`.
 **Which team**, for a new prototype only. The same response lists them. If
 it is genuinely ambiguous, ask — one short question beats filing it wrongly.
 
-**Its flow — check this on every push.** The studio draws a prototype's screens
-on a canvas, with an arrow for each tap, from a flow you keep in a file called
-`flow.json` in the prototype's own source folder (next to `package.json`, not in
-the build output, so a build can't wipe it). Every push, in this order:
+**Its flow — work this out on every push, by yourself.** The studio draws a
+prototype's screens on a canvas, with an arrow for each tap. You derive that
+from the code each time, so it always matches this version; there is nothing
+for the person to keep or edit. Don't ask them about it.
 
-1. **Is there a `flow.json` already?** If so, it is the flow. Check it against
-   the prototype as it is now: add screens that are new, drop ones that are gone,
-   fix labels that changed. **If the person has edited it or told you what the
-   screens are, theirs wins — only add what is missing, and say what you added.**
-2. **No `flow.json`: does the prototype have more than one screen** a person moves
-   between by tapping — quiz steps, pages, a checkout, states you can reach? If
-   it is a single screen, there is no flow; carry on. If you can't tell, ask one
-   short question ("Does this have several screens I should show as a flow?")
-   rather than guessing either way. If it does, write one. **Don't skip it
-   because it needs a small code change.**
-3. **The person may mark the screens themselves.** If they say which screens or
-   steps to show ("steps 1 to 7 are the quiz", "add the cart as a screen", "leave
-   out the loader"), write exactly that, in their names. Nothing is automatic that
-   they can override.
+Does the prototype have more than one screen a person moves between by tapping
+(quiz steps, pages, a checkout, states you can reach)? If not, there is no flow:
+carry on. If so, write one. **Don't skip it because it needs a small code
+change.** Save it as a scratch file outside the prototype folder (your scratchpad
+directory) and upload it with `--flow` (step 4).
 
 The file:
 
@@ -107,9 +98,12 @@ The file:
 - The first screen is where a person starts. Past about 25 screens, don't draw
   it: leave the flow out and say why.
 
-Then upload with `--flow flow.json` (step 4). The script merges it into the
-uploaded `studio.json` beside any controls, so there is nothing to copy into the
-build.
+The script merges the file into the uploaded `studio.json` beside any controls,
+so there is nothing to copy into the build. It checks the flow before uploading:
+an arrow to a screen that doesn't exist, or a duplicate id, stops the push (fix
+the file and re-run); a "Heads up" that nothing in the files reads a screen's
+parameter means that screen would open on the first one, so add the `?step=`
+handling, rebuild and push again.
 
 The upload prints a final line, `Flow: N screens` or `Flow: none`. Put that in
 your closing message so it is clear what happened. If it says none and the
@@ -151,7 +145,7 @@ node ~/.claude/skills/push/push.mjs \
   --changes "Cut the second card. Moved the CTA above the fold."
 ```
 
-Add `--flow flow.json` whenever the prototype has a flow (see above), and
+Add `--flow <the flow file>` whenever the prototype has a flow (see above), and
 `--entry app.html` if the entry isn't `index.html`, `--slug quiz-results`
 for an existing prototype, `--team acquisition` for a new one, and
 optionally `--project <slug>` or `--description "..."`.
