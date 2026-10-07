@@ -49,8 +49,7 @@ export async function GET(
     // forever. A byte range never is: Safari opens a video by asking for its
     // first two bytes, and a cache that kept that answer would hand the
     // same two bytes to every request after it.
-    // (Not while developing, where files under .local are edited in place.)
-    "cache-control": upstream.status === 206 || process.env.NODE_ENV !== "production" ? "no-store" : "public, max-age=31536000, immutable",
+    "cache-control": upstream.status === 206 ? "no-store" : "public, max-age=31536000, immutable",
     "accept-ranges": "bytes",
     // Nothing here should end up in a search index.
     "x-robots-tag": "noindex",

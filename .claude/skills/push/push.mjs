@@ -19,7 +19,8 @@
  *   node push.mjs --dir . --name "Quiz results" --author "Luke" \
  *     --title "Tighter results layout" --changes "Cut the second card." \
  *     [--entry index.html] [--slug quiz-results] [--team acquisition] \
- *     [--project some-project] [--description "..."] [--version v0.5] [--figma <url>] [--notion <url>]
+ *     [--project some-project] [--description "..."] [--version v0.5] [--figma <url>] [--notion <url>] \
+ *     [--flow flow.json]
  *
  * Studio address and password come from ~/.claude/prototype-studio.json
  * unless --studio-url / --studio-password override them.
@@ -89,6 +90,36 @@ const files = walk(root).map((filePath) => ({
   size: statSync(filePath).size,
 }));
 
+// --flow: the prototype's flow, kept as a file in its own source and merged into the
+// uploaded studio.json (beside any controls), so a build can't wipe it.
+const flowArg = flag("flow");
+if (flowArg) {
+  let flow;
+  try {
+    const parsed = JSON.parse(readFileSync(resolve(flowArg), "utf8"));
+    flow = parsed.flow ?? parsed;
+  } catch (error) {
+    console.error(`Couldn't read the flow at ${flowArg}: ${error.message}`);
+    process.exit(1);
+  }
+  if (!Array.isArray(flow.screens) || flow.screens.length < 2) {
+    console.error("A flow needs a `screens` list of at least two screens.");
+    process.exit(1);
+  }
+  const existing = files.find((file) => file.path === "studio.json");
+  let manifest = {};
+  if (existing) {
+    try {
+      manifest = JSON.parse(readFileSync(existing.filePath, "utf8"));
+    } catch {
+      // An unreadable studio.json is replaced.
+    }
+  }
+  const content = Buffer.from(`${JSON.stringify({ ...manifest, flow }, null, 2)}\n`);
+  if (existing) Object.assign(existing, { content, size: content.length });
+  else files.push({ filePath: join(root, "studio.json"), path: "studio.json", size: content.length, content });
+}
+
 const tooBig = files.filter((file) => file.size > MAX_FILE_BYTES);
 if (tooBig.length) {
   console.error(`GitHub won't take files over 100MB: ${tooBig.map((file) => file.path).join(", ")}`);
@@ -105,6 +136,16 @@ if (busting.length) {
   console.warn(
     `Heads up: ${busting.map((file) => file.path).join(", ")} adds the time to its own file addresses, so every load re-downloads everything and the prototype opens slowly in the studio. Pin it to a fixed string and push again.`,
   );
+}
+// The flow (see SKILL.md): said out loud at the end, so leaving it out is a decision, not an accident.
+let flowScreens = 0;
+const manifest = files.find((file) => file.path === "studio.json");
+if (manifest) {
+  try {
+    flowScreens = JSON.parse(manifest.content?.toString() ?? readFileSync(manifest.filePath, "utf8")).flow?.screens?.length ?? 0;
+  } catch {
+    // An unreadable studio.json just means no flow.
+  }
 }
 const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 
@@ -177,7 +218,7 @@ async function uploadNext() {
   for (let file = queue.shift(); file; file = queue.shift()) {
     const blob = await github("/git/blobs", {
       method: "POST",
-      body: JSON.stringify({ content: readFileSync(file.filePath).toString("base64"), encoding: "base64" }),
+      body: JSON.stringify({ content: (file.content ?? readFileSync(file.filePath)).toString("base64"), encoding: "base64" }),
     });
     tree.push({ path: `${prefix}/${file.path}`, mode: "100644", type: "blob", sha: blob.sha });
     uploaded += 1;
@@ -229,3 +270,8 @@ const result = await studio("/api/push", notes);
 console.log(`Uploaded ${files.length} file(s), ${(totalBytes / 1024 / 1024).toFixed(1)} MB`);
 console.log(`Pushed ${result.slug} ${result.version}`);
 console.log(result.studio);
+console.log(
+  flowScreens
+    ? `Flow: ${flowScreens} screens`
+    : "Flow: none. Fine for a single screen; if this has several, add one (step 2 of the skill) and push again.",
+);

@@ -173,7 +173,7 @@ export function FlowCanvas({
       className="absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] bg-tile active:cursor-grabbing"
     >
       <div className="absolute left-0 top-0 origin-top-left" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
-        {flow.screens.map((screen) => {
+        {flow.screens.map((screen, index) => {
           const spot = at(screen.id);
           return (
             <button
@@ -198,7 +198,7 @@ export function FlowCanvas({
               }}
               className="absolute block overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface text-left"
             >
-              <ScreenFrame src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}preview`} device={device} />
+              <ScreenFrame index={index} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}preview`} device={device} />
             </button>
           );
         })}
@@ -272,7 +272,7 @@ export function FlowCanvas({
  * One screen, live, at the phone's own size and scaled down. It loads only
  * once it has come near the visible part of the canvas, and then stays.
  */
-function ScreenFrame({ src, device }: { src: string; device: Device }) {
+function ScreenFrame({ src, device, index }: { src: string; device: Device; index: number }) {
   const holder = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
 
@@ -282,7 +282,8 @@ function ScreenFrame({ src, device }: { src: string; device: Device }) {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setNear(true);
+          // Staggered, so a dozen screens don't all ask for their files in the same instant.
+          window.setTimeout(() => setNear(true), index * 150);
           observer.disconnect();
         }
       },
@@ -290,7 +291,7 @@ function ScreenFrame({ src, device }: { src: string; device: Device }) {
     );
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [index]);
 
   return (
     <div ref={holder} className="size-full">
