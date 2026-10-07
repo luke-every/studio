@@ -62,6 +62,41 @@ not listed, it is new and also needs a `team`.
 **Which team**, for a new prototype only. The same response lists them. If
 it is genuinely ambiguous, ask — one short question beats filing it wrongly.
 
+**Its flow — a quick check, not a project.** Does the prototype have several
+distinct screens a person moves between by tapping (quiz steps, pages, a
+checkout, states you can reach)? If it is a single screen, or you can't tell
+what the screens are within a minute, **skip this** and say nothing about it.
+
+If it does, the studio can draw all of them on a canvas, with an arrow for each
+tap. Write the flow into `studio.json` next to `index.html` (create the file, or
+add a `flow` key to the one that is there — leave any `controls` alone):
+
+```json
+{
+  "flow": {
+    "screens": [
+      { "id": "home", "name": "Homepage", "params": {} },
+      { "id": "q1", "name": "Question 1", "params": { "step": "0" } }
+    ],
+    "edges": [{ "from": "home", "to": "q1", "label": "Find your routine" }]
+  }
+}
+```
+
+- A screen is one thing a person sees. Give each step of a multi-step flow its
+  own screen. Name them the way the team would ("Goal, affirmed"), not by code.
+- `params` are URL parameters that open the prototype on that screen. If it
+  already reads parameters (check its `controls`), use those. If it doesn't,
+  add the smallest thing that does — read `?step=` or `?screen=` when the page
+  loads and jump there with sample data filled in — and mention that you did.
+- One edge per tap that leads to another screen, labelled with the tap
+  ("Continue", "Pick a plan"). Main paths only; skip back buttons and dismisses.
+- Order `screens` so the first is where a person starts. Keep it to about 25
+  screens; past that, skip the flow rather than drawing a mess.
+
+It uploads with everything else, so no extra step. Mention it in one line at
+the end ("Also added a flow of 13 screens").
+
 ## 3. Write the notes
 
 This is the part that matters, and the part only you can do. These notes are

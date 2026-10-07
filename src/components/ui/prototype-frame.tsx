@@ -5,12 +5,15 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DevPanel } from "@/components/prototype/dev-panel";
 import { EditBar } from "@/components/prototype/edit-bar";
 import { EditPanel } from "@/components/prototype/edit-panel";
+import { FlowCanvas } from "@/components/prototype/flow-canvas";
+import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
 import { ViewMenu, type View } from "@/components/prototype/view-menu";
 import { useEditSession } from "@/components/prototype/use-edit-session";
 
-import { ExternalIcon, SlidersIcon } from "@/components/shell/nav-icons";
+import { ExternalIcon, FlowIcon, SlidersIcon } from "@/components/shell/nav-icons";
 
 import { Button, IconButton } from "./button";
+import { withParams, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { editInPlace } from "@/lib/edit-dom";
@@ -33,7 +36,7 @@ import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
  * changes, so choosing another version reads as the thing refreshing.
  */
 export function PrototypeFrame({
-  url,
+  url: addressed,
   title,
   leading,
   center,
@@ -67,6 +70,14 @@ export function PrototypeFrame({
   edit?: { slug: string; versionId: string };
 }) {
   const [controlsOpen, setControlsOpen] = useState(false);
+  // The flow: the screens of the prototype and how they connect, drawn as a canvas.
+  // Opening a screen from it shows the prototype on that screen; both belong to one address.
+  const flow = usePrototypeFlow(addressed?.split("?")[0]);
+  const [flowOpen, setFlowOpen] = useState(false);
+  const [opened, setOpened] = useState<{ address?: string; screen: FlowScreen | null }>({ screen: null });
+  const screen = opened.address === addressed ? opened.screen : null;
+  const url = addressed && screen ? withParams(addressed, screen.params) : addressed;
+  const showingFlow = flowOpen && !!flow && !!addressed;
   // Dev mode: the same preview, with its code beside it. What was picked and
   // what moved belong to the document on screen, so a new url starts them over.
   const [view, setView] = useState<View>("design");
@@ -216,15 +227,25 @@ export function PrototypeFrame({
               ) : null}
             </div>
             {/* Picking a phone makes no sense on a phone. */}
-            <div className="hidden justify-self-center sm:block">{center?.({ scale })}</div>
+            <div className="hidden justify-self-center sm:block">{showingFlow ? null : center?.({ scale })}</div>
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
-                {edit && view !== "dev" ? (
+                {flow && addressed ? (
+                  <IconButton
+                    label={showingFlow ? "Back to the prototype" : "Flow"}
+                    onClick={() => setFlowOpen((open) => !open)}
+                    aria-pressed={showingFlow}
+                    className={showingFlow ? "!border-transparent !bg-accent !text-accent-foreground" : ""}
+                  >
+                    <FlowIcon className="size-[1.125rem]" />
+                  </IconButton>
+                ) : null}
+                {edit && view !== "dev" && !showingFlow ? (
                   <span className="hidden sm:block">
                     <Button onClick={() => setEditingNow(true)}>Edit</Button>
                   </span>
                 ) : null}
-                <ViewMenu view={view} onChange={setView} canDev={!narrow} />
+                {showingFlow ? null : <ViewMenu view={view} onChange={setView} canDev={!narrow} />}
                 <IconButton label="Open in a new tab" href={newTab} external tooltipAlign="end">
                   <ExternalIcon className="size-[1.125rem]" />
                 </IconButton>
@@ -246,7 +267,7 @@ export function PrototypeFrame({
           }`}
         >
           {url ? (
-            <FrameBody key={url} url={url} title={title} poster={poster} scale={scale} device={device} wireframe={wireframe} inspect={dev ? { ...inspect, picking: editing ? !interacting : picking } : null} />
+            <FrameBody key={url} url={url} title={title} poster={screen ? undefined : poster} scale={scale} device={device} wireframe={wireframe} inspect={dev ? { ...inspect, picking: editing ? !interacting : picking } : null} />
           ) : (
             <div className="grid size-full place-items-center">
               <p className="max-w-[30ch] px-6 text-center text-sm leading-[var(--leading-relaxed)] text-foreground-subtle">
@@ -258,7 +279,19 @@ export function PrototypeFrame({
         </div>
       </div>
 
-      {dev ? (
+      {showingFlow && flow && addressed ? (
+        <FlowCanvas
+          flow={flow}
+          base={addressed.split("?")[0]}
+          device={device}
+          onOpen={(next) => {
+            setOpened({ address: addressed, screen: next });
+            setFlowOpen(false);
+          }}
+        />
+      ) : null}
+
+      {dev && !showingFlow ? (
         <div
           className="absolute right-4 top-[5.5rem] hidden max-h-[calc(100vh-12rem)] w-[var(--dev-panel-width)] overflow-y-auto rounded-[var(--r-xl)] bg-surface p-4 [scrollbar-width:thin] sm:block"
           style={{ zIndex: "var(--z-base)" }}

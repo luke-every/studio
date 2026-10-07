@@ -39,7 +39,7 @@ const toggleControl = z.object({
 });
 
 export const controlsSchema = z.object({
-  controls: z.array(z.discriminatedUnion("type", [choiceControl, toggleControl])),
+  controls: z.array(z.discriminatedUnion("type", [choiceControl, toggleControl])).default([]),
 });
 
 export type Control = z.infer<typeof controlsSchema>["controls"][number];

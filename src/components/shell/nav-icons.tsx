@@ -198,6 +198,16 @@ export function ShuffleIcon(props: IconProps) {
   );
 }
 
+export function FlowIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="1.75" y="2.75" width="4.5" height="4.5" rx="1" />
+      <rect x="9.75" y="8.75" width="4.5" height="4.5" rx="1" />
+      <path d="M6.25 5h2.5a1.5 1.5 0 0 1 1.5 1.5v2.25" />
+    </Frame>
+  );
+}
+
 export function MenuIcon(props: IconProps) {
   return (
     <Frame {...props}>
