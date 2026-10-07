@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { VERSION_PATTERN } from "./version";
+
 /**
  * Registry schemas.
  *
@@ -96,10 +98,10 @@ export const versionSchema = z.object({
   prototypeSlug: slug,
   /** Chronological label, e.g. "v0.8". Not semver. This is also where the
    * version's files are stored, so it never changes once written. */
-  version: z.string().regex(/^v\d+\.\d+$/, 'must look like "v0.8"'),
+  version: z.string().regex(VERSION_PATTERN, 'must look like "v0.8"'),
   /** What it is called on screen, if somebody renamed it. The files stay
    * where they were, so the link to a version keeps working. */
-  label: z.string().regex(/^v\d+\.\d+$/, 'must look like "v0.8"').optional(),
+  label: z.string().regex(VERSION_PATTERN, 'must look like "v0.8"').optional(),
   /** A short headline for the change. */
   title: z.string().min(1),
   /** What is new or different, in whatever detail is useful. */

@@ -6,9 +6,10 @@ import { useState, type FormEvent } from "react";
 import { MotionPopover } from "@/components/motion";
 import { CheckIcon, ChevronDownIcon, PencilIcon } from "@/components/shell/nav-icons";
 import { Stamp } from "@/components/ui/stamp";
+import { VERSION_PATTERN } from "@/lib/registry/version";
 import type { PrototypeVersion } from "@/lib/registry/types";
 
-const VERSION_NUMBER = /^v\d+\.\d+$/;
+const VERSION_NUMBER = VERSION_PATTERN;
 
 /**
  * The version, and when it was made. With more than one it's a button that

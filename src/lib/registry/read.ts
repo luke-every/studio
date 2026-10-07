@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isStoreConfigured, readRegistryDocument, type RegistryDocument } from "./store";
+import { versionSegment } from "./version";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
 import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
 
@@ -209,15 +210,17 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
 
 /** Where a version is served from. Paths use v0-2 so a dot never needs escaping. */
 export function servedPath(slug: string, version: string) {
-  return `/p/${slug}/${version.replace(".", "-")}`;
+  return `/p/${slug}/${versionSegment(version)}`;
 }
 
 /** "v0.10" is after "v0.9", which a string sort would get backwards. */
 export function compareVersions(a: string, b: string) {
-  const parse = (value: string) => value.replace(/^v/, "").split(".").map(Number);
-  const [aMajor, aMinor] = parse(a);
-  const [bMajor, bMinor] = parse(b);
-  return aMajor === bMajor ? aMinor - bMinor : aMajor - bMajor;
+  const parse = (value: string) => {
+    const [major, minor, micro = 0] = value.replace(/^v/, "").split(".").map(Number);
+    return [major, minor, micro];
+  };
+  const [x, y] = [parse(a), parse(b)];
+  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
 }
 
 /** What every save has written as a tint, since nothing ever chose one. */

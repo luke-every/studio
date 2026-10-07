@@ -1,5 +1,7 @@
 import "server-only";
 
+import { versionSegment } from "./version";
+
 /**
  * The content repository.
  *
@@ -48,7 +50,7 @@ function requireConfig(): Config {
 
 /** Where a version's files sit inside the content repository. */
 export function versionPrefix(slug: string, version: string) {
-  return `p/${slug}/${version.replace(".", "-")}`;
+  return `p/${slug}/${versionSegment(version)}`;
 }
 
 function rawEntryUrl(cfg: Config, commitSha: string, prefix: string) {
@@ -102,7 +104,7 @@ export async function fetchPrototypeFile(
   path: string[],
   range: string | null,
 ): Promise<Response | null> {
-  if (!/^[a-z0-9-]+$/.test(slug) || !/^v\d+-\d+$/.test(versionSegment)) return null;
+  if (!/^[a-z0-9-]+$/.test(slug) || !/^v\d+-\d+(?:-\d+)?$/.test(versionSegment)) return null;
   if (path.some((segment) => !segment || segment === "." || segment === "..")) return null;
 
   const cfg = config();
@@ -312,16 +314,16 @@ async function commitLocalVersion(
   const { cp, mkdir, access, writeFile } = await import("node:fs/promises");
   const { dirname, join } = await import("node:path");
   const root = join(process.cwd(), ".local", "p", slug);
-  const folder = join(root, version.replace(".", "-"));
+  const folder = join(root, versionSegment(version));
 
   if (await access(folder).then(() => true, () => false)) {
     throw new Error(`${version} of ${slug} already exists. Versions are never replaced.`);
   }
-  if (from) await cp(join(root, from.replace(".", "-")), folder, { recursive: true });
+  if (from) await cp(join(root, versionSegment(from)), folder, { recursive: true });
   for (const file of files) {
     const target = join(folder, file.path);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, typeof file.content === "string" ? file.content : new Uint8Array(file.content));
   }
-  return { entryUrl: `/p/${slug}/${version.replace(".", "-")}` };
+  return { entryUrl: `/p/${slug}/${versionSegment(version)}` };
 }

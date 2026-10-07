@@ -10,6 +10,7 @@ import { applierScript, describeEdits, mergeEdits, type Edit, type EditsFile } f
 import { compareVersions, readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
 import type { PrototypeRecord, VersionRecord } from "./schema";
+import { VERSION_PATTERN, versionSegment } from "./version";
 
 /**
  * Changing the registry.
@@ -160,6 +161,15 @@ function nextVersion(existing: VersionRecord[]) {
   return `v${(highest + 0.1).toFixed(1)}`;
 }
 
+/** An edit is a small step on the version it was made on: v3.4 becomes v3.4.1, then v3.4.2. */
+function nextMicroVersion(existing: VersionRecord[], base: VersionRecord) {
+  const root = (base.label ?? base.version).match(/^v\d+\.\d+/)![0];
+  const used = new Set(existing.flatMap((version) => [version.version, version.label]));
+  let micro = 1;
+  while (used.has(`${root}.${micro}`)) micro++;
+  return `${root}.${micro}`;
+}
+
 type VersionNotes = {
   name: string;
   slug?: string;
@@ -200,7 +210,7 @@ function plan(
 
   let version = nextVersion(mine);
   if (input.version) {
-    if (!/^v\d+\.\d+$/.test(input.version)) {
+    if (!VERSION_PATTERN.test(input.version)) {
       throw new StoreError(`"${input.version}" isn't a version number. They look like v0.8.`);
     }
     // A number is taken if it is a version's name on screen or where its
@@ -334,8 +344,9 @@ export async function saveEditedVersion(input: {
   if (!input.edits.length) throw new StoreError("There's nothing to save yet.");
   if (!input.by.trim()) throw new StoreError("Add your name so the studio knows who made these edits.");
 
-  const { slug, version } = plan(document, { name: prototype.name, slug: input.slug });
-  const segment = base.version.replace(".", "-");
+  const mine = document.versions.filter((item) => item.prototypeSlug === input.slug);
+  const { slug, version } = plan(document, { name: prototype.name, slug: input.slug, version: nextMicroVersion(mine, base) });
+  const segment = versionSegment(base.version);
 
   const entry = await fetchPrototypeFile(slug, segment, [], null);
   if (!entry) throw new StoreError(`Couldn't read the files of ${base.label ?? base.version}.`);
@@ -370,6 +381,7 @@ export async function saveEditedVersion(input: {
     {
       name: prototype.name,
       slug,
+      version,
       title: "Visual edits",
       changes: describeEdits(input.edits),
       by: input.by,
@@ -480,7 +492,7 @@ export async function renameVersion(input: { slug: string; versionId: string; la
   if (!target) throw new StoreError("No such version.");
 
   const label = input.label.trim();
-  if (!/^v\d+\.\d+$/.test(label)) {
+  if (!VERSION_PATTERN.test(label)) {
     throw new StoreError(`"${label}" isn't a version number. They look like v0.8.`);
   }
 

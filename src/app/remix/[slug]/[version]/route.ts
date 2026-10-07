@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { NextRequest } from "next/server";
 
+import { VERSION_PATTERN } from "@/lib/registry/version";
+
 /**
  * The command behind the Remix button.
  *
@@ -14,7 +16,7 @@ import type { NextRequest } from "next/server";
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string; version: string }> }) {
   const { slug, version } = await params;
-  if (!/^[a-z0-9-]+$/.test(slug) || !/^v\d+\.\d+$/.test(version)) return new Response("Not found.", { status: 404 });
+  if (!/^[a-z0-9-]+$/.test(slug) || !VERSION_PATTERN.test(version)) return new Response("Not found.", { status: 404 });
 
   const studio = request.nextUrl.origin;
   const remix = await readFile(join(process.cwd(), "scripts", "remix.mjs"), "utf8");
