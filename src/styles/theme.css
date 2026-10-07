@@ -28,8 +28,8 @@
   --surface-pressed: var(--alpha-ink-08);
 
   /* A feed tile. */
-  --tile: var(--paper-300);
-  --tile-hover: color-mix(in oklab, var(--paper-300), var(--ink-900) 2%);
+  --tile: var(--alpha-graphite-06);
+  --tile-hover: var(--alpha-graphite-09);
 
   --border: var(--alpha-ink-12);
   --border-strong: var(--ink-400);

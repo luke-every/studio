@@ -38,6 +38,7 @@ import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 export function PrototypeFrame({
   url: addressed,
   title,
+  name,
   leading,
   center,
   device,
@@ -50,6 +51,8 @@ export function PrototypeFrame({
 }: {
   url?: string;
   title: string;
+  /** The prototype's name, shown in the bar while the flow is open. */
+  name: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
   /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at. */
@@ -176,10 +179,10 @@ export function PrototypeFrame({
         // Scaled to fit, the tile is a set height and the phone is made to fit
         // it. Otherwise the tile is at least that tall and grows to hold a
         // phone that is taller. On a phone it is always the set height.
-        fit ? "sm:h-[var(--frame-height)]" : ""
+        fit || showingFlow ? "sm:h-[var(--frame-height)]" : ""
       }`}
     >
-      <div className="grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:absolute sm:inset-x-0 sm:top-0 sm:z-[var(--z-raised)] sm:min-h-20 sm:pb-4">
+      <div className="grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:relative sm:z-[var(--z-raised)] sm:px-8 sm:py-8">
         {editing && edit ? (
           // Editing is the only thing going on: just a way out, undo and redo, and Save.
           <>
@@ -227,7 +230,7 @@ export function PrototypeFrame({
               ) : null}
             </div>
             {/* Picking a phone makes no sense on a phone. */}
-            <div className="hidden justify-self-center sm:block">{showingFlow ? null : center?.({ scale })}</div>
+            <div className="hidden justify-self-center sm:block">{showingFlow ? <span className="block max-w-[28rem] truncate text-ui font-medium text-foreground">{name}</span> : center?.({ scale })}</div>
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
                 {flow && addressed ? (
@@ -260,7 +263,7 @@ export function PrototypeFrame({
         ref={stage}
         // Clicking the tile around the phone lets go of what was picked. A click inside the prototype never reaches here.
         onClick={() => dev && deselect()}
-        className={`flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4 [scrollbar-width:thin] sm:pb-16 sm:pt-20 ${dev ? "sm:pr-[calc(var(--dev-panel-width)+2rem)]" : ""}`}>
+        className={`flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4 [scrollbar-width:thin] sm:pb-16 ${dev ? "sm:pr-[calc(var(--dev-panel-width)+2rem)]" : ""}`}>
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
           className={`relative isolate m-auto shrink-0 overflow-hidden rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${

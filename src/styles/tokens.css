@@ -87,6 +87,8 @@
   /* --- Alpha ramps (for borders, scrims, elevation on either theme) ------- */
   --alpha-ink-04: color-mix(in oklab, var(--ink-900) 4%, transparent);
   --alpha-ink-08: color-mix(in oklab, var(--ink-900) 8%, transparent);
+  --alpha-graphite-06: rgba(64, 64, 64, 0.06);
+  --alpha-graphite-09: rgba(64, 64, 64, 0.09);
   --alpha-ink-12: color-mix(in oklab, var(--ink-900) 12%, transparent);
   --alpha-ink-60: color-mix(in oklab, var(--ink-900) 60%, transparent);
   --alpha-paper-06: color-mix(in oklab, var(--paper-50) 6%, transparent);

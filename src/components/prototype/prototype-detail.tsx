@@ -77,7 +77,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const address = selected.url ? applyControls(selected.url, offered, values) : undefined;
 
   return (
-    <div className="w-full py-6 sm:px-8 sm:py-8">
+    <div className="w-full py-8 sm:px-8 sm:py-10">
       <PrototypeFrame
         url={address}
         device={device}
@@ -115,6 +115,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
         }
         edit={{ slug: prototype.slug, versionId: selected.id }}
         title={`${prototype.name} ${selected.version}`}
+        name={prototype.name}
         actions={<RemixButton slug={prototype.slug} version={selected.version} name={prototype.name} />}
         leading={
           <VersionMenu
