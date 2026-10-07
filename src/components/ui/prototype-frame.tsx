@@ -38,7 +38,6 @@ import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 export function PrototypeFrame({
   url: addressed,
   title,
-  name,
   leading,
   center,
   device,
@@ -51,8 +50,6 @@ export function PrototypeFrame({
 }: {
   url?: string;
   title: string;
-  /** The prototype's name, shown in the bar while the flow is open. */
-  name: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
   /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at. */
@@ -230,7 +227,7 @@ export function PrototypeFrame({
               ) : null}
             </div>
             {/* Picking a phone makes no sense on a phone. */}
-            <div className="hidden justify-self-center sm:block">{showingFlow ? <span className="block max-w-[28rem] truncate text-ui font-medium text-foreground">{name}</span> : center?.({ scale })}</div>
+            <div className="hidden justify-self-center sm:block">{showingFlow ? null : center?.({ scale })}</div>
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
                 {flow && addressed ? (

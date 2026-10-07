@@ -115,7 +115,6 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
         }
         edit={{ slug: prototype.slug, versionId: selected.id }}
         title={`${prototype.name} ${selected.version}`}
-        name={prototype.name}
         actions={<RemixButton slug={prototype.slug} version={selected.version} name={prototype.name} />}
         leading={
           <VersionMenu
