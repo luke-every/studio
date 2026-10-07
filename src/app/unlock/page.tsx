@@ -10,15 +10,21 @@ import { isUnlocked, unlock } from "@/lib/gate";
  * email, no sign-out — you say the word once on a device and the studio
  * opens from then on.
  */
-export default async function UnlockPage({ searchParams }: PageProps<"/unlock">) {
-  if (await isUnlocked()) redirect("/");
+/** Where to go once in: the page they asked for, if it is a page of this studio. */
+function destination(next: unknown) {
+  return typeof next === "string" && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+}
 
-  const { wrong } = await searchParams;
+export default async function UnlockPage({ searchParams }: PageProps<"/unlock">) {
+  const { wrong, next } = await searchParams;
+  const to = destination(next);
+  if (await isUnlocked()) redirect(to);
 
   async function open(formData: FormData) {
     "use server";
     const opened = await unlock(String(formData.get("password") ?? ""));
-    redirect(opened ? "/" : "/unlock?wrong=1");
+    const target = destination(formData.get("next"));
+    redirect(opened ? target : `/unlock?wrong=1&next=${encodeURIComponent(target)}`);
   }
 
   return (
@@ -33,6 +39,7 @@ export default async function UnlockPage({ searchParams }: PageProps<"/unlock">)
         </p>
 
         <form action={open} className="mt-6 flex flex-col gap-3">
+          <input type="hidden" name="next" value={to} />
           <input
             name="password"
             type="password"

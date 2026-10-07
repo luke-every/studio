@@ -57,7 +57,10 @@ export async function middleware(request: NextRequest) {
   const cookie = request.cookies.get("proto.open")?.value;
   if (cookie && cookie === (await signature(password))) return NextResponse.next();
 
-  return NextResponse.redirect(new URL("/unlock", request.url));
+  // Remember where they were headed, so the door leads there and not just home.
+  const door = new URL("/unlock", request.url);
+  if (pathname !== "/") door.searchParams.set("next", pathname + request.nextUrl.search);
+  return NextResponse.redirect(door);
 }
 
 export const config = {
