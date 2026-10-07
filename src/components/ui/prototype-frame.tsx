@@ -10,7 +10,7 @@ import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
 import { ViewMenu, type View } from "@/components/prototype/view-menu";
 import { useEditSession } from "@/components/prototype/use-edit-session";
 
-import { ExternalIcon, FlowIcon, SlidersIcon } from "@/components/shell/nav-icons";
+import { ExternalIcon, FlowIcon, GithubIcon, SlidersIcon } from "@/components/shell/nav-icons";
 
 import { Button, IconButton } from "./button";
 import { withParams, type FlowScreen } from "@/lib/flow";
@@ -38,6 +38,7 @@ import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 export function PrototypeFrame({
   url: addressed,
   title,
+  githubUrl,
   leading,
   center,
   device,
@@ -50,6 +51,8 @@ export function PrototypeFrame({
 }: {
   url?: string;
   title: string;
+  /** This version's files on GitHub. Without it there is no button. */
+  githubUrl?: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
   /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at. */
@@ -245,6 +248,11 @@ export function PrototypeFrame({
                   </span>
                 ) : null}
                 {showingFlow ? null : <ViewMenu view={view} onChange={setView} canDev={!narrow} />}
+                {githubUrl && !showingFlow ? (
+                  <IconButton label="Open in GitHub" href={githubUrl} external>
+                    <GithubIcon className="size-[1.125rem]" />
+                  </IconButton>
+                ) : null}
                 {showingFlow ? null : (
                   <IconButton label="Open in a new tab" href={newTab} external tooltipAlign="end">
                     <ExternalIcon className="size-[1.125rem]" />

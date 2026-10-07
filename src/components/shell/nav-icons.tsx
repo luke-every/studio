@@ -234,3 +234,12 @@ export function UserIcon(props: IconProps) {
     </Frame>
   );
 }
+
+/** The GitHub mark. A filled shape, unlike the stroked icons around it. */
+export function GithubIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden className={`${base} ${className ?? ""}`}>
+      <path d="M8 .25a7.75 7.75 0 0 0-2.45 15.1c.39.07.53-.17.53-.37v-1.3c-2.16.47-2.62-1.04-2.62-1.04-.35-.9-.86-1.14-.86-1.14-.7-.48.05-.47.05-.47.78.05 1.19.8 1.19.8.69 1.18 1.81.84 2.25.64.07-.5.27-.84.49-1.04-1.72-.2-3.53-.86-3.53-3.83 0-.85.3-1.54.8-2.08-.08-.2-.35-.99.08-2.06 0 0 .65-.21 2.13.8a7.4 7.4 0 0 1 3.88 0c1.48-1 2.13-.8 2.13-.8.43 1.07.16 1.86.08 2.06.5.54.8 1.23.8 2.08 0 2.98-1.81 3.63-3.54 3.82.28.24.53.71.53 1.43v2.12c0 .2.14.45.54.37A7.75 7.75 0 0 0 8 .25Z" />
+    </svg>
+  );
+}

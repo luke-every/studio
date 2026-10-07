@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isStoreConfigured, readRegistryDocument, type RegistryDocument } from "./store";
+import { contentRepoUrl } from "./github";
 import { versionSegment } from "./version";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
 import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
@@ -201,6 +202,7 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
   });
 
   return {
+    repoUrl: contentRepoUrl(),
     people: [...seen.values()].sort((a, b) => a.name.localeCompare(b.name)),
     teams,
     projects,

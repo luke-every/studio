@@ -32,7 +32,7 @@ import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
  * else can open.
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
-  const { markOpened, renameVersion, isSaving } = useStudio();
+  const { markOpened, renameVersion, isSaving, repoUrl } = useStudio();
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
   const [fit, chooseFit] = useFit();
@@ -115,6 +115,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
         }
         edit={{ slug: prototype.slug, versionId: selected.id }}
         title={`${prototype.name} ${selected.version}`}
+        githubUrl={repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}` : undefined}
         actions={<RemixButton slug={prototype.slug} version={selected.version} name={prototype.name} />}
         leading={
           <VersionMenu

@@ -39,6 +39,7 @@ type StudioContextValue = {
   teams: TeamSummary[];
   projects: Project[];
   prototypes: Prototype[];
+  repoUrl: string | null;
   addTeam: (input: { name: string; remit: string; description: string }) => Promise<boolean>;
   addProject: (input: { teamSlug: string; name: string }) => Promise<boolean>;
   filePrototype: (prototypeSlug: string, projectSlug: string | null) => void;
@@ -198,6 +199,7 @@ export function StudioProvider({
       teams: snapshot.teams.map((team) => summariseTeam(team, snapshot.prototypes)),
       projects: snapshot.projects,
       prototypes: snapshot.prototypes,
+      repoUrl: snapshot.repoUrl,
       addTeam,
       addProject,
       filePrototype,

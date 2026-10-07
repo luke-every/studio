@@ -34,6 +34,12 @@ function config(): Config | null {
   return { token, owner, name, branch };
 }
 
+/** Where the content repository's files can be browsed on GitHub, or null if none is connected. */
+export function contentRepoUrl() {
+  const cfg = config();
+  return cfg ? `https://github.com/${cfg.owner}/${cfg.name}/tree/${cfg.branch}` : null;
+}
+
 export function isContentRepoConfigured() {
   return config() !== null;
 }

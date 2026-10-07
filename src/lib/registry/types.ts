@@ -77,6 +77,8 @@ export type Project = {
 };
 
 export type RegistrySnapshot = {
+  /** The content repository on GitHub, for "Open in GitHub". Null when none is connected. */
+  repoUrl: string | null;
   /** Everyone who appears anywhere in the registry. Derived, never managed. */
   people: Person[];
   teams: Team[];
