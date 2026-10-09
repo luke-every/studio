@@ -1,22 +1,32 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 import { MotionModal } from "@/components/motion";
-import { ShuffleIcon } from "@/components/shell/nav-icons";
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
 
 const subscribe = () => () => {};
 
 /**
- * Remix: make an independent copy of the version on screen. The button opens
- * the one command to paste into Terminal, which copies the version into a new
+ * Remix: make an independent copy of the version on screen. The prototype's
+ * menu opens this, with the one command to paste into Terminal, which copies the version into a new
  * folder and opens Claude Code in it. The original is only ever read; what
  * comes back through /push is a prototype of its own.
  */
-export function RemixButton({ slug, version, name }: { slug: string; version: string; name: string }) {
-  const [open, setOpen] = useState(false);
+export function RemixDialog({
+  slug,
+  version,
+  name,
+  open,
+  onClose,
+}: {
+  slug: string;
+  version: string;
+  name: string;
+  open: boolean;
+  onClose: () => void;
+}) {
   const origin = useSyncExternalStore(subscribe, () => window.location.origin, () => "");
   const { notify } = useStudio();
   const command = `curl -fsSL ${origin || "https://…"}/remix/${slug}/${version} | sh`;
@@ -32,10 +42,7 @@ export function RemixButton({ slug, version, name }: { slug: string; version: st
 
   return (
     <>
-      <IconButton label="Remix" onClick={() => setOpen(true)} aria-haspopup="dialog">
-        <ShuffleIcon className="size-[1.125rem]" />
-      </IconButton>
-      <MotionModal open={open} onClose={() => setOpen(false)} label={`Remix ${name}`}>
+      <MotionModal open={open} onClose={onClose} label={`Remix ${name}`}>
         <div className="flex flex-col gap-5">
           <div>
             <h2 className="text-md font-medium tracking-[var(--tracking-tight)]">
@@ -60,7 +67,7 @@ export function RemixButton({ slug, version, name }: { slug: string; version: st
           </p>
 
           <div className="flex justify-end">
-            <Button onClick={() => setOpen(false)}>Done</Button>
+            <Button onClick={onClose}>Done</Button>
           </div>
         </div>
       </MotionModal>

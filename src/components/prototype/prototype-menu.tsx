@@ -11,14 +11,15 @@ import { useStudio } from "@/lib/data/studio-store";
 import type { Prototype } from "@/lib/registry/types";
 
 import { LinksDialog } from "./prototype-links";
+import { RemixDialog } from "./remix-dialog";
 
-type Dialog = "rename" | "move" | "links" | "delete";
+type Dialog = "rename" | "move" | "links" | "remix" | "delete";
 
 const item =
   "flex w-full items-center rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-nav hover:bg-surface-hover";
 
-/** The ellipsis beside a prototype's title: rename it, move it, edit its links, delete it. */
-export function PrototypeMenu({ prototype }: { prototype: Prototype }) {
+/** The ellipsis beside a prototype's title: remix the version on screen, rename it, move it, edit its links, delete it. */
+export function PrototypeMenu({ prototype, version }: { prototype: Prototype; version: string }) {
   const { isSaving } = useStudio();
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -50,6 +51,9 @@ export function PrototypeMenu({ prototype }: { prototype: Prototype }) {
         }
       >
         <div role="menu" className="flex flex-col">
+          <button type="button" role="menuitem" onClick={() => choose("remix")} className={`${item} text-foreground`}>
+            Remix
+          </button>
           <button type="button" role="menuitem" onClick={() => choose("rename")} className={`${item} text-foreground`}>
             Rename
           </button>
@@ -65,6 +69,7 @@ export function PrototypeMenu({ prototype }: { prototype: Prototype }) {
         </div>
       </MotionPopover>
 
+      <RemixDialog slug={prototype.slug} version={version} name={prototype.name} open={dialog === "remix"} onClose={close} />
       {dialog === "rename" ? <RenameDialog prototype={prototype} onClose={close} /> : null}
       {dialog === "move" ? <MoveDialog prototype={prototype} onClose={close} /> : null}
       {dialog === "links" ? <LinksDialog prototype={prototype} kinds={["figma", "notion"]} onClose={close} /> : null}

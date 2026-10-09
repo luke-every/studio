@@ -113,6 +113,14 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Anything that can be pressed says so. */
+  button:not(:disabled),
+  [role="button"],
+  [role="radio"]:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
   body {
     background-color: var(--background);
     color: var(--foreground);

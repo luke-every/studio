@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { GithubIcon } from "@/components/shell/nav-icons";
+import { IconButton } from "@/components/ui/button";
 import { DialogForm, fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
 import { linkProblem, type LinkKind } from "@/lib/links";
@@ -14,11 +15,11 @@ const KINDS: Record<LinkKind, { name: string; icon: string; placeholder: string 
 };
 
 /**
- * The prototype's design and write-up. A link that's been given opens in a
+ * Where this version's files are, and the prototype's design and write-up. A link that's been given opens in a
  * new tab; one that hasn't says so, and tapping it asks for the address. It
  * is saved for everyone.
  */
-export function PrototypeLinks({ prototype }: { prototype: Prototype }) {
+export function PrototypeLinks({ prototype, githubUrl }: { prototype: Prototype; githubUrl?: string }) {
   const { isSaving } = useStudio();
   const [adding, setAdding] = useState<LinkKind | null>(null);
   const urls: Record<LinkKind, string | undefined> = {
@@ -29,21 +30,30 @@ export function PrototypeLinks({ prototype }: { prototype: Prototype }) {
   return (
     <>
       <div className="flex flex-wrap gap-2">
+        {githubUrl ? (
+          <IconButton label="Open in GitHub" href={githubUrl} external tooltipSide="above" tooltipAlign="start">
+            <GithubIcon />
+          </IconButton>
+        ) : (
+          <IconButton label="No files on GitHub for this version" disabled tooltipSide="above" tooltipAlign="start">
+            <GithubIcon />
+          </IconButton>
+        )}
         {(Object.keys(KINDS) as LinkKind[]).map((kind) => {
           const { name, icon } = KINDS[kind];
           const image = (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={icon} alt="" width={20} height={20} className="size-5 object-contain" />
+            <img src={icon} alt="" width={16} height={16} className="size-4 object-contain" />
           );
 
           return urls[kind] ? (
-            <Button key={kind} href={urls[kind]} external icon={image} className={isSaving(`link:${kind}`) ? "pulse-soft" : ""}>
-              Open in {name}
-            </Button>
+            <IconButton key={kind} label={`Open in ${name}`} href={urls[kind]} external tooltipSide="above" tooltipAlign="start" className={isSaving(`link:${kind}`) ? "pulse-soft" : ""}>
+              {image}
+            </IconButton>
           ) : (
-            <Button key={kind} icon={image} loading={isSaving(`link:${kind}`)} onClick={() => setAdding(kind)}>
-              {isSaving(`link:${kind}`) ? "Saving…" : `Add ${name} link`}
-            </Button>
+            <IconButton key={kind} label={`Add ${name} link`} tooltipSide="above" tooltipAlign="start" loading={isSaving(`link:${kind}`)} onClick={() => setAdding(kind)}>
+              {image}
+            </IconButton>
           );
         })}
       </div>

@@ -22,12 +22,18 @@ const look = {
 type Look = keyof typeof look;
 
 /**
- * What every control in the prototype's top bar looks like: the same height,
- * padding, frame and type as a secondary Button, so a row of menus and
- * buttons reads as one set.
+ * The look of every control on a prototype's page: the icon buttons, the
+ * dropdown triggers, the links. One height, radius, padding and frame, with an
+ * icon, a label, or both inside, so a row of them reads as one set.
  */
-export const barControl =
-  "flex h-10 items-center gap-2 whitespace-nowrap rounded-[var(--r-full)] border border-border bg-surface px-5 text-ui font-medium text-foreground hover:bg-surface-hover";
+const controlBase =
+  "inline-flex h-9 min-w-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--r-control)] px-3 text-ui font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] disabled:opacity-40";
+
+/** For a control that is not a button, such as a version with nothing to choose. */
+export const barControl = `${controlBase} border border-border bg-surface text-foreground`;
+
+/** What a control looks like while it is switched on. */
+export const controlOn = "!border-transparent !bg-accent !text-accent-foreground hover:!bg-accent-hover";
 
 type Props = {
   /** `destructive` is a primary button for something that can't be taken back. */
@@ -74,8 +80,10 @@ export function Button({ variant = "secondary", href, external, icon, loading, c
 }
 
 /**
- * A round button with just an icon. It says what it is on hover or focus, at
- * once, in a small label underneath — an icon alone doesn't.
+ * The control used across a prototype's page. Put an icon, a label, or both
+ * in `children`. `label` names it for assistive tech and, when there is no
+ * text beside the icon, says what it is on hover or focus, in a small label
+ * underneath.
  */
 export function IconButton({
   label,
@@ -83,33 +91,36 @@ export function IconButton({
   href,
   external,
   tooltipAlign = "center",
+  tooltipSide = "below",
   loading,
   children,
   className,
   ...rest
 }: {
-  label: string;
-  /** Working on it: the icon breathes. */
+  label?: string;
+  /** Working on it: the content breathes. */
   loading?: boolean;
-  variant?: Extract<Look, "secondary" | "ghost">;
+  variant?: Extract<Look, "primary" | "secondary" | "ghost">;
   href?: string;
   external?: boolean;
-  tooltipAlign?: "center" | "end";
+  tooltipAlign?: "start" | "center" | "end";
+  /** Above it, for a control at the bottom of the window. */
+  tooltipSide?: "below" | "above";
   children: ReactNode;
   className?: string;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children" | "aria-label">) {
-  const classes = `${base} ${look[variant]} size-10 ${className ?? ""}`;
-  const tip = (
+  const classes = `${controlBase} ${look[variant]} ${className ?? ""}`;
+  const tip = label ? (
     <span
       role="tooltip"
-      className={`pointer-events-none absolute top-full mt-2 whitespace-nowrap rounded-[var(--r-md)] bg-accent px-2.5 py-1 text-xs font-normal text-accent-foreground opacity-0 transition-opacity duration-[var(--dur-instant)] ease-[var(--curve-entrance)] group-hover/tip:opacity-100 peer-focus-visible:opacity-100 ${
-        tooltipAlign === "end" ? "right-0" : "left-1/2 -translate-x-1/2"
+      className={`pointer-events-none absolute ${tooltipSide === "above" ? "bottom-full mb-2" : "top-full mt-2"} whitespace-nowrap rounded-[var(--r-md)] bg-accent px-2.5 py-1 text-xs font-normal text-accent-foreground opacity-0 transition-opacity duration-[var(--dur-instant)] ease-[var(--curve-entrance)] group-hover/tip:opacity-100 peer-focus-visible:opacity-100 ${
+        tooltipAlign === "end" ? "right-0" : tooltipAlign === "start" ? "left-0" : "left-1/2 -translate-x-1/2"
       }`}
       style={{ zIndex: "var(--z-popover)" }}
     >
       {label}
     </span>
-  );
+  ) : null;
 
   return (
     <span className="group/tip relative inline-flex">
@@ -123,7 +134,7 @@ export function IconButton({
         </Link>
       ) : (
         <button type="button" aria-label={label} aria-busy={loading || undefined} className={`${classes} peer`} {...rest}>
-          <span className={loading ? "pulse-soft" : ""}>{children}</span>
+          <span className={`inline-flex items-center gap-1.5 ${loading ? "pulse-soft" : ""}`}>{children}</span>
         </button>
       )}
       {tip}

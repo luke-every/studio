@@ -9,7 +9,6 @@ import { AddPrototype } from "@/components/prototype/add-prototype";
 import { useStudio } from "@/lib/data/studio-store";
 import { prototypesInProject } from "@/lib/registry/select";
 import { formatUpdated } from "@/lib/format";
-import { matchesPrototype, useSearch } from "@/lib/search-store";
 
 /**
  * A project folder: the prototypes filed into it, most recently opened
@@ -18,7 +17,6 @@ import { matchesPrototype, useSearch } from "@/lib/search-store";
 export function ProjectView() {
   const params = useParams<{ slug: string; projectSlug: string }>();
   const { teams, projects, prototypes, opened } = useStudio();
-  const { query } = useSearch();
 
   const team = teams.find((candidate) => candidate.slug === params.slug);
   const project = projects.find(
@@ -26,12 +24,10 @@ export function ProjectView() {
   );
   if (!team || !project) notFound();
 
-  const contents = prototypesInProject(project.slug, prototypes, opened).filter((prototype) =>
-    matchesPrototype(prototype, query),
-  );
+  const contents = prototypesInProject(project.slug, prototypes, opened);
 
   return (
-    <div className="w-full px-5 py-8 sm:px-8 sm:py-10">
+    <div className="w-full px-5 pb-8 pt-4 sm:px-8 sm:pb-10">
       <Link
         href={`/teams/${team.slug}`}
         className="text-xs text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"

@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
 import { CheckIcon, ChevronDownIcon } from "@/components/shell/nav-icons";
-import { barControl } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { DEVICES, type Device } from "@/lib/phone";
 
 /** Which phone the prototype is previewed on: its name and size, and a list of the common ones. */
@@ -18,17 +18,10 @@ export function DeviceMenu({ device, onChange }: { device: Device; onChange: (de
       align="start"
       className="w-72"
       trigger={
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-label="Preview on"
-          className={barControl}
-        >
+        <IconButton onClick={() => setOpen((value) => !value)} aria-haspopup="listbox" aria-expanded={open}>
           <span>{device.name}</span>
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
-        </button>
+        </IconButton>
       }
     >
       <ul role="listbox" aria-label="Phones" className="flex max-h-[32rem] flex-col overflow-y-auto">

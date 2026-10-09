@@ -24,11 +24,14 @@ export function useOverlayBehaviour({
   onClose,
   lockScroll = true,
   trapFocus = true,
+  focusSelector,
 }: {
   open: boolean;
   onClose: () => void;
   lockScroll?: boolean;
   trapFocus?: boolean;
+  /** Focus this inside the layer on the way in, such as a field to type into, instead of the layer itself. */
+  focusSelector?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const restoreTo = useRef<HTMLElement | null>(null);
@@ -75,7 +78,10 @@ export function useOverlayBehaviour({
 
     // Give focus to the layer itself rather than its first control, so the
     // user is not dropped onto a button they did not ask for.
-    const focusTimer = window.setTimeout(() => container.current?.focus(), 0);
+    const focusTimer = window.setTimeout(() => {
+      const field = focusSelector ? container.current?.querySelector<HTMLElement>(focusSelector) : null;
+      (field ?? container.current)?.focus();
+    }, 0);
 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
@@ -83,7 +89,7 @@ export function useOverlayBehaviour({
       if (lockScroll) document.body.style.overflow = previousOverflow;
       restoreTo.current?.focus?.();
     };
-  }, [open, onClose, lockScroll, trapFocus]);
+  }, [open, onClose, lockScroll, trapFocus, focusSelector]);
 
   return container;
 }

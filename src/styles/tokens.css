@@ -115,12 +115,13 @@
 
   /* --- Layout ------------------------------------------------------------- */
   --nav-height: 4rem;
-  --search-width: 31.25rem;
   --tile-height: 37.5rem;
   /* The phone in a feed tile: 85% of the tile's height, at phone proportions. */
   --tile-device-width: calc(var(--tile-height) * 0.85 * 9 / 19.5);
   /* The prototype on its own page: never taller than the window, so all of it is in view. */
-  --frame-height: 90dvh;
+  --frame-height: 90svh;
+  /* The column beside a prototype: its name, description, variants and links. */
+  --detail-side-width: 21.75rem;
   /* What is written under a prototype: narrow enough to read. */
   --content-width: 45rem;
   --dev-panel-width: 20rem;
@@ -133,6 +134,8 @@
   --r-xl: 0.75rem;
   --r-full: 999px;
   --r-tag: 0.75rem;
+  /* Buttons, dropdown triggers and toggles on a prototype's page. */
+  --r-control: 1rem;
   /* Never under 16px: on a narrow screen the corners shrink with it instead of
    * swallowing a tile, and from tablet width up they are the full size. */
   --r-tile: clamp(1rem, 3vw, 1.5rem);

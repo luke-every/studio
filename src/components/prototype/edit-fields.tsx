@@ -2,23 +2,69 @@
 
 import { useRef, useState, type ReactNode } from "react";
 
+import { CheckIcon } from "@/components/shell/nav-icons";
 import { toHex } from "@/lib/edit-dom";
 
 /**
- * The controls edit mode is made of, in the manner of a design tool: a value
- * with a glyph you can drag, a row of icon choices, a swatch with its hex.
+ * The controls edit mode is made of, in the manner of Figma's design panel:
+ * sections divided by hairlines, a small caption above each control, a value
+ * with a glyph you can drag, a joined row of icon choices with the chosen one
+ * dark, a swatch with its hex.
  * Everything is controlled by what the page says it is now, so a field never
  * shows a value the prototype doesn't have.
  */
 
 const well = "bg-surface-inset rounded-[var(--r-md)]";
 
-export function Section({ title, children }: { title: string; children: ReactNode }) {
+/** A titled group, full width with a hairline under it. `action` sits at the end of the title row. */
+export function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-2.5 border-t border-divider pt-4">
-      <p className="text-sm font-medium text-foreground">{title}</p>
+    <section className="flex flex-col border-b border-divider pb-3">
+      <div className="flex h-10 items-center justify-between gap-2 px-4">
+        <h3 className="text-xs font-medium text-foreground">{title}</h3>
+        {action}
+      </div>
+      <div className="flex flex-col gap-3 px-4">{children}</div>
+    </section>
+  );
+}
+
+/** A small caption above a control. */
+export function Field({ caption, children }: { caption?: string; children: ReactNode }) {
+  if (!caption) return children;
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs text-foreground-muted">{caption}</span>
       {children}
     </div>
+  );
+}
+
+/** A small square button for the end of a section's title row. */
+export function PanelButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="grid h-6 min-w-6 place-items-center rounded-[var(--r-md)] px-1.5 text-xs text-foreground-muted transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-inset hover:text-foreground"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** A tick box with its label. */
+export function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-foreground">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="peer sr-only" />
+      <span className="grid size-4 place-items-center rounded-[var(--r-sm)] bg-surface-inset text-transparent transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] peer-checked:bg-accent peer-checked:text-accent-foreground peer-focus-visible:ring-1 peer-focus-visible:ring-[var(--focus-ring)]">
+        <CheckIcon className="size-3" />
+      </span>
+      {label}
+    </label>
   );
 }
 
@@ -48,29 +94,33 @@ export function NumberField({
   value,
   onCommit,
   unit = "px",
+  caption,
 }: {
   glyph: ReactNode;
   label: string;
   value: string;
   onCommit: (css: string) => void;
-  unit?: "px" | "opacity";
+  unit?: "px" | "opacity" | "number";
+  /** Shown above the field. */
+  caption?: string;
 }) {
-  const shown = unit === "opacity" ? String(Math.round(parseFloat(value || "1") * 100)) : pixels(value);
+  const shown = unit === "opacity" ? String(Math.round(parseFloat(value || "1") * 100)) : unit === "number" ? value : pixels(value);
   const [draft, setDraft] = useState<string | null>(null);
   const scrub = useRef<{ x: number; from: number } | null>(null);
 
-  const css = (n: number) => (unit === "opacity" ? String(Math.min(100, Math.max(0, n)) / 100) : `${n}px`);
+  const css = (n: number) => (unit === "opacity" ? String(Math.min(100, Math.max(0, n)) / 100) : unit === "number" ? String(n) : `${n}px`);
   const commit = (text: string) => {
     const trimmed = text.trim();
     setDraft(null);
     if (!trimmed || trimmed === shown) return;
     if (/^-?[\d.]+$/.test(trimmed)) onCommit(css(parseFloat(trimmed)));
-    else if (unit === "px") onCommit(trimmed);
+    else if (unit === "px" || unit === "number") onCommit(trimmed);
   };
   const current = () => (Number.isNaN(parseFloat(shown)) ? 0 : parseFloat(shown));
 
   return (
-    <label className={`${well} flex h-8 items-center gap-1 pl-2 pr-1 text-sm focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
+    <Field caption={caption}>
+    <label className={`${well} flex h-7 items-center gap-1 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
       <span
         title={`${label} — drag to change`}
         onPointerDown={(event) => {
@@ -107,23 +157,65 @@ export function NumberField({
         className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none"
       />
     </label>
+    </Field>
   );
 }
 
-/** A row of icon choices, one of which is on. */
-export function Choice({
+/** A short list to choose from, for options too many or too wordy for icons. */
+export function SelectField({
+  caption,
   label,
   value,
   options,
   onChange,
 }: {
+  caption?: string;
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Field caption={caption}>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`${well} h-7 w-full px-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-[var(--focus-ring)]`}
+      >
+        {options.some((option) => option.value === value) ? null : (
+          <option value={value} hidden>
+            {value}
+          </option>
+        )}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
+/** A joined row of icon choices, one of which is on. */
+export function Choice({
+  label,
+  value,
+  options,
+  onChange,
+  caption,
+}: {
   label: string;
   value: string;
   options: { value: string; title: string; icon: ReactNode }[];
   onChange: (value: string) => void;
+  /** Shown above the row. */
+  caption?: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className={`${well} flex gap-0.5 p-0.5`}>
+    <Field caption={caption}>
+    <div role="radiogroup" aria-label={label} className="flex gap-px">
       {options.map((option) => (
         <button
           key={option.value}
@@ -132,21 +224,22 @@ export function Choice({
           aria-checked={value === option.value}
           title={option.title}
           onClick={() => onChange(option.value)}
-          className={`grid h-7 flex-1 place-items-center rounded-[var(--r-md)] ${
-            value === option.value ? "bg-surface text-foreground" : "text-foreground-subtle hover:text-foreground"
+          className={`grid h-7 flex-1 place-items-center bg-surface-inset transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] first:rounded-l-[var(--r-md)] last:rounded-r-[var(--r-md)] ${
+            value === option.value ? "!bg-accent text-accent-foreground" : "text-foreground-muted hover:text-foreground"
           }`}
         >
           {option.icon}
         </button>
       ))}
     </div>
+    </Field>
   );
 }
 
 const transparent = (color: string) => color === "transparent" || /rgba\(.*,\s*0\)$/.test(color);
 
 /** A colour: its swatch, which opens the picker, and its hex, which can be typed. */
-export function ColorField({ label, value, onCommit }: { label: string; value: string; onCommit: (css: string) => void }) {
+export function ColorField({ label, value, onCommit, caption }: { label: string; value: string; onCommit: (css: string) => void; caption?: string }) {
   const none = transparent(value);
   const hex = none ? "" : toHex(value);
   const [draft, setDraft] = useState<string | null>(null);
@@ -158,7 +251,8 @@ export function ColorField({ label, value, onCommit }: { label: string; value: s
   };
 
   return (
-    <label className={`${well} flex h-8 items-center gap-2 pl-2 pr-1 text-sm focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
+    <Field caption={caption}>
+    <label className={`${well} flex h-7 items-center gap-2 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
       <span
         // The swatch shows the colour the page really has, so it is set from the page's own value.
         style={none ? undefined : { backgroundColor: value }}
@@ -187,5 +281,6 @@ export function ColorField({ label, value, onCommit }: { label: string; value: s
         className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none"
       />
     </label>
+    </Field>
   );
 }

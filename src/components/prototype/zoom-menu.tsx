@@ -1,6 +1,6 @@
 "use client";
 
-import { barControl } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
@@ -29,17 +29,10 @@ export function ZoomMenu({
       align="start"
       className="w-32"
       trigger={
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-label="Zoom"
-          className={barControl}
-        >
+        <IconButton onClick={() => setOpen((value) => !value)} aria-haspopup="listbox" aria-expanded={open}>
           <span>{percent(fitted ?? zoom)}</span>
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
-        </button>
+        </IconButton>
       }
     >
       <ul role="listbox" aria-label="Zoom" className="flex flex-col">

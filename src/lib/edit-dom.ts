@@ -53,6 +53,18 @@ export function isPicture(element: Element) {
   return element.ownerDocument.defaultView!.getComputedStyle(element).backgroundImage.includes("url(");
 }
 
+/**
+ * The element whose picture a click on `element` should swap: itself, or the
+ * nearest one around it with a background image, since the thing clicked is
+ * often text or a button sitting on top of the picture.
+ */
+export function pictureOf(element: Element): Element | null {
+  for (let at: Element | null = element; at && at !== at.ownerDocument.body && at !== at.ownerDocument.documentElement; at = at.parentElement) {
+    if (isPicture(at)) return at;
+  }
+  return null;
+}
+
 export function setPicture(element: Element, src: string) {
   if (element.tagName === "IMG") {
     element.removeAttribute("srcset");
@@ -61,6 +73,91 @@ export function setPicture(element: Element, src: string) {
     (element as HTMLElement).style.setProperty("background-image", `url("${src}")`, "important");
   }
 }
+
+export type Axis = "width" | "height";
+export type Sizing = "fixed" | "fill" | "hug";
+
+/** Sets some inline properties for a moment, runs `measure`, and puts them back as they were. */
+function probing<T>(element: HTMLElement, changes: [string, string][], measure: () => T): T {
+  const was = changes.map(([property]) => [property, element.style.getPropertyValue(property), element.style.getPropertyPriority(property)] as const);
+  for (const [property, value] of changes) element.style.setProperty(property, value, "important");
+  const result = measure();
+  for (const [property, value, priority] of was) {
+    if (value) element.style.setProperty(property, value, priority);
+    else element.style.removeProperty(property);
+  }
+  return result;
+}
+
+/**
+ * How an element is sized along one axis, as a designer would say it rather
+ * than as the browser reports it (which is always pixels):
+ *
+ *   fixed  it has a size of its own
+ *   fill   it takes the room its parent gives it
+ *   hug    it is only as big as what is inside it
+ *
+ * Found by trying: with no size of its own, does it still come out the same?
+ * Then, if it is made to wrap its content, does it still?
+ */
+export function sizingOf(element: Element, axis: Axis): Sizing {
+  const el = element as HTMLElement;
+  const size = () => (axis === "width" ? el.getBoundingClientRect().width : el.getBoundingClientRect().height);
+  const now = size();
+  // A pixel size set on the element itself is a size of its own, even if it happens to match what filling would give.
+  if (/^[\d.]+px$/.test(el.style.getPropertyValue(axis))) return "fixed";
+  if (Math.abs(probing(el, [[axis, "auto"]], size) - now) > 1) return "fixed";
+
+  const row = !/column/.test(el.parentElement ? getComputedStyle(el.parentElement).flexDirection : "");
+  const main = axis === "width" ? row : !row;
+  const hugging: [string, string][] = [[main ? "flex-grow" : "align-self", main ? "0" : "flex-start"]];
+  if (axis === "width") hugging.push(["width", "fit-content"]);
+  const wraps = Math.abs(probing(el, hugging, size) - now) <= 1;
+
+  // A paragraph that runs the whole width wraps its content too, but is filling.
+  const parent = el.parentElement;
+  if (wraps && parent && axis === "width") {
+    const style = getComputedStyle(parent);
+    const room = parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    if (Math.abs(room - now) <= 1) return "fill";
+  }
+  return wraps ? "hug" : "fill";
+}
+
+/** The properties that give an element `mode` sizing along `axis`; `px` is the size to hold when fixed. */
+export function sizeProperties(element: Element, axis: Axis, mode: Sizing, px: number): [string, string][] {
+  const parent = element.parentElement;
+  const display = parent ? getComputedStyle(parent) : null;
+  const flex = !!display && /flex|grid/.test(display.display);
+  const row = !display || !/column/.test(display.flexDirection);
+  const main = axis === "width" ? row : !row;
+
+  if (mode === "fixed") return [[axis, `${Math.round(px * 100) / 100}px`], ...(flex && main ? ([["flex-grow", "0"]] as [string, string][]) : [])];
+  if (mode === "hug") return [[axis, "fit-content"], ...(flex ? ([main ? ["flex-grow", "0"] : ["align-self", "flex-start"]] as [string, string][]) : [])];
+  // fill
+  if (!flex) return [[axis, "100%"]];
+  return [[axis, "auto"], main ? ["flex-grow", "1"] : ["align-self", "stretch"]];
+}
+
+/** A box shadow, the first layer of it: what the panel lets you change. */
+export type Shadow = { x: number; y: number; blur: number; spread: number; color: string };
+
+/** The first shadow of a computed `box-shadow` (colour first, as the browser writes it), or null for none. */
+export function parseShadow(value: string): Shadow | null {
+  const match = value.match(/^(rgba?\([^)]*\)|#[\da-f]+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px(?:\s+(-?[\d.]+)px)?/i);
+  if (!match || /\binset\b/.test(value.split(/,(?![^(]*\))/)[0])) return null;
+  return { color: match[1], x: +match[2], y: +match[3], blur: +match[4], spread: +(match[5] ?? 0) };
+}
+
+export const shadowCss = (s: Shadow) => `${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${s.color}`;
+
+/** `rgb(…)` or `rgba(…)` as its parts, the alpha being 1 when not given. */
+export function rgbaOf(color: string): [number, number, number, number] {
+  const [r = 0, g = 0, b = 0, a = 1] = (color.match(/[\d.]+/g) ?? []).map(Number);
+  return [r, g, b, a];
+}
+
+export const toRgba = (r: number, g: number, b: number, a: number) => `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
 
 /** `rgb(…)` as the `#rrggbb` a colour input wants. */
 export function toHex(color: string) {

@@ -2,13 +2,9 @@
 
 import { useCallback, useState, useSyncExternalStore } from "react";
 
-import { MotionModal } from "@/components/motion";
 import { Button, IconButton } from "@/components/ui/button";
 
-import { ProjectOrb } from "@/components/project/project-orb";
-import { SparkleIcon } from "@/components/shell/nav-icons";
-
-import { SetupGuide } from "./setup-guide";
+import { SetupDialog } from "./setup-dialog";
 
 const KEY = "proto.setup-dismissed";
 
@@ -48,7 +44,7 @@ function useDismissed() {
 /**
  * "New here? Get set up." A small card that comes up in the bottom right
  * corner, 40px in, a moment after the page. It opens the setup guide; the
- * same guide lives in Settings for anyone who closes this.
+ * same guide is under Setup in the user menu for anyone who closes this.
  */
 export function SetupPrompt() {
   const [dismissed, dismiss] = useDismissed();
@@ -92,19 +88,7 @@ export function SetupPrompt() {
         </aside>
       )}
 
-      <MotionModal open={open} onClose={() => setOpen(false)} label="Get set up">
-        <div className="flex flex-col gap-5">
-          <div className="relative size-14">
-            <ProjectOrb seed="get-set-up" className="!aspect-square size-full !rounded-[var(--r-lg)]" />
-            <SparkleIcon className="absolute inset-0 m-auto size-6 text-white" />
-          </div>
-          <h2 className="-mt-1 text-md font-medium tracking-[var(--tracking-tight)]">Get set up</h2>
-          <SetupGuide />
-          <div className="flex justify-end">
-            <Button onClick={() => setOpen(false)}>Done</Button>
-          </div>
-        </div>
-      </MotionModal>
+      <SetupDialog open={open} onClose={() => setOpen(false)} />
     </>
   );
 }

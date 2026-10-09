@@ -1,6 +1,6 @@
 "use client";
 
-import { barControl } from "@/components/ui/button";
+import { barControl, IconButton } from "@/components/ui/button";
 import { useState, type FormEvent } from "react";
 
 import { MotionPopover } from "@/components/motion";
@@ -40,11 +40,8 @@ export function VersionMenu({
 
   const label = (
     <>
-      <span className={`flex items-center gap-1 text-sm font-medium text-foreground ${saving ? "pulse-soft" : ""}`}>
-        {selected.version}
-        {versions.length > 1 ? <ChevronDownIcon className="size-3.5 text-foreground-subtle" /> : null}
-      </span>
-      <span className="block text-xs text-foreground-subtle"><Stamp iso={selected.createdAt} /></span>
+      {selected.version}
+      {versions.length > 1 ? <ChevronDownIcon className="size-3.5 text-foreground-subtle" /> : null}
     </>
   );
 
@@ -58,7 +55,7 @@ export function VersionMenu({
   };
 
   // One version: nothing to pick.
-  if (versions.length < 2) return <div className={`${barControl} flex-col !items-start !justify-center !gap-0`}>{label}</div>;
+  if (versions.length < 2) return <div className={`${barControl} ${saving ? "pulse-soft" : ""}`}>{label}</div>;
 
   return (
     <MotionPopover
@@ -70,15 +67,9 @@ export function VersionMenu({
       align="start"
       className="w-72"
       trigger={
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          className={`${barControl} flex-col !items-start !justify-center !gap-0 text-left`}
-        >
+        <IconButton onClick={() => setOpen((value) => !value)} aria-haspopup="listbox" aria-expanded={open} loading={saving}>
           {label}
-        </button>
+        </IconButton>
       }
     >
       <ul role="listbox" aria-label="Versions" className="flex max-h-80 flex-col overflow-y-auto">

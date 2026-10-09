@@ -8,7 +8,6 @@ import { ProjectStrip } from "@/components/project/project-strip";
 import { AddPrototype } from "@/components/prototype/add-prototype";
 import { prototypesInTeam } from "@/lib/registry/select";
 import { useStudio } from "@/lib/data/studio-store";
-import { matchesPrototype, useSearch } from "@/lib/search-store";
 
 /**
  * A team, and the prototypes inside it.
@@ -19,26 +18,21 @@ import { matchesPrototype, useSearch } from "@/lib/search-store";
 export function TeamView() {
   const params = useParams<{ slug: string }>();
   const { teams, prototypes, opened } = useStudio();
-  const { query } = useSearch();
 
   const team = teams.find((candidate) => candidate.slug === params.slug);
   if (!team) notFound();
 
-  const contents = prototypesInTeam(team.slug, prototypes, opened).filter((prototype) =>
-    matchesPrototype(prototype, query),
-  );
+  const contents = prototypesInTeam(team.slug, prototypes, opened);
 
   return (
-    <div className="w-full px-5 py-8 sm:px-8 sm:py-10">
+    <div className="w-full px-5 pb-8 pt-4 sm:px-8 sm:pb-10">
       <div>
         <ProjectStrip teamSlug={team.slug} />
       </div>
 
       <div className="mt-11 border-t border-divider pt-7">
         <div className="mb-5 flex items-center justify-between gap-4">
-          <h2 className="text-eyebrow">
-            {query.trim() ? `Matching “${query.trim()}”` : "All prototypes"}
-          </h2>
+          <h2 className="text-eyebrow">All prototypes</h2>
           <div className="flex items-center gap-2">
             <AddPrototype teamSlug={team.slug} trigger="button" />
           </div>
@@ -51,13 +45,9 @@ export function TeamView() {
           </FeedGrid>
         ) : (
           <div className="max-w-[44ch] py-10">
-            <p className="text-md text-foreground">
-              {query.trim() ? "Nothing here matches that." : "Nothing in here yet."}
-            </p>
+            <p className="text-md text-foreground">Nothing in here yet.</p>
             <p className="mt-2 text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
-              {query.trim()
-                ? `No prototype in ${team.name} matches what you typed. Clear the search to see the team again.`
-                : `${team.name} is an empty room with a good question in it. The first prototype will show up here once there is something to look at.`}
+              {team.name} is an empty room with a good question in it. The first prototype will show up here once there is something to look at.
             </p>
           </div>
         )}

@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import type { EditSession } from "@/components/prototype/use-edit-session";
 import { RedoIcon, UndoIcon } from "@/components/shell/nav-icons";
-import { Button, IconButton } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
 import { saveEdits } from "@/lib/registry/actions";
 import { useUser } from "@/lib/use-user";
@@ -66,14 +66,14 @@ export function EditBar({ session, slug, baseVersionId }: { session: EditSession
   return (
     <div className="relative flex items-center gap-2">
       <IconButton label="Undo (⌘Z)" onClick={session.undo} disabled={!session.canUndo || saving}>
-        <UndoIcon className="size-[1.125rem]" />
+        <UndoIcon />
       </IconButton>
       <IconButton label="Redo (⌘⇧Z)" onClick={session.redo} disabled={!session.canRedo || saving}>
-        <RedoIcon className="size-[1.125rem]" />
+        <RedoIcon />
       </IconButton>
-      <Button variant="primary" onClick={() => save(name)} disabled={!count || saving} loading={saving}>
+      <IconButton variant="primary" onClick={() => save(name)} disabled={!count || saving} loading={saving}>
         Save
-      </Button>
+      </IconButton>
 
       {asking ? (
         <form
@@ -94,9 +94,9 @@ export function EditBar({ session, slug, baseVersionId }: { session: EditSession
             onChange={(event) => setName(event.target.value)}
             className="h-8 rounded-[var(--r-md)] bg-surface-inset px-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-[var(--focus-ring)]"
           />
-          <Button variant="primary" type="submit" disabled={!name.trim()}>
+          <IconButton variant="primary" type="submit" disabled={!name.trim()}>
             Save version
-          </Button>
+          </IconButton>
         </form>
       ) : null}
     </div>

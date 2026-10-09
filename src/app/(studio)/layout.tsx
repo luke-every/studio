@@ -2,7 +2,6 @@ import { AppShell } from "@/components/shell/app-shell";
 import { StudioProvider } from "@/lib/data/studio-store";
 import { MotionProvider } from "@/lib/motion";
 import { getRegistrySnapshot } from "@/lib/registry";
-import { SearchProvider } from "@/lib/search-store";
 
 /**
  * The studio, behind the door.
@@ -20,11 +19,9 @@ export default async function StudioLayout({ children }: LayoutProps<"/">) {
 
   return (
     <StudioProvider snapshot={snapshot}>
-      <SearchProvider>
-        <MotionProvider>
-          <AppShell>{children}</AppShell>
-        </MotionProvider>
-      </SearchProvider>
+      <MotionProvider>
+        <AppShell>{children}</AppShell>
+      </MotionProvider>
     </StudioProvider>
   );
 }

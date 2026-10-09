@@ -87,10 +87,11 @@ export function useEditSession(url: string | undefined) {
 
   const apply = (edit: Edit, key: string) => commit(mergeEdits(latest.current.edits, [edit]), key);
 
-  const setStyle = (element: Element, property: string, value: string) => {
+  /** Change several properties of one element as a single step to undo. */
+  const setStyles = (element: Element, css: Record<string, string>) => {
     remember(element);
     const selector = selectorFor(element);
-    apply({ kind: "style", selector, css: { [property]: value } }, `style:${selector}:${property}`);
+    apply({ kind: "style", selector, css }, `style:${selector}:${Object.keys(css).join(",")}`);
   };
 
   const setText = (element: Element, text: string) => {
@@ -147,7 +148,7 @@ export function useEditSession(url: string | undefined) {
     edits: current.edits,
     canUndo: current.past.length > 0,
     canRedo: current.future.length > 0,
-    setStyle,
+    setStyles,
     setText,
     setImage,
     reset,

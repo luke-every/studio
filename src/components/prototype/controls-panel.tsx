@@ -1,10 +1,9 @@
 "use client";
 
+import { controlOn, IconButton } from "@/components/ui/button";
 import { visibleControls, type ControlValues, type Controls } from "@/lib/controls";
 
-const pill = "rounded-[var(--r-full)] px-3 py-1.5 text-sm";
-
-/** The controls a prototype offers, as buttons: a choice is a row of options, a toggle a switch. */
+/** The controls a prototype offers, as buttons, down the side of the page: a choice is a row of options, a toggle a switch. */
 export function ControlsPanel({
   controls,
   values,
@@ -15,30 +14,25 @@ export function ControlsPanel({
   onChange: (id: string, value: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {visibleControls(controls, values).map((control) => (
         <div key={control.id} className="flex flex-col gap-2">
-          <p className="text-sm text-foreground-muted">{control.label}</p>
+          <p className="text-base text-foreground">{control.label}</p>
 
           {control.type === "choice" ? (
-            <div role="radiogroup" aria-label={control.label} className="flex flex-wrap gap-1.5">
+            <div role="radiogroup" aria-label={control.label} className="flex flex-wrap gap-2">
               {control.options.map((option) => {
                 const selected = values[control.id] === option.value;
                 return (
-                  <button
+                  <IconButton
                     key={option.value}
-                    type="button"
                     role="radio"
                     aria-checked={selected}
                     onClick={() => onChange(control.id, option.value)}
-                    className={`${pill} ${
-                      selected
-                        ? "bg-accent font-medium text-accent-foreground"
-                        : "bg-tile text-foreground-muted hover:text-foreground"
-                    }`}
+                    className={selected ? controlOn : ""}
                   >
                     {option.label}
-                  </button>
+                  </IconButton>
                 );
               })}
             </div>

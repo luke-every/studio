@@ -7,12 +7,12 @@ import { EditBar } from "@/components/prototype/edit-bar";
 import { EditPanel } from "@/components/prototype/edit-panel";
 import { FlowCanvas } from "@/components/prototype/flow-canvas";
 import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
-import { ViewMenu, type View } from "@/components/prototype/view-menu";
 import { useEditSession } from "@/components/prototype/use-edit-session";
 
-import { ExternalIcon, FlowIcon, GithubIcon, SlidersIcon } from "@/components/shell/nav-icons";
+import { CodeIcon, ExternalIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
 
-import { Button, IconButton } from "./button";
+import { IconButton } from "./button";
+import { Toggle } from "./toggle";
 import { withParams, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
 import { useMediaQuery } from "@/lib/use-media-query";
@@ -23,13 +23,14 @@ import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 /**
  * A prototype on a tile, the same grey tile the feed uses, 90% of the
  * window tall so all of it is in view. The prototype sits in the middle as
- * a phone, centered on the tile. Along the top: `leading` (the version) on
- * the left, `center` (which phone) in the middle, and the buttons on the right.
+ * a phone, centered on the tile. The tile is a set height, so a phone drawn bigger than it scrolls inside. Along the top: on the left the version, design or
+ * wireframe, and the flow; in the middle `center` (which phone, how big); on the
+ * right dev mode and open in a new window.
  *
  * The prototype is laid out at the phone's own size and then scaled to fit the
  * tile, so it looks the same on a laptop as on a big screen.
  *
- * The wireframe button shows the same prototype with its visual design
+ * The wireframe toggle shows the same prototype with its visual design
  * stripped back (see `@/lib/wireframe`); it lasts until the page is left.
  *
  * The prototype loads behind a skeleton, which comes back whenever the url
@@ -38,21 +39,18 @@ import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 export function PrototypeFrame({
   url: addressed,
   title,
-  githubUrl,
   leading,
   center,
   device,
   zoom = 1,
   fit = false,
-  controls,
-  actions,
   poster,
   edit,
+  mode,
+  onMode,
 }: {
   url?: string;
   title: string;
-  /** This version's files on GitHub. Without it there is no button. */
-  githubUrl?: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
   /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at. */
@@ -63,16 +61,14 @@ export function PrototypeFrame({
   zoom?: number;
   /** Scale it to the room there is instead; `zoom` is ignored while this is on. */
   fit?: boolean;
-  /** What the prototype lets you adjust. Without it there is no button. */
-  controls?: ReactNode;
-  /** Buttons for the prototype as a whole, at the end of the bar. */
-  actions?: ReactNode;
   /** A picture of the prototype, shown while the real one loads. */
   poster?: string;
   /** Which version edits are made on. Without it there is no Edit mode. */
   edit?: { slug: string; versionId: string };
+  /** Looking, editing or in dev mode. The last two replace the bar and bring a panel of their own. */
+  mode: "view" | "dev" | "edit";
+  onMode: (mode: "view" | "dev" | "edit") => void;
 }) {
-  const [controlsOpen, setControlsOpen] = useState(false);
   // The flow: the screens of the prototype and how they connect, drawn as a canvas.
   // Opening a screen from it shows the prototype on that screen; both belong to one address.
   const flow = usePrototypeFlow(addressed?.split("?")[0]);
@@ -83,17 +79,19 @@ export function PrototypeFrame({
   const showingFlow = flowOpen && !!flow && !!addressed;
   // Dev mode: the same preview, with its code beside it. What was picked and
   // what moved belong to the document on screen, so a new url starts them over.
-  const [view, setView] = useState<View>("design");
-  // Editing is its own state, on top of how it is viewed: a design or a wireframe can be edited, dev mode can't.
-  const [editingNow, setEditingNow] = useState(false);
-  const editing = editingNow && view !== "dev";
-  const wireframe = view === "wireframe";
-  const dev = view === "dev" || editing;
+  const [look, setLook] = useState<"design" | "wireframe">("design");
+  // Editing and dev mode both look at the design or the wireframe, so the look is kept while either is on.
+  const editing = mode === "edit" && !!edit;
+  const wireframe = look === "wireframe";
+  const dev = mode === "dev" || editing;
+  // The panel keeps showing what it held while it closes.
+  const panelOpen = dev && !showingFlow;
+  const [panelKind, setPanelKind] = useState<"dev" | "edit">("dev");
+  if (dev && panelKind !== (editing ? "edit" : "dev")) setPanelKind(editing ? "edit" : "dev");
   const session = useEditSession(url);
   const [target, setTarget] = useState<Element | null>(null);
-  // In Edit, clicks pick a part to change; in Interact they go to the prototype, to move between screens.
+  // While Selecting, clicks pick a part; while Interacting they go to the prototype, to move between screens.
   const [interacting, setInteracting] = useState(false);
-  const [picking, setPicking] = useState(true);
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
   // ⌘Z undoes, ⇧⌘Z and ⌘Y redo, whether the focus is in the studio or in the prototype.
@@ -103,6 +101,11 @@ export function PrototypeFrame({
   };
   const hotkey = (event: KeyboardEvent) => {
     if (event.key === "Escape" && dev) {
+      // With a part picked, Escape only lets go of it; the prototype never sees the key.
+      if (target || here.picked) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
       deselect();
       return;
     }
@@ -119,20 +122,22 @@ export function PrototypeFrame({
   });
   useEffect(() => {
     const listen = (event: KeyboardEvent) => {
-      // Typing in a field keeps the browser's own undo.
+      // Typing a paragraph keeps the browser's own undo. Every other control in the panel (a number, a colour, a
+      // dropdown, a tick) holds one value that is committed as it changes, so ⌘Z there undoes the edit it made.
       const target = event.target as HTMLElement | null;
-      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      if (target && (target.isContentEditable || target.tagName === "TEXTAREA")) return;
+      if (target && ["INPUT", "SELECT"].includes(target.tagName)) target.blur();
       hotkeyRef.current(event);
     };
     window.addEventListener("keydown", listen);
     return () => window.removeEventListener("keydown", listen);
   }, []);
 
-  const exitEditing = () => {
-    if (session.edits.length && !window.confirm("Leave without saving? Your changes will be discarded.")) return;
+  const exitMode = () => {
+    if (editing && session.edits.length && !window.confirm("Leave without saving? Your changes will be discarded.")) return;
     session.discard();
     setInteracting(false);
-    setEditingNow(false);
+    onMode("view");
   };
 
   const inspect = {
@@ -153,19 +158,21 @@ export function PrototypeFrame({
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
   // On a phone it is a preview, not a place to work: always scaled to fit the
-  // screen, with no picking a size.
+  // screen, with no picking a size. It is sized once, when it loads, and left:
+  // Safari resizes the window as the address bar slides away while scrolling,
+  // and redrawing the prototype for every step of that is slow.
   const narrow = useMediaQuery("(max-width: 639px)");
   useEffect(() => {
     const element = stage.current;
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      setSpace({ width, height });
+      setSpace((now) => (narrow && now ? now : { width, height }));
     });
     observer.observe(element);
 
     return () => observer.disconnect();
-  }, []);
+  }, [narrow]);
   // Measured on the client only, so no frame is drawn on the server.
   const scale = space
     ? fit || narrow
@@ -173,59 +180,55 @@ export function PrototypeFrame({
       : zoom
     : null;
 
+  // A set height, the window's on a wide screen: a bigger phone scrolls inside the tile instead of stretching the page.
   return (
+    <div className="flex h-[var(--frame-height)] w-full gap-4 lg:h-full">
     <div
-      className={`relative mx-auto flex min-h-[var(--frame-height)] w-full flex-col rounded-[var(--r-tile)] bg-tile max-sm:h-[var(--frame-height)] max-sm:rounded-none ${
-        // Scaled to fit, the tile is a set height and the phone is made to fit
-        // it. Otherwise the tile is at least that tall and grows to hold a
-        // phone that is taller. On a phone it is always the set height.
-        fit || showingFlow ? "sm:h-[var(--frame-height)]" : ""
-      }`}
+      // Clicking the tile around the phone lets go of what was picked, unless it was a button that was pressed. A click inside the prototype never reaches here.
+      onClick={(event) => dev && !(event.target as Element).closest("button, a") && deselect()}
+      className="relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile max-sm:rounded-none"
     >
-      <div className="grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:relative sm:z-[var(--z-raised)] sm:px-8 sm:py-8">
-        {editing && edit ? (
-          // Editing is the only thing going on: just a way out, undo and redo, and Save.
+      <div key={dev ? "mode" : "view"} className="bar-in grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:relative sm:z-[var(--z-raised)] sm:px-8 sm:py-8">
+        {dev ? (
+          // Editing or dev mode is the only thing going on: a way out, how clicks behave, and (editing) undo, redo and Save.
           <>
-            <button
-              type="button"
-              onClick={exitEditing}
-              className="h-10 justify-self-start rounded-[var(--r-full)] bg-surface px-4 text-ui font-medium text-foreground-muted hover:text-foreground"
-            >
-              Exit editing
-            </button>
-            <div role="group" aria-label="Clicking" className="hidden items-center justify-self-center rounded-[var(--r-full)] bg-surface p-0.5 sm:flex">
-              {([false, true] as const).map((use) => (
-                <button
-                  key={String(use)}
-                  type="button"
-                  aria-pressed={interacting === use}
-                  onClick={() => setInteracting(use)}
-                  className={`h-9 rounded-[var(--r-full)] px-3.5 text-ui font-medium ${
-                    interacting === use ? "bg-accent text-accent-foreground" : "text-foreground-muted hover:text-foreground"
-                  }`}
-                >
-                  {use ? "Interact" : "Select"}
-                </button>
-              ))}
+            <IconButton onClick={exitMode} className="justify-self-start">
+              {editing ? "Cancel" : "Exit"}
+            </IconButton>
+            <div className="hidden justify-self-center sm:block">
+              <Toggle
+                label="Clicking"
+                value={interacting ? "interact" : "select"}
+                onChange={(next) => setInteracting(next === "interact")}
+                options={[
+                  { id: "select", label: "Select", showLabel: true },
+                  { id: "interact", label: "Interact", showLabel: true },
+                ]}
+              />
             </div>
             <div className="[grid-column:3] justify-self-end">
-              <EditBar session={session} slug={edit.slug} baseVersionId={edit.versionId} />
+              {editing && edit ? <EditBar session={session} slug={edit.slug} baseVersionId={edit.versionId} /> : null}
             </div>
           </>
         ) : (
           <>
-            {/* On the left, the version and what is about the prototype; in the middle, the phone it is shown on; on the right, what to do with it. */}
+            {/* On the left, the version and how it is looked at; in the middle, the phone it is shown on; on the right, what to do with it. */}
             <div className="flex min-w-0 items-center gap-2 justify-self-start">
               {leading}
-              {url && !showingFlow ? actions : null}
-              {url && controls && !showingFlow ? (
-                <IconButton
-                  label="Controls"
-                  onClick={() => setControlsOpen((open) => !open)}
-                  aria-expanded={controlsOpen}
-                  className={controlsOpen ? "!border-transparent !bg-accent !text-accent-foreground" : ""}
-                >
-                  <SlidersIcon className="size-[1.125rem]" />
+              {url && !showingFlow ? (
+                <Toggle
+                  label="Look"
+                  value={look}
+                  onChange={setLook}
+                  options={[
+                    { id: "design", label: "Design", icon: <SparkleIcon /> },
+                    { id: "wireframe", label: "Wireframe", icon: <WireframeIcon /> },
+                  ]}
+                />
+              ) : null}
+              {url && flow && addressed && !showingFlow ? (
+                <IconButton label="Flow" onClick={() => setFlowOpen(true)}>
+                  <FlowIcon />
                 </IconButton>
               ) : null}
             </div>
@@ -233,29 +236,20 @@ export function PrototypeFrame({
             <div className="hidden justify-self-center sm:block">{showingFlow ? null : center?.({ scale })}</div>
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
-                {flow && addressed ? (
-                  showingFlow ? (
-                    <Button onClick={() => setFlowOpen(false)}>Back to prototype</Button>
-                  ) : (
-                    <IconButton label="Flow" onClick={() => setFlowOpen(true)}>
-                      <FlowIcon className="size-[1.125rem]" />
-                    </IconButton>
-                  )
-                ) : null}
-                {edit && view !== "dev" && !showingFlow ? (
+                {showingFlow ? <IconButton onClick={() => setFlowOpen(false)}>Back to prototype</IconButton> : null}
+                {edit && !showingFlow ? (
                   <span className="hidden sm:block">
-                    <Button onClick={() => setEditingNow(true)}>Edit</Button>
+                    <IconButton onClick={() => onMode("edit")}>Edit</IconButton>
                   </span>
                 ) : null}
-                {showingFlow ? null : <ViewMenu view={view} onChange={setView} canDev={!narrow} />}
-                {githubUrl && !showingFlow ? (
-                  <IconButton label="Open in GitHub" href={githubUrl} external>
-                    <GithubIcon className="size-[1.125rem]" />
+                {showingFlow || narrow ? null : (
+                  <IconButton label="Dev mode" onClick={() => onMode("dev")}>
+                    <CodeIcon />
                   </IconButton>
-                ) : null}
+                )}
                 {showingFlow ? null : (
-                  <IconButton label="Open in a new tab" href={newTab} external tooltipAlign="end">
-                    <ExternalIcon className="size-[1.125rem]" />
+                  <IconButton label="Open in a new window" href={newTab} external tooltipAlign="end">
+                    <ExternalIcon />
                   </IconButton>
                 )}
               </div>
@@ -266,9 +260,7 @@ export function PrototypeFrame({
 
       <div
         ref={stage}
-        // Clicking the tile around the phone lets go of what was picked. A click inside the prototype never reaches here.
-        onClick={() => dev && deselect()}
-        className={`flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 pb-4 [scrollbar-width:thin] sm:pb-16 ${showingFlow ? "invisible" : ""} ${dev ? "sm:pr-[calc(var(--dev-panel-width)+2rem)]" : ""}`}>
+        className={`flex min-h-0 flex-1 overflow-auto px-4 pb-4 [scrollbar-width:thin] sm:pb-16 ${showingFlow ? "invisible" : ""}`}>
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
           className={`relative isolate m-auto shrink-0 overflow-hidden rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${
@@ -276,7 +268,7 @@ export function PrototypeFrame({
           }`}
         >
           {url ? (
-            <FrameBody key={url} url={url} title={title} poster={screen ? undefined : poster} scale={scale} device={device} wireframe={wireframe} inspect={dev ? { ...inspect, picking: editing ? !interacting : picking } : null} />
+            <FrameBody key={url} url={url} title={title} poster={screen ? undefined : poster} scale={scale} device={device} wireframe={wireframe} inspect={dev ? { ...inspect, picking: !interacting } : null} />
           ) : (
             <div className="grid size-full place-items-center">
               <p className="max-w-[30ch] px-6 text-center text-sm leading-[var(--leading-relaxed)] text-foreground-subtle">
@@ -299,28 +291,31 @@ export function PrototypeFrame({
           }}
         />
       ) : null}
+    </div>
 
-      {dev && !showingFlow ? (
-        <div
-          className="absolute right-4 top-[5.5rem] hidden max-h-[calc(100vh-12rem)] w-[var(--dev-panel-width)] overflow-y-auto rounded-[var(--r-xl)] bg-surface p-4 [scrollbar-width:thin] sm:block"
-          style={{ zIndex: "var(--z-base)" }}
-        >
-          {editing && edit ? (
-            <EditPanel element={target?.isConnected ? target : null} session={session} />
-          ) : (
-            <DevPanel picked={here.picked} motion={here.motion} picking={picking} onPicking={setPicking} />
-          )}
-        </div>
-      ) : null}
-
-      {controls && controlsOpen ? (
-        <div
-          className="absolute left-4 top-[5.5rem] max-h-[calc(100%-7rem)] w-72 overflow-y-auto rounded-[var(--r-xl)] bg-surface p-4"
-          style={{ zIndex: "var(--z-base)" }}
-        >
-          {controls}
-        </div>
-      ) : null}
+    {/* Its own panel beside the canvas, as tall as the canvas without making it taller. It stays mounted so it can open and close. */}
+    <div
+      inert={!panelOpen}
+      className={`relative hidden shrink-0 transition-[width,margin,visibility] duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:block ${
+        // Hidden outright once it has gone, not only moved out of sight.
+        panelOpen ? "w-[var(--dev-panel-width)]" : "invisible -ml-4 w-0"
+      }`}
+    >
+      {/* It travels in from the right and fades in as the space opens for it, at the same pace as the left column goes. */}
+      <div
+        className={`absolute inset-y-0 right-0 w-[var(--dev-panel-width)] overflow-y-auto rounded-[var(--r-tile)] bg-tile transition-[translate,opacity] duration-[var(--dur-standard)] ease-[var(--curve-standard)] [scrollbar-width:thin] ${
+          panelOpen ? "" : "translate-x-full opacity-0"
+        }`}
+      >
+        {panelKind === "edit" && edit ? (
+          <EditPanel element={target?.isConnected ? target : null} session={session} />
+        ) : (
+          <div className="p-4">
+            <DevPanel picked={here.picked} motion={here.motion} />
+          </div>
+        )}
+      </div>
+    </div>
     </div>
   );
 }

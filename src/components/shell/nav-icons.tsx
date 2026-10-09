@@ -34,15 +34,6 @@ export function HomeIcon(props: IconProps) {
   );
 }
 
-export function SettingsIcon(props: IconProps) {
-  return (
-    <Frame {...props}>
-      <circle cx="8" cy="8" r="2" />
-      <path d="M6.6 1.75h2.8l.35 1.7c.4.15.77.36 1.1.62l1.65-.55 1.4 2.42-1.3 1.14c.05.21.07.43.07.65s-.02.44-.07.65l1.3 1.14-1.4 2.42-1.65-.55c-.33.26-.7.47-1.1.62l-.35 1.7H6.6l-.35-1.7a4.6 4.6 0 0 1-1.1-.62l-1.65.55-1.4-2.42 1.3-1.14A4.6 4.6 0 0 1 3.33 8c0-.22.02-.44.07-.65l-1.3-1.14 1.4-2.42 1.65.55c.33-.26.7-.47 1.1-.62l.35-1.7Z" />
-    </Frame>
-  );
-}
-
 export function SparkleIcon(props: IconProps) {
   return (
     <Frame {...props}>
@@ -170,6 +161,14 @@ export function WireframeIcon(props: IconProps) {
     <Frame {...props}>
       <rect x="2.75" y="2.75" width="10.5" height="10.5" rx="1.25" strokeDasharray="2 2" />
       <path d="m2.75 11 3-3 2.5 2.5L10 8.5l3.25 3.25" />
+    </Frame>
+  );
+}
+
+export function CodeIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="m5.5 4.5-3.5 3.5 3.5 3.5M10.5 4.5 14 8l-3.5 3.5" />
     </Frame>
   );
 }

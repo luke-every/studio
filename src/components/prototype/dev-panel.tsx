@@ -1,5 +1,6 @@
 "use client";
 
+import { IconButton } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
 import type { MotionSeen, Picked } from "@/lib/inspect";
 
@@ -9,21 +10,14 @@ const heading = "text-sm font-medium text-foreground";
 /**
  * Dev mode's side panel: what the engineer picked in the prototype, as code
  * they can take, and what has moved since they started looking.
- *
- * Pick and prototype are two ways of using the same preview, so there is a
- * switch between them: while picking, a click chooses a part instead of
- * pressing it.
+
  */
 export function DevPanel({
   picked,
   motion,
-  picking,
-  onPicking,
 }: {
   picked: Picked | null;
   motion: MotionSeen[];
-  picking: boolean;
-  onPicking: (on: boolean) => void;
 }) {
   const { notify } = useStudio();
 
@@ -38,22 +32,6 @@ export function DevPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-foreground-muted">{picking ? "Click a part of the prototype" : "Using the prototype"}</p>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={picking}
-          aria-label="Pick parts of the prototype"
-          onClick={() => onPicking(!picking)}
-          className={`flex h-6 w-10 shrink-0 items-center rounded-[var(--r-full)] p-0.5 ${
-            picking ? "justify-end bg-accent" : "justify-start bg-tile"
-          }`}
-        >
-          <span className="size-5 rounded-[var(--r-full)] bg-surface" />
-        </button>
-      </div>
-
       {picked ? (
         <>
           <div className="flex flex-col gap-1">
@@ -67,13 +45,7 @@ export function DevPanel({
           <div className={section}>
             <div className="flex items-center justify-between gap-3">
               <p className={heading}>Code</p>
-              <button
-                type="button"
-                onClick={() => copy(picked.html, "Code copied")}
-                className="rounded-[var(--r-full)] bg-tile px-3 py-1.5 text-sm text-foreground-muted hover:text-foreground"
-              >
-                Copy
-              </button>
+              <IconButton onClick={() => copy(picked.html, "Code copied")}>Copy</IconButton>
             </div>
             <pre className="max-h-64 overflow-auto font-sans rounded-[var(--r-md)] bg-surface-inset p-3 text-xs leading-[var(--leading-relaxed)] text-foreground-muted [scrollbar-width:thin]">
               {picked.html}
@@ -84,13 +56,7 @@ export function DevPanel({
             <div className={section}>
               <div className="flex items-center justify-between gap-3">
                 <p className={heading}>Classes</p>
-                <button
-                  type="button"
-                  onClick={() => copy(picked.classes.join(" "), "Classes copied")}
-                  className="rounded-[var(--r-full)] bg-tile px-3 py-1.5 text-sm text-foreground-muted hover:text-foreground"
-                >
-                  Copy
-                </button>
+                <IconButton onClick={() => copy(picked.classes.join(" "), "Classes copied")}>Copy</IconButton>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {picked.classes.map((name) => (

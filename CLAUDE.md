@@ -153,7 +153,7 @@ not a partition of it, so the team page always lists everything.
   its history. `?v=v0.2` opens a particular version.
 - `/p/<slug>/<version>` — the prototype's own files, outside the door.
 
-Side nav is Home, the search field, Settings, then the teams.
+The top bar is the Test Kitchen wordmark, then Home (a menu of teams) or breadcrumbs, and on the right search, notifications and the user menu. There is no settings page.
 
 Grid is the default arrangement everywhere, with a grid/list switcher whose
 choice is remembered per scope.

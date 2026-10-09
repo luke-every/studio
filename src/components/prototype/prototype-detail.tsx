@@ -8,7 +8,6 @@ import { ZoomMenu } from "@/components/prototype/zoom-menu";
 import { ControlsPanel } from "@/components/prototype/controls-panel";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { PrototypeLinks } from "@/components/prototype/prototype-links";
-import { RemixButton } from "@/components/prototype/remix-button";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
@@ -71,84 +70,108 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // What the prototype offers to adjust, if anything. The choices belong to
   // the version on screen, so switching version starts again from defaults.
   const offered = usePrototypeControls(selected.url);
+  // Editing and dev mode take the page over: the side column steps aside for a panel next to the canvas.
+  const [mode, setMode] = useState<"view" | "dev" | "edit">("view");
   const [picked, setPicked] = useState<{ id: string; values: ControlValues }>({ id: "", values: {} });
   const mine = picked.id === selected.id ? picked.values : {};
   const values = { ...defaultValues(offered), ...mine };
   const address = selected.url ? applyControls(selected.url, offered, values) : undefined;
 
+  // Two columns that always fit the window; whatever is bigger scrolls inside its own column.
   return (
-    <div className="w-full py-8 sm:px-8 sm:py-10">
-      <PrototypeFrame
-        url={address}
-        device={device}
-        zoom={zoom}
-        fit={fit}
-        center={({ scale }) => (
-          <div className="flex items-center gap-2">
-            <DeviceMenu device={device} onChange={chooseDevice} />
-            <ZoomMenu
-              zoom={zoom}
-              fitted={fit ? scale : null}
-              onChange={(next) => {
-                chooseZoom(next);
-                chooseFit(false);
-              }}
-            />
-            <FitButton active={fit} onChange={chooseFit} />
-          </div>
-        )}
-        // The tile's picture is of the default phone and setup, so it is only
-        // the placeholder while the prototype is shown that way.
-        poster={
-          selected.url && address === selected.url && device.id === DEFAULT_DEVICE.id
-            ? `${selected.url}/studio-preview.jpg`
-            : undefined
-        }
-        controls={
-          offered ? (
-            <ControlsPanel
-              controls={offered}
-              values={values}
-              onChange={(id, value) => setPicked({ id: selected.id, values: { ...mine, [id]: value } })}
-            />
-          ) : undefined
-        }
-        edit={{ slug: prototype.slug, versionId: selected.id }}
-        title={`${prototype.name} ${selected.version}`}
-        githubUrl={repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}` : undefined}
-        actions={<RemixButton slug={prototype.slug} version={selected.version} name={prototype.name} />}
-        leading={
-          <VersionMenu
-            versions={prototype.versions}
-            selectedId={selected.id}
-            currentId={prototype.current.id}
-            onSelect={choose}
-            onRename={rename}
-            saving={isSaving("version")}
-          />
-        }
-      />
-
-      <div className="mx-auto mt-8 w-full max-w-[var(--content-width)] px-5 pb-10 sm:px-0">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
-              {prototype.name}
-            </h1>
-            <p className="mt-2 text-base text-foreground-muted">
-              {prototype.owner.name} · Last updated <Stamp iso={prototype.updatedAt} relative />
+    <div className="flex w-full flex-col gap-6 py-4 sm:px-8 lg:gap-4 lg:h-[calc(100dvh-var(--nav-height))] overflow-x-clip lg:flex-row lg:items-stretch">
+      {/* Closing up rather than unmounting, so it slides away as the panel opens beside the canvas. */}
+      <aside
+        inert={mode !== "view"}
+        className={`order-2 min-w-0 px-5 sm:px-0 lg:order-1 lg:flex lg:shrink-0 lg:overflow-hidden lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+          mode === "view" ? "lg:w-[var(--detail-side-width)]" : "invisible max-lg:hidden lg:-mr-4 lg:w-0"
+        }`}
+      >
+      {/* It travels left and fades as the column closes, at the same pace as the panel arrives. */}
+      <div
+        className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:px-4 lg:py-6 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+          mode === "view" ? "" : "lg:-translate-x-full lg:opacity-0"
+        }`}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-start gap-2">
+              <h1 className="min-w-0 flex-1 text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
+                {prototype.name}
+              </h1>
+              <PrototypeMenu prototype={prototype} version={selected.version} />
+            </div>
+            <p className="text-xs text-foreground-subtle">
+              Last updated <Stamp iso={prototype.updatedAt} relative />
             </p>
           </div>
-          <PrototypeMenu prototype={prototype} />
+          <p className="text-base leading-[var(--leading-relaxed)] text-foreground-muted">
+            {prototype.description || "A short description of what this prototype is and the question it is asking will go here."}
+          </p>
         </div>
 
-        <p className="mt-5 text-base leading-[var(--leading-relaxed)] text-foreground-muted">
-          {prototype.description || "A short description of what this prototype is and the question it is asking will go here."}
-        </p>
-
-        <div className="mt-6">
-          <PrototypeLinks prototype={prototype} />
+        {/* The variants, when there are some, in a framed block that fills what is left. */}
+        <div className="min-h-0 flex-1">
+          {offered ? (
+            <div className="max-h-full overflow-y-auto rounded-[var(--r-control)] border border-border p-4 [scrollbar-width:thin]">
+              <ControlsPanel
+                controls={offered}
+                values={values}
+                onChange={(id, value) => setPicked({ id: selected.id, values: { ...mine, [id]: value } })}
+              />
+            </div>
+          ) : null}
         </div>
+
+        <PrototypeLinks
+          prototype={prototype}
+          githubUrl={repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}` : undefined}
+        />
+      </div>
+      </aside>
+
+      <div className="order-1 min-w-0 flex-1 lg:order-2 lg:min-h-0">
+        <PrototypeFrame
+          url={address}
+          device={device}
+          zoom={zoom}
+          fit={fit}
+          center={({ scale }) => (
+            <div className="flex items-center gap-2">
+              <DeviceMenu device={device} onChange={chooseDevice} />
+              <ZoomMenu
+                zoom={zoom}
+                fitted={fit ? scale : null}
+                onChange={(next) => {
+                  chooseZoom(next);
+                  chooseFit(false);
+                }}
+              />
+              <FitButton active={fit} onChange={chooseFit} />
+            </div>
+          )}
+          // The tile's picture is of the default phone and setup, so it is only
+          // the placeholder while the prototype is shown that way.
+          poster={
+            selected.url && address === selected.url && device.id === DEFAULT_DEVICE.id
+              ? `${selected.url}/studio-preview.jpg`
+              : undefined
+          }
+          edit={{ slug: prototype.slug, versionId: selected.id }}
+          mode={mode}
+          onMode={setMode}
+          title={`${prototype.name} ${selected.version}`}
+          leading={
+            <VersionMenu
+              versions={prototype.versions}
+              selectedId={selected.id}
+              currentId={prototype.current.id}
+              onSelect={choose}
+              onRename={rename}
+              saving={isSaving("version")}
+            />
+          }
+        />
       </div>
     </div>
   );

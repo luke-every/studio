@@ -180,6 +180,19 @@
   }
 }
 
+/* bar-in — the top bar's controls give way to another set (looking, editing,
+ * dev mode): the new set settles in from a touch above. */
+@keyframes bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-travel-sm) * -1));
+  }
+}
+
+@utility bar-in {
+  animation: bar-in var(--dur-standard) var(--curve-entrance) both;
+}
+
 @utility layer-scrim {
   animation: layer-scrim var(--dur-standard) var(--curve-entrance) both;
 }

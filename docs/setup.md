@@ -55,7 +55,7 @@ migration step.
 ## Installing /push
 
 **Anyone else**, on their own, with no help: open the studio, tap "Get set up"
-in the corner (it's also in Settings) and paste the one command it shows into
+in the corner (it's also under Setup in the user menu) and paste the one command it shows into
 Terminal:
 
 ```
