@@ -6,7 +6,7 @@ import { linkProblem, type LinkKind } from "@/lib/links";
 
 import { isStoreConfigured, readRegistryDocument, writeRegistryDocument, type RegistryDocument } from "./store";
 import { commitPrototypeVersion, fetchPrototypeFile, verifyPrototypeVersion, versionPrefix } from "./github";
-import { applierScript, describeEdits, mergeEdits, type Edit, type EditsFile } from "@/lib/edits";
+import { applierScript, describeEdits, mergeEdits, variantIdPattern, type Edit, type EditsFile, type EditVariant } from "@/lib/edits";
 import { compareVersions, readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
 import type { PrototypeRecord, VersionRecord } from "./schema";
@@ -329,6 +329,11 @@ export async function saveVersion(
  * `edits.json` (what changed, and which version it was made on), a script
  * that applies it, and any replaced images; the page loads that script.
  * Edits already on the version being edited are kept underneath.
+ *
+ * With `variant`, the edits are not applied to the version itself: they are
+ * kept as a named variant, shown only when the prototype is asked for it. A
+ * variant made while looking at another one (`basedOn`) starts from that one's
+ * edits.
  */
 export async function saveEditedVersion(input: {
   slug: string;
@@ -336,6 +341,7 @@ export async function saveEditedVersion(input: {
   edits: Edit[];
   images: { path: string; content: ArrayBuffer }[];
   by: string;
+  variant?: { id: string; label: string; basedOn?: string };
 }) {
   const document = await load();
   const prototype = document.prototypes.find((item) => item.slug === input.slug);
@@ -354,8 +360,19 @@ export async function saveEditedVersion(input: {
 
   const earlier = await fetchPrototypeFile(slug, segment, ["edits.json"], null);
   const before = earlier ? ((await earlier.json().catch(() => null)) as EditsFile | null) : null;
-  const edits = mergeEdits(before?.edits ?? [], input.edits);
-  const file: EditsFile = { base: base.label ?? base.version, edits };
+  const variants: EditVariant[] = before?.variants ?? [];
+  let edits = before?.edits ?? [];
+  let added: EditVariant | null = null;
+  if (input.variant) {
+    const { id, label, basedOn } = input.variant;
+    if (!variantIdPattern.test(id) || !label.trim()) throw new StoreError("Give the variant a name.");
+    if (variants.some((item) => item.id === id)) throw new StoreError("There is already a variant with that name.");
+    added = { id, label: label.trim(), edits: mergeEdits(variants.find((item) => item.id === basedOn)?.edits ?? [], input.edits) };
+  } else {
+    edits = mergeEdits(edits, input.edits);
+  }
+  const allVariants = added ? [...variants, added] : variants;
+  const file: EditsFile = { base: base.label ?? base.version, edits, ...(allVariants.length ? { variants: allVariants } : {}) };
 
   const tag = '<script src="studio-edits.js"></script>';
   const page = html.includes("studio-edits.js")
@@ -369,7 +386,7 @@ export async function saveEditedVersion(input: {
     version,
     [
       { path: "index.html", content: page },
-      { path: "studio-edits.js", content: applierScript(edits) },
+      { path: "studio-edits.js", content: applierScript(edits, allVariants) },
       { path: "edits.json", content: `${JSON.stringify(file, null, 2)}\n` },
       ...input.images,
     ],
@@ -382,8 +399,8 @@ export async function saveEditedVersion(input: {
       name: prototype.name,
       slug,
       version,
-      title: "Visual edits",
-      changes: describeEdits(input.edits),
+      title: added ? `Variant: ${added.label}` : "Visual edits",
+      changes: added ? `Added the variant “${added.label}”. ${describeEdits(input.edits)}`.trim() : describeEdits(input.edits),
       by: input.by,
     },
     entryUrl,

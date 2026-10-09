@@ -17,7 +17,16 @@ export type Edit =
   /** `src` is a path inside the version's own folder. */
   | { kind: "image"; selector: string; src: string };
 
-export type EditsFile = { base: string; edits: Edit[] };
+/** A named set of edits that is only shown when asked for, so the version itself stays as it was. */
+export type EditVariant = { id: string; label: string; edits: Edit[] };
+
+/** `edits` are always applied; each variant's are applied on top while it is the one asked for. */
+export type EditsFile = { base: string; edits: Edit[]; variants?: EditVariant[] };
+
+/** The address parameter that asks a prototype for one of its variants. */
+export const VARIANT_PARAM = "studio-variant";
+
+export const variantIdPattern = /^[a-z0-9-]{1,48}$/;
 
 /** What the server accepts: these end up in a stylesheet and a script inside the prototype. */
 export const editsSchema = z.array(
@@ -67,8 +76,11 @@ export function describeEdits(edits: Edit[]) {
  * copy and images are put back whenever the page changes underneath them.
  * An element that is no longer there is skipped, never an error.
  */
-export function applierScript(edits: Edit[]) {
-  return `(function (edits) {
+export function applierScript(always: Edit[], variants: EditVariant[] = []) {
+  return `(function (always, variants) {
+  var asked = new URLSearchParams(location.search).get(${JSON.stringify(VARIANT_PARAM)});
+  var chosen = variants.filter(function (v) { return v.id === asked; })[0];
+  var edits = chosen ? always.concat(chosen.edits) : always;
   var rules = edits.filter(function (e) { return e.kind === "style"; }).map(function (e) {
     return e.selector + "{" + Object.keys(e.css).map(function (p) { return p + ":" + e.css[p] + " !important"; }).join(";") + "}";
   }).join("\\n");
@@ -105,6 +117,6 @@ export function applierScript(edits: Edit[]) {
   apply();
   document.addEventListener("DOMContentLoaded", apply);
   new MutationObserver(soon).observe(document.documentElement, { childList: true, subtree: true });
-})(${JSON.stringify(edits)});
+})(${JSON.stringify(always)}, ${JSON.stringify(variants)});
 `;
 }

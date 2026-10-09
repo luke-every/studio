@@ -123,6 +123,13 @@ export async function saveEdits(form: FormData) {
         edits,
         images,
         by: String(form.get("by") ?? ""),
+        variant: form.get("variantLabel")
+          ? {
+              id: String(form.get("variantId") ?? ""),
+              label: String(form.get("variantLabel")).slice(0, 60),
+              basedOn: String(form.get("variantBasedOn") ?? "") || undefined,
+            }
+          : undefined,
       }),
     ["/"],
   );

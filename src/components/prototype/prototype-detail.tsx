@@ -5,13 +5,15 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { DeviceMenu } from "@/components/prototype/device-menu";
 import { FitButton } from "@/components/prototype/fit-button";
 import { ZoomMenu } from "@/components/prototype/zoom-menu";
-import { ControlsPanel } from "@/components/prototype/controls-panel";
+import { ControlsPanel, VariantPicker } from "@/components/prototype/controls-panel";
+import { useVersionVariants } from "@/components/prototype/use-version-variants";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { PrototypeLinks } from "@/components/prototype/prototype-links";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { applyControls, defaultValues, type ControlValues } from "@/lib/controls";
+import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
 import { DEFAULT_DEVICE } from "@/lib/phone";
 import { useDevice, useFit, useZoom } from "@/lib/use-device";
@@ -35,7 +37,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
   const [fit, chooseFit] = useFit();
-  const fromUrl = useUrlVersion();
+  const fromUrl = useUrlParam("v");
+  const variantFromUrl = useUrlParam("variant");
   // Chosen by id, so renaming a version doesn't lose it.
   const [chosenId, setChosenId] = useState<string | null>(null);
 
@@ -59,6 +62,11 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
   const choose = (version: PrototypeVersion) => {
     setChosenId(version.id);
+    // A variant belongs to the version it was made on.
+    setVariantChoice({ id: version.id, variant: null });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("variant");
+    window.history.replaceState(null, "", url);
     showInAddressBar(version);
   };
 
@@ -75,7 +83,21 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const [picked, setPicked] = useState<{ id: string; values: ControlValues }>({ id: "", values: {} });
   const mine = picked.id === selected.id ? picked.values : {};
   const values = { ...defaultValues(offered), ...mine };
-  const address = selected.url ? applyControls(selected.url, offered, values) : undefined;
+  // Variants made in the studio for this version, and the one being shown: the choice, else the address bar's, else none.
+  const variants = useVersionVariants(selected.url);
+  const [variantChoice, setVariantChoice] = useState<{ id: string; variant: string | null } | null>(null);
+  const asked = variantChoice?.id === selected.id ? variantChoice.variant : variantFromUrl;
+  const variant = variants.find((item) => item.id === asked)?.id ?? null;
+  const chooseVariant = (next: string | null) => {
+    setVariantChoice({ id: selected.id, variant: next });
+    const url = new URL(window.location.href);
+    if (next) url.searchParams.set("variant", next);
+    else url.searchParams.delete("variant");
+    window.history.replaceState(null, "", url);
+  };
+
+  const controlled = selected.url ? applyControls(selected.url, offered, values) : undefined;
+  const address = controlled && variant ? `${controlled}${controlled.includes("?") ? "&" : "?"}${VARIANT_PARAM}=${variant}` : controlled;
 
   // Two columns that always fit the window; whatever is bigger scrolls inside its own column.
   return (
@@ -112,13 +134,16 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
         {/* The variants, when there are some, in a framed block that fills what is left. */}
         <div className="min-h-0 flex-1">
-          {offered ? (
-            <div className="max-h-full overflow-y-auto rounded-[var(--r-control)] border border-border p-4 [scrollbar-width:thin]">
-              <ControlsPanel
-                controls={offered}
-                values={values}
-                onChange={(id, value) => setPicked({ id: selected.id, values: { ...mine, [id]: value } })}
-              />
+          {offered || variants.length ? (
+            <div className="flex max-h-full flex-col gap-6 overflow-y-auto rounded-[var(--r-control)] border border-border p-4 [scrollbar-width:thin]">
+              {variants.length ? <VariantPicker variants={variants} value={variant} onChange={chooseVariant} /> : null}
+              {offered ? (
+                <ControlsPanel
+                  controls={offered}
+                  values={values}
+                  onChange={(id, value) => setPicked({ id: selected.id, values: { ...mine, [id]: value } })}
+                />
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -157,7 +182,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               ? `${selected.url}/studio-preview.jpg`
               : undefined
           }
-          edit={{ slug: prototype.slug, versionId: selected.id }}
+          edit={{ slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
           mode={mode}
           onMode={setMode}
           title={`${prototype.name} ${selected.version}`}
@@ -178,7 +203,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 }
 
 /**
- * Which version the address bar is asking for.
+ * Which version (or variant) the address bar is asking for.
  *
  * Read as an external store rather than with useSearchParams, which would
  * force this page out of prerendering and put a server round trip in front
@@ -186,7 +211,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
  * the current version and corrects itself on hydration if a link asked for
  * another one.
  */
-function useUrlVersion() {
+function useUrlParam(name: string) {
   const subscribe = useCallback((listener: () => void) => {
     window.addEventListener("popstate", listener);
     return () => window.removeEventListener("popstate", listener);
@@ -194,7 +219,7 @@ function useUrlVersion() {
 
   return useSyncExternalStore(
     subscribe,
-    () => new URLSearchParams(window.location.search).get("v"),
+    () => new URLSearchParams(window.location.search).get(name),
     () => null,
   );
 }

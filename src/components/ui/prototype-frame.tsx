@@ -64,7 +64,7 @@ export function PrototypeFrame({
   /** A picture of the prototype, shown while the real one loads. */
   poster?: string;
   /** Which version edits are made on. Without it there is no Edit mode. */
-  edit?: { slug: string; versionId: string };
+  edit?: { slug: string; versionId: string; variantId?: string };
   /** Looking, editing or in dev mode. The last two replace the bar and bring a panel of their own. */
   mode: "view" | "dev" | "edit";
   onMode: (mode: "view" | "dev" | "edit") => void;
@@ -126,7 +126,12 @@ export function PrototypeFrame({
       // dropdown, a tick) holds one value that is committed as it changes, so ⌘Z there undoes the edit it made.
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || target.tagName === "TEXTAREA")) return;
-      if (target && ["INPUT", "SELECT"].includes(target.tagName)) target.blur();
+      if (target && ["INPUT", "SELECT"].includes(target.tagName)) {
+        // Only ⌘Z and ⌘Y are ours, and not in a field where a name is being typed.
+        const undoKey = (event.metaKey || event.ctrlKey) && ["z", "y"].includes(event.key.toLowerCase());
+        if (!undoKey || target.closest("[data-native-undo]")) return;
+        target.blur();
+      }
       hotkeyRef.current(event);
     };
     window.addEventListener("keydown", listen);
@@ -207,7 +212,7 @@ export function PrototypeFrame({
               />
             </div>
             <div className="[grid-column:3] justify-self-end">
-              {editing && edit ? <EditBar session={session} slug={edit.slug} baseVersionId={edit.versionId} /> : null}
+              {editing && edit ? <EditBar session={session} slug={edit.slug} baseVersionId={edit.versionId} variantId={edit.variantId} /> : null}
             </div>
           </>
         ) : (

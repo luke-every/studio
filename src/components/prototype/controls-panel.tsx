@@ -55,3 +55,35 @@ export function ControlsPanel({
     </div>
   );
 }
+
+/** The variants made in the studio: the version as it is, and each named set of edits to show on top of it. */
+export function VariantPicker({
+  variants,
+  value,
+  onChange,
+}: {
+  variants: { id: string; label: string }[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const options = [{ id: null, label: "Baseline" }, ...variants];
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-base text-foreground">Variants</p>
+      <div role="radiogroup" aria-label="Variants" className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <IconButton
+            key={option.id ?? "baseline"}
+            role="radio"
+            aria-checked={value === option.id}
+            onClick={() => onChange(option.id)}
+            className={value === option.id ? controlOn : ""}
+          >
+            {option.label}
+          </IconButton>
+        ))}
+      </div>
+    </div>
+  );
+}
