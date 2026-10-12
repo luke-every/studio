@@ -265,7 +265,7 @@ export function FlowCanvas({
     if (!screen || !doc?.body) return;
     const spot = at(screen.id);
     comments.onFocus(null);
-    setDraft({ screenId: screen.id, anchor: anchorAt(doc, (world.x - spot.x) / SCREEN_SCALE, (world.y - spot.y) / SCREEN_SCALE) });
+    setDraft({ screenId: screen.id, anchor: { ...anchorAt(doc, (world.x - spot.x) / SCREEN_SCALE, (world.y - spot.y) / SCREEN_SCALE), flowScreen: screen.id } });
   };
   // Where a spot inside a screen is, on the canvas as it is now and in the window.
   const onCanvas = (screenId: string, spot: Spot) => toScreen(at(screenId).x + spot.x * SCREEN_SCALE, at(screenId).y + spot.y * SCREEN_SCALE);
@@ -440,6 +440,7 @@ export function FlowCanvas({
           onClose={() => comments?.onFocus(null)}
           onReply={comments!.onReply}
           onResolve={comments!.onResolve}
+          onDelete={comments!.onDelete}
         />
       ) : null}
       {draft && draftAt && comments ? (

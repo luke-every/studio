@@ -10,6 +10,7 @@ import { IconButton } from "@/components/ui/button";
 import { Breadcrumbs } from "./breadcrumbs";
 import { MobileMenu } from "./mobile-menu";
 import { EditProfileModal } from "./profile-modal";
+import { SettingsDialog } from "./settings-dialog";
 import { BellIcon, SearchIcon } from "./nav-icons";
 import { SearchDialog } from "./search-dialog";
 import { TeamMenu, TeamRow } from "./team-menu";
@@ -28,9 +29,10 @@ export function TopNav({ onSwitchUser }: { onSwitchUser: () => void }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-[var(--z-sticky)] bg-background">
+    <header className="sticky top-0 z-[var(--z-sticky)] bg-background lg:transition-[translate,margin] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] lg:in-data-fullscreen:-mt-[var(--nav-height)] lg:in-data-fullscreen:-translate-y-full">
       <div className="flex h-[var(--nav-height)] items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-4 justify-self-start">
           <Link href="/" className="shrink-0 text-md font-medium tracking-[var(--tracking-tight)] text-foreground">
@@ -46,10 +48,10 @@ export function TopNav({ onSwitchUser }: { onSwitchUser: () => void }) {
           <IconButton label="Notifications" variant="ghost" tooltipAlign="end">
             <BellIcon className="size-[1.125rem]" />
           </IconButton>
-          <UserMenu onSwitch={onSwitchUser} onSetup={() => setSetupOpen(true)} onEditProfile={() => setProfileOpen(true)} />
+          <UserMenu onSwitch={onSwitchUser} onSetup={() => setSetupOpen(true)} onSettings={() => setSettingsOpen(true)} onEditProfile={() => setProfileOpen(true)} />
         </nav>
         <div className="sm:hidden">
-          <MobileMenu onSearch={() => setSearchOpen(true)} onSetup={() => setSetupOpen(true)} onSwitch={onSwitchUser} onEditProfile={() => setProfileOpen(true)} />
+          <MobileMenu onSearch={() => setSearchOpen(true)} onSetup={() => setSetupOpen(true)} onSettings={() => setSettingsOpen(true)} onSwitch={onSwitchUser} onEditProfile={() => setProfileOpen(true)} />
         </div>
       </div>
 
@@ -57,6 +59,7 @@ export function TopNav({ onSwitchUser }: { onSwitchUser: () => void }) {
       <div className="px-4 pb-2 empty:hidden sm:hidden">{pathname === "/" ? <TeamRow /> : <Breadcrumbs />}</div>
 
       <SetupDialog open={setupOpen} onClose={() => setSetupOpen(false)} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <EditProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <SearchDialog open={searchOpen} onOpen={() => setSearchOpen(true)} onClose={() => setSearchOpen(false)} />
     </header>

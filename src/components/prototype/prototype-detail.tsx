@@ -106,21 +106,43 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const [flowOpen, setFlowOpen] = useState(false);
   const showingFlow = flowOpen && !!flow && !!address;
   const side = mode === "view" && !showingFlow;
+  // Full screen: the nav and the side column go, the prototype fills the window, and the column slides back in while the pointer is at the left edge.
+  const [focus, setFocus] = useState(false);
+  const [peek, setPeek] = useState(false);
+  const away = focus && !peek;
+  // The nav is the shell's, so it is told through the document: it slides up out of the way while the page below grows into its place.
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-fullscreen", focus);
+    return () => document.documentElement.removeAttribute("data-fullscreen");
+  }, [focus]);
 
   // Two columns that always fit the window; whatever is bigger scrolls inside its own column.
   return (
-    <div className="flex w-full flex-col gap-6 py-4 sm:px-8 lg:gap-4 lg:h-[calc(100dvh-var(--nav-height))] overflow-x-clip lg:flex-row lg:items-stretch">
+    <div
+      className={`flex w-full flex-col gap-6 py-4 sm:px-8 lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:flex-row lg:items-stretch ${
+        focus ? "lg:h-dvh lg:px-4" : "lg:h-[calc(100dvh-var(--nav-height))]"
+      }`}
+    >
+      {focus ? (
+        <div aria-hidden onPointerEnter={() => setPeek(true)} className="fixed inset-y-0 left-0 z-[var(--z-focus-mode)] w-3 max-lg:hidden" />
+      ) : null}
       {/* Closing up rather than unmounting, so it slides away as the panel opens beside the canvas. */}
       <aside
-        inert={!side}
-        className={`order-2 min-w-0 px-5 sm:px-0 lg:order-1 lg:flex lg:shrink-0 lg:overflow-hidden lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
-          side ? "lg:w-[var(--detail-side-width)]" : "invisible max-lg:hidden lg:-mr-4 lg:w-0"
+        inert={focus ? away : !side}
+        onPointerLeave={() => setPeek(false)}
+        className={`order-2 min-w-0 px-5 sm:px-0 lg:relative lg:order-1 lg:flex lg:shrink-0 lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+          side && !focus
+            ? "lg:w-[var(--detail-side-width)] lg:overflow-hidden"
+            : focus
+              ? // Closed up like any other mode, but its panel stays drawn so it can come back over the prototype.
+                "lg:z-[var(--z-focus-mode)] lg:-mr-4 lg:w-0 lg:[transform:translateZ(0)] lg:[&>div]:border lg:[&>div]:border-border"
+              : "invisible max-lg:hidden lg:-mr-4 lg:w-0 lg:overflow-hidden"
         }`}
       >
       {/* It travels left and fades as the column closes, at the same pace as the panel arrives. */}
       <div
         className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:rounded-[var(--r-tile)] lg:bg-tile lg:p-6 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
-          side ? "" : "lg:-translate-x-full lg:opacity-0"
+          (focus ? !away : side) ? "" : "lg:-translate-x-full lg:opacity-0"
         }`}
       >
         <div className="flex flex-col gap-4">
@@ -191,6 +213,11 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           onFlowOpen={setFlowOpen}
           mode={mode}
           onMode={setMode}
+          fullscreen={focus}
+          onFullscreen={(next) => {
+            setFocus(next);
+            setPeek(false);
+          }}
           title={`${prototype.name} ${selected.version}`}
           leading={
             <VersionMenu

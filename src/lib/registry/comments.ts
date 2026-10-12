@@ -85,3 +85,29 @@ export async function setResolved(input: { slug: string; version: string; id: st
   );
   return next;
 }
+
+/** Records which flow screen a comment is on, found after it was left. Only ever fills it in; the anchor is otherwise kept as it is. */
+export async function setFlowScreen(input: { slug: string; version: string; id: string; flowScreen: string }) {
+  const comments = await load(input.slug, input.version);
+  const found = comments.find((item) => item.id === input.id);
+  if (!found) throw new Error("That comment isn't there any more.");
+  const next: Comment = { ...found, anchor: anchorSchema.parse({ ...found.anchor, flowScreen: input.flowScreen }) };
+  await save(
+    input.slug,
+    input.version,
+    comments.map((item) => (item.id === next.id ? next : item)),
+    `Place comment #${found.n} on ${input.slug} ${input.version}`,
+  );
+  return next;
+}
+
+/** Takes a comment away, and the replies that answer it. */
+export async function removeComment(input: { slug: string; version: string; id: string }) {
+  const comments = await load(input.slug, input.version);
+  const found = comments.find((item) => item.id === input.id);
+  if (!found) throw new Error("That comment isn't there any more.");
+  // A reply goes one level deep, so what answers a comment is everything pointing at it.
+  const left = comments.filter((item) => item.id !== found.id && item.parentId !== found.id);
+  await save(input.slug, input.version, left, `Delete comment #${found.n} on ${input.slug} ${input.version}`);
+  return found.id;
+}

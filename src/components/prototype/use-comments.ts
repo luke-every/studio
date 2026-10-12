@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import type { Anchor, Comment } from "@/lib/comments";
-import { addComment, listComments, resolveComment } from "@/lib/registry/actions";
+import { addComment, deleteComment, listComments, resolveComment, setCommentScreen } from "@/lib/registry/actions";
 
 const SHOW_KEY = "proto.show-comments";
 const showListeners = new Set<() => void>();
@@ -40,7 +40,7 @@ export function useShowComments() {
 /**
  * The comments on one version. Read when it is opened and again whenever the
  * window is come back to, which is how somebody else's show up without a
- * refresh. Nothing is deleted, so a list only ever grows or gets resolved.
+ * refresh. A list grows, and comments get resolved or deleted.
  */
 export function useComments(slug: string | undefined, version: string | undefined, by: string) {
   const target = slug && version ? { slug, version } : undefined;
@@ -68,16 +68,24 @@ export function useComments(slug: string | undefined, version: string | undefine
   const replace = (next: Comment) =>
     setLoaded((now) => (now && now.key === key ? { key, list: now.list.map((item) => (item.id === next.id ? next : item)) } : now));
 
+  /** Posts a comment; the comment, or null if it couldn't be saved. */
   const add = async (text: string, anchor: Anchor) => {
-    if (!target) return false;
+    if (!target) return null;
     const result = await addComment({ ...target, text, anchor, by });
     if (!result.ok) {
       setError(result.error);
-      return false;
+      return null;
     }
     setError(null);
     setLoaded((now) => ({ key, list: [...(now && now.key === key ? now.list : []), result.value] }));
-    return true;
+    return result.value;
+  };
+
+  /** Notes which flow screen a comment is on, so going to it next time needs no looking. */
+  const place = async (comment: Comment, flowScreen: string) => {
+    if (!target || comment.anchor.flowScreen === flowScreen) return;
+    const result = await setCommentScreen({ ...target, id: comment.id, flowScreen });
+    if (result.ok) replace(result.value);
   };
 
   const reply = async (parent: Comment, text: string) => {
@@ -99,10 +107,22 @@ export function useComments(slug: string | undefined, version: string | undefine
     else setError(result.error);
   };
 
+  const remove = async (comment: Comment) => {
+    if (!target) return;
+    const result = await deleteComment({ ...target, id: comment.id });
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setLoaded((now) =>
+      now && now.key === key ? { key, list: now.list.filter((item) => item.id !== comment.id && item.parentId !== comment.id) } : now,
+    );
+  };
+
   // Comments are what has pins and rows; a reply belongs to the comment it answers.
   const all = loaded && loaded.key === key ? loaded.list : [];
   const replies: Record<string, Comment[]> = {};
   for (const item of all) if (item.parentId) (replies[item.parentId] ??= []).push(item);
 
-  return { comments: all.filter((item) => !item.parentId), replies, error, add, reply, resolve };
+  return { comments: all.filter((item) => !item.parentId), replies, error, add, place, reply, resolve, remove };
 }

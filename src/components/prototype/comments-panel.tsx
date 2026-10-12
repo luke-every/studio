@@ -6,7 +6,7 @@ import { UserAvatar } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
 import type { Comment } from "@/lib/comments";
 
-import { Replies, ResolveToggle } from "./comment-parts";
+import { CommentActions } from "./comment-parts";
 
 type Show = "open" | "resolved" | "all";
 
@@ -20,20 +20,26 @@ export function CommentsPanel({
   selectedId,
   error,
   onSelect,
-  onReply,
   onResolve,
+  onDelete,
 }: {
   comments: Comment[];
   replies: Record<string, Comment[]>;
   selectedId: string | null;
   error: string | null;
   onSelect: (comment: Comment) => void;
-  onReply: (parent: Comment, text: string) => Promise<boolean>;
   onResolve: (comment: Comment, resolved: boolean) => void;
+  onDelete: (comment: Comment) => void;
 }) {
   const [show, setShow] = useState<Show>("open");
   const shown = comments
-    .filter((comment) => (show === "all" ? true : show === "resolved" ? comment.resolvedAt : !comment.resolvedAt))
+    .filter((comment) =>
+      show === "all"
+        ? true
+        : show === "resolved"
+          ? comment.resolvedAt
+          : !comment.resolvedAt,
+    )
     .toReversed();
 
   return (
@@ -48,7 +54,9 @@ export function CommentsPanel({
               aria-pressed={show === option}
               onClick={() => setShow(option)}
               className={`rounded-[var(--r-full)] px-2.5 py-1 text-xs capitalize transition-colors duration-[var(--dur-fast)] ${
-                show === option ? "bg-accent text-accent-foreground" : "text-foreground-muted hover:bg-surface-hover"
+                show === option
+                  ? "bg-accent text-accent-foreground"
+                  : "text-foreground-muted hover:bg-surface-hover"
               }`}
             >
               {option}
@@ -62,13 +70,19 @@ export function CommentsPanel({
       {shown.length ? (
         <ul className="flex flex-col">
           {shown.map((comment) => (
-            <li key={comment.id} className="border-t border-divider first:border-t-0">
+            <li
+              key={comment.id}
+              className="border-t border-divider first:border-t-0"
+            >
               <div
                 role="button"
                 tabIndex={0}
                 onClick={() => onSelect(comment)}
                 onKeyDown={(event) => {
-                  if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                  if (
+                    event.target === event.currentTarget &&
+                    (event.key === "Enter" || event.key === " ")
+                  ) {
                     event.preventDefault();
                     onSelect(comment);
                   }
@@ -77,18 +91,34 @@ export function CommentsPanel({
                   selectedId === comment.id ? "bg-surface-inset" : ""
                 }`}
               >
-                <p className="flex items-center gap-1.5 text-xs text-foreground-subtle">
-                  #{comment.n}
-                  <UserAvatar name={comment.author.name} className="size-5" />
-                  <span className="text-foreground-muted">{comment.author.name}</span>
-                  <span aria-hidden>·</span>
-                  <ResolveToggle resolved={!!comment.resolvedAt} onToggle={() => onResolve(comment, !comment.resolvedAt)} />
-                  <Stamp iso={comment.at} relative />
+                <CommentActions
+                  comment={comment}
+                  onResolve={onResolve}
+                  onDelete={onDelete}
+                  bleed="-mx-2 px-2"
+                />
+                <p className="flex items-center justify-between gap-3 text-xs text-foreground-subtle">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <UserAvatar name={comment.author.name} className="size-5" />
+                    <span className="truncate text-foreground-muted">
+                      {comment.author.name}
+                    </span>
+                  </span>
+                  <span className="shrink-0">
+                    <Stamp iso={comment.at} relative />
+                  </span>
                 </p>
-                <p className={`whitespace-pre-wrap text-sm leading-[var(--leading-relaxed)] ${comment.resolvedAt ? "text-foreground-subtle" : "text-foreground"}`}>
+                <p
+                  className={`whitespace-pre-wrap py-2 text-base leading-[var(--leading-relaxed)] ${comment.resolvedAt ? "text-foreground-subtle" : "text-foreground"}`}
+                >
                   {comment.text}
                 </p>
-                <Replies replies={replies[comment.id] ?? []} onReply={(text) => onReply(comment, text)} />
+                {replies[comment.id]?.length ? (
+                  <p className="text-ui font-medium text-foreground-muted">
+                    {replies[comment.id].length}{" "}
+                    {replies[comment.id].length === 1 ? "reply" : "replies"}
+                  </p>
+                ) : null}
               </div>
             </li>
           ))}

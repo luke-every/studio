@@ -145,6 +145,24 @@ export async function addComment(input: Parameters<typeof comments.addComment>[0
   return attempt(() => comments.addComment(input), []);
 }
 
+export async function setCommentScreen(input: Parameters<typeof comments.setFlowScreen>[0]) {
+  return attempt(() => comments.setFlowScreen(input), []);
+}
+
+export async function deleteComment(input: Parameters<typeof comments.removeComment>[0]) {
+  return attempt(() => comments.removeComment(input), []);
+}
+
 export async function resolveComment(input: Parameters<typeof comments.setResolved>[0]) {
   return attempt(() => comments.setResolved(input), []);
+}
+
+/**
+ * The studio's password, for the setup guide to show to someone already inside.
+ * It is asked for rather than written into the page, so it stays out of the code
+ * that is sent to everyone and follows the password if it changes.
+ */
+export async function studioPassword() {
+  if (!(await isUnlocked())) return "";
+  return process.env.STUDIO_PASSWORD?.trim() ?? "";
 }

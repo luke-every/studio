@@ -20,6 +20,8 @@ export const anchorSchema = z.object({
   text: z.string().max(80).optional(),
   /** What the page was saying when it was left (see `pageKey`): the step of a flow, which the address alone doesn't tell apart. */
   page: z.string().max(80).optional(),
+  /** Which screen of the prototype's flow it was left on, when it has one: opening it goes straight there. */
+  flowScreen: z.string().max(80).optional(),
   /** The point inside that element, 0 to 1 across and down. */
   x: z.number().min(0).max(1),
   y: z.number().min(0).max(1),

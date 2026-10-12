@@ -4,7 +4,19 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 
 import type { Anchor } from "@/lib/comments";
 
-import { anchorAt, Card, CommentCard, Composer, DraftPin, elementOf, pageKey, Pin, spotOf, type CommentsUi, type Spot } from "./comment-parts";
+import {
+  anchorAt,
+  Card,
+  CommentCard,
+  Composer,
+  DraftPin,
+  elementOf,
+  pageKey,
+  Pin,
+  spotOf,
+  type CommentsUi,
+  type Spot,
+} from "./comment-parts";
 
 /**
  * Comments over a prototype: the pins, the card for the one that is open, and
@@ -16,8 +28,28 @@ import { anchorAt, Card, CommentCard, Composer, DraftPin, elementOf, pageKey, Pi
  * screen, so they follow it as it scrolls, resizes or moves things about; a
  * state is only set when somebody's pin actually moved.
  */
-export function CommentLayer({ frame, scale, comments: ui }: { frame: RefObject<HTMLIFrameElement | null>; scale: number; comments: CommentsUi }) {
-  const { list: comments, replies, visible, placing, focus, onFocus, onAdd, onReply, onResolve } = ui;
+export function CommentLayer({
+  frame,
+  scale,
+  comments: ui,
+}: {
+  frame: RefObject<HTMLIFrameElement | null>;
+  scale: number;
+  comments: CommentsUi;
+}) {
+  const {
+    list: comments,
+    replies,
+    visible,
+    placing,
+    focus,
+    onFocus,
+    onLocate,
+    onAdd,
+    onReply,
+    onResolve,
+    onDelete,
+  } = ui;
 
   const [draft, setDraft] = useState<Anchor | null>(null);
   const [spots, setSpots] = useState<Record<string, Spot>>({});
@@ -25,8 +57,10 @@ export function CommentLayer({ frame, scale, comments: ui }: { frame: RefObject<
   const [origin, setOrigin] = useState({ left: 0, top: 0 });
   const root = useRef<HTMLDivElement>(null);
   const latest = useRef(comments);
+  const locate = useRef(onLocate);
   useEffect(() => {
     latest.current = comments;
+    locate.current = onLocate;
   });
 
   // Leaving comment mode drops a comment that was never posted.
@@ -71,21 +105,56 @@ export function CommentLayer({ frame, scale, comments: ui }: { frame: RefObject<
     const win = element?.contentWindow;
     if (!comment || !element || !win) return;
 
+    let check = 0;
     const reveal = () => {
       const doc = element.contentDocument;
       if (!doc) return;
       const target = elementOf(doc, comment.anchor);
-      if (target) target.scrollIntoView({ block: "nearest", inline: "nearest" });
-      else if (!comment.anchor.selector) win.scrollTo(0, comment.anchor.fy * doc.documentElement.scrollHeight - win.innerHeight / 2);
+      // Not on this screen at all: it is on another step, so ask for that one straight away rather than waiting to see.
+      if (comment.anchor.selector && !target) {
+        locate.current?.(comment);
+        return;
+      }
+      if (target) target.scrollIntoView({ block: "center", inline: "center" });
+      else
+        win.scrollTo(
+          0,
+          comment.anchor.fy * doc.documentElement.scrollHeight -
+            win.innerHeight / 2,
+        );
+      // There, but not as it was (another step drawn the same way): once it has settled, ask for the screen that has it.
+      check = window.setTimeout(() => {
+        const now = element.contentDocument;
+        if (now && !spotOf(now, comment.anchor)) locate.current?.(comment);
+      }, 350);
     };
 
-    if (win.location.pathname === comment.anchor.screen) {
-      reveal();
-      return;
-    }
-    element.addEventListener("load", reveal, { once: true });
-    win.location.assign(comment.anchor.screen);
-    return () => element.removeEventListener("load", reveal);
+    // A frame that is still loading has no address to compare yet.
+    // Ready once its markup is in, without waiting for its images: a frame that has only just been given its address is
+    // still on a blank page, or still reading, and is looked at again in a moment.
+    let wait = 0;
+    const start = () => {
+      if (
+        win.location.href === "about:blank" ||
+        element.contentDocument?.readyState === "loading"
+      ) {
+        wait = window.setTimeout(start, 30);
+        return;
+      }
+      if (win.location.pathname === comment.anchor.screen) {
+        reveal();
+        return;
+      }
+      element.addEventListener("load", reveal, { once: true });
+      win.location.assign(comment.anchor.screen);
+    };
+
+    start();
+    return () => {
+      window.clearTimeout(check);
+      window.clearTimeout(wait);
+      element.removeEventListener("load", reveal);
+    };
   }, [focus, frame]);
 
   const place = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -93,15 +162,33 @@ export function CommentLayer({ frame, scale, comments: ui }: { frame: RefObject<
     if (!doc?.body) return;
     const box = event.currentTarget.getBoundingClientRect();
     onFocus(null);
-    setDraft(anchorAt(doc, (event.clientX - box.left) / scale, (event.clientY - box.top) / scale));
+    setDraft(
+      anchorAt(
+        doc,
+        (event.clientX - box.left) / scale,
+        (event.clientY - box.top) / scale,
+      ),
+    );
   };
 
   const open = comments.find((item) => item.id === focus?.id);
-  const windowAt = (spot: Spot) => ({ left: origin.left + spot.x * scale, top: origin.top + spot.y * scale });
+  const windowAt = (spot: Spot) => ({
+    left: origin.left + spot.x * scale,
+    top: origin.top + spot.y * scale,
+  });
 
   return (
-    <div ref={root} className="pointer-events-none absolute inset-0" style={{ zIndex: "var(--z-raised)" }}>
-      {placing ? <div onClick={place} className="pointer-events-auto absolute inset-0 cursor-crosshair" /> : null}
+    <div
+      ref={root}
+      className="pointer-events-none absolute inset-0"
+      style={{ zIndex: "var(--z-raised)" }}
+    >
+      {placing ? (
+        <div
+          onClick={place}
+          className="pointer-events-auto absolute inset-0 cursor-crosshair"
+        />
+      ) : null}
 
       {visible
         ? comments.map((comment) => {
@@ -114,14 +201,24 @@ export function CommentLayer({ frame, scale, comments: ui }: { frame: RefObject<
                 left={spot.x * scale}
                 top={spot.y * scale}
                 selected={focus?.id === comment.id}
-                onClick={() => onFocus(focus?.id === comment.id ? null : comment.id)}
+                onClick={() =>
+                  onFocus(focus?.id === comment.id ? null : comment.id)
+                }
               />
             );
           })
         : null}
 
       {visible && open && spots[open.id] ? (
-        <CommentCard comment={open} replies={replies[open.id] ?? []} at={windowAt(spots[open.id])} onClose={() => onFocus(null)} onReply={onReply} onResolve={onResolve} />
+        <CommentCard
+          comment={open}
+          replies={replies[open.id] ?? []}
+          at={windowAt(spots[open.id])}
+          onClose={() => onFocus(null)}
+          onReply={onReply}
+          onResolve={onResolve}
+          onDelete={onDelete}
+        />
       ) : null}
 
       {shownDraft && spots.draft ? (

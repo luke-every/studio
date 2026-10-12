@@ -6,6 +6,8 @@ import { DevPanel } from "@/components/prototype/dev-panel";
 import { EditBar } from "@/components/prototype/edit-bar";
 import { CommentLayer } from "@/components/prototype/comment-layer";
 import type { CommentsUi } from "@/components/prototype/comment-parts";
+import { locateScreen } from "@/components/prototype/locate-screen";
+import type { Anchor, Comment } from "@/lib/comments";
 import { CommentsPanel } from "@/components/prototype/comments-panel";
 import { EditPanel } from "@/components/prototype/edit-panel";
 import { FlowCanvas } from "@/components/prototype/flow-canvas";
@@ -13,9 +15,9 @@ import { useEditSession } from "@/components/prototype/use-edit-session";
 import { useComments, useShowComments } from "@/components/prototype/use-comments";
 import { MotionSheet } from "@/components/motion";
 
-import { CodeIcon, CommentIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
+import { CodeIcon, CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
 
-import { IconButton } from "./button";
+import { controlOn, IconButton } from "./button";
 import { Toggle } from "./toggle";
 import { withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
@@ -58,6 +60,8 @@ export function PrototypeFrame({
   onFlowOpen,
   mode,
   onMode,
+  fullscreen,
+  onFullscreen,
 }: {
   url?: string;
   title: string;
@@ -84,6 +88,9 @@ export function PrototypeFrame({
   /** Looking, editing or in dev mode. The last two replace the bar and bring a panel of their own. */
   mode: "view" | "dev" | "edit" | "comment";
   onMode: (mode: "view" | "dev" | "edit" | "comment") => void;
+  /** Full screen: the studio steps back so the prototype can fill the window. */
+  fullscreen: boolean;
+  onFullscreen: (on: boolean) => void;
 }) {
   // The flow: the screens of the prototype and how they connect, drawn as a canvas.
   // Opening a screen from it shows the prototype on that screen; both belong to one address.
@@ -101,7 +108,7 @@ export function PrototypeFrame({
   // Comment mode, like editing, takes the page over: the next click on the prototype leaves a comment there, and the panel lists them all.
   // On a phone the list is a sheet instead, opened from the bar.
   const user = useUser();
-  const { comments, replies, error: commentsError, add: addComment, reply: replyToComment, resolve: resolveComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name);
+  const { comments, replies, error: commentsError, add: postComment, place: placeComment, reply: replyToComment, resolve: resolveComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name);
   const [showPins, setShowPins] = useShowComments();
   const commenting = mode === "comment" && !!commentsOf;
   const [listOpen, setListOpen] = useState(false);
@@ -117,9 +124,50 @@ export function PrototypeFrame({
   const [target, setTarget] = useState<Element | null>(null);
   // While Selecting, clicks pick a part; while Interacting they go to the prototype, to move between screens.
   const [interacting, setInteracting] = useState(false);
+  // A comment asked for that isn't on the screen showing is on another step of the flow. Most know which (it is noted when
+  // they are left) and that screen is shown at once; one that doesn't is looked for, once per ask, and noted for next time.
+  const [located, setLocated] = useState(0);
+  const show = (screen: FlowScreen) => {
+    setOpened({ address: addressed, screen });
+    // Starts it over even if that screen is already the one open, since the prototype may have moved on from it.
+    setRestarts((count) => count + 1);
+  };
+  const locate = (comment: Comment) => {
+    if (!flow || !addressed || !focus || located === focus.at) return;
+    setLocated(focus.at);
+    const known = flow.screens.find((screen) => screen.id === comment.anchor.flowScreen);
+    if (known) {
+      show(known);
+      return;
+    }
+    void locateScreen(addressed, flow, device, comment.anchor).then((found) => {
+      if (!found) return;
+      show(found);
+      void placeComment(comment, found.id);
+    });
+  };
+  // Choosing a comment from the list. One noted as on another flow screen than the one open goes there at once, without
+  // first looking for it on this one (where a step drawn over another can make it seem to be).
+  const goTo = (comment: Comment) => {
+    const next = (focus?.at ?? 0) + 1;
+    setFocus({ id: comment.id, at: next });
+    const known = flow?.screens.find((item) => item.id === comment.anchor.flowScreen);
+    if (known && addressed && known.id !== (screen ?? flow?.screens[0])?.id) {
+      setLocated(next);
+      show(known);
+    }
+  };
+  // Leaving a comment: which flow screen it is on is found straight after, out of sight, so going to it later is instant.
+  const addComment = async (text: string, anchor: Anchor) => {
+    const posted = await postComment(text, anchor);
+    if (posted && flow && addressed && !anchor.flowScreen) {
+      void locateScreen(addressed, flow, device, anchor).then((found) => found && placeComment(posted, found.id));
+    }
+    return !!posted;
+  };
   const commentsUi: CommentsUi | null =
     commentsOf && !dev
-      ? { list: comments, visible: showPins || commenting, placing: commenting && !interacting, focus, onFocus: askFor, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment }
+      ? { list: comments, visible: showPins || commenting, placing: commenting && !interacting, focus, onFocus: askFor, onLocate: locate, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onDelete: deleteComment }
       : null;
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
@@ -128,6 +176,8 @@ export function PrototypeFrame({
     setTarget(null);
     setSeen((now) => ({ ...now, picked: null }));
   };
+  // Counts restarts: a new key remounts the frame, which loads the same address afresh.
+  const [restarts, setRestarts] = useState(0);
   const changeMode = (next: "view" | "dev" | "edit" | "comment") => {
     setListOpen(false);
     onMode(next);
@@ -149,6 +199,23 @@ export function PrototypeFrame({
       }
       if (event.key === "Escape" && commenting) {
         exitMode();
+        return;
+      }
+    }
+    if (mode === "view" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key.toLowerCase() === "f" && url && !showingFlow) {
+        event.preventDefault();
+        onFullscreen(!fullscreen);
+        return;
+      }
+      if (event.key.toLowerCase() === "r" && url && !showingFlow) {
+        // Starts the prototype over at the address on screen, so the version, variant and settings stay as they are.
+        event.preventDefault();
+        setRestarts((count) => count + 1);
+        return;
+      }
+      if (event.key === "Escape" && fullscreen) {
+        onFullscreen(false);
         return;
       }
     }
@@ -287,6 +354,11 @@ export function PrototypeFrame({
                   ]}
                 />
               ) : null}
+              {url && !showingFlow && !narrow ? (
+                <IconButton label="Dev mode" onClick={() => changeMode("dev")}>
+                  <CodeIcon />
+                </IconButton>
+              ) : null}
               {url && flow && addressed && !showingFlow ? (
                 <IconButton label="Flow" onClick={() => onFlowOpen(true)}>
                   <FlowIcon />
@@ -316,15 +388,23 @@ export function PrototypeFrame({
                     <IconButton onClick={() => changeMode("edit")}>Edit</IconButton>
                   </span>
                 ) : null}
-                {showingFlow || narrow ? null : (
-                  <IconButton label="Dev mode" onClick={() => changeMode("dev")}>
-                    <CodeIcon />
+                {showingFlow ? null : (
+                  <IconButton label="Open in a new window" href={newTab} external>
+                    <ExternalIcon />
                   </IconButton>
                 )}
                 {showingFlow ? null : (
-                  <IconButton label="Open in a new window" href={newTab} external tooltipAlign="end">
-                    <ExternalIcon />
-                  </IconButton>
+                  <span className="hidden lg:block">
+                    <IconButton
+                      label={fullscreen ? "Exit full screen (F)" : "Full screen (F)"}
+                      tooltipAlign="end"
+                      aria-pressed={fullscreen}
+                      className={fullscreen ? controlOn : undefined}
+                      onClick={() => onFullscreen(!fullscreen)}
+                    >
+                      <ExpandIcon />
+                    </IconButton>
+                  </span>
                 )}
               </div>
             ) : null}
@@ -344,7 +424,7 @@ export function PrototypeFrame({
         >
           {url ? (
             <FrameBody
-              key={url}
+              key={`${url}#${restarts}`}
               url={url}
               title={title}
               poster={screen ? undefined : poster}
@@ -398,7 +478,7 @@ export function PrototypeFrame({
         {panelKind === "edit" && edit ? (
           <EditPanel element={target?.isConnected ? target : null} session={session} />
         ) : panelKind === "comments" ? (
-          <CommentsPanel comments={comments} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={(comment) => askFor(comment.id)} onReply={replyToComment} onResolve={resolveComment} />
+          <CommentsPanel comments={comments} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={goTo} onResolve={resolveComment} onDelete={deleteComment} />
         ) : (
           <div className="p-4">
             <DevPanel picked={here.picked} motion={here.motion} />
@@ -416,11 +496,11 @@ export function PrototypeFrame({
           selectedId={focus?.id ?? null}
           error={commentsError}
           onSelect={(comment) => {
-            askFor(comment.id);
+            goTo(comment);
             setListOpen(false);
           }}
-          onReply={replyToComment}
           onResolve={resolveComment}
+          onDelete={deleteComment}
         />
       </div>
     </MotionSheet>
