@@ -116,7 +116,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       >
       {/* It travels left and fades as the column closes, at the same pace as the panel arrives. */}
       <div
-        className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:px-4 lg:py-6 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+        className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:rounded-[var(--r-tile)] lg:bg-tile lg:p-6 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
           side ? "" : "lg:-translate-x-full lg:opacity-0"
         }`}
       >
