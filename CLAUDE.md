@@ -21,7 +21,8 @@ on its own merits. Do not flip the flag back on wholesale.
 
 Reintroduced so far: `hover-lift` (a CSS preset in `src/styles/motion.css`) on
 the feed tiles. It animates even with the flag off; its timing is
-`--lift-duration` / `--lift-curve`.
+`--lift-duration` / `--lift-curve`. `flow-reveal` on the flow canvas: its
+screens hold as skeletons for `--flow-reveal-hold`, then fade in together.
 
 Everything below describes how motion works when it is enabled.
 

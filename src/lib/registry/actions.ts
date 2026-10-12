@@ -6,6 +6,7 @@ import { isUnlocked } from "@/lib/gate";
 
 import { EDIT_IMAGE_DIR, editsSchema, type Edit } from "@/lib/edits";
 
+import * as comments from "./comments";
 import * as registry from "./write";
 
 /**
@@ -133,4 +134,17 @@ export async function saveEdits(form: FormData) {
       }),
     ["/"],
   );
+}
+
+/** Comments on one version of a prototype. They are not in any prerendered page, so nothing is revalidated. */
+export async function listComments(slug: string, version: string) {
+  return attempt(() => comments.readComments(slug, version), []);
+}
+
+export async function addComment(input: Parameters<typeof comments.addComment>[0]) {
+  return attempt(() => comments.addComment(input), []);
+}
+
+export async function resolveComment(input: Parameters<typeof comments.setResolved>[0]) {
+  return attempt(() => comments.setResolved(input), []);
 }

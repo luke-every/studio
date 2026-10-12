@@ -242,3 +242,28 @@ export function GithubIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function CommentIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M3.5 2.75h9a1.25 1.25 0 0 1 1.25 1.25v6a1.25 1.25 0 0 1-1.25 1.25H8L5 13.75v-2.5H3.5A1.25 1.25 0 0 1 2.25 10V4A1.25 1.25 0 0 1 3.5 2.75Z" />
+    </Frame>
+  );
+}
+
+export function EyeIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8Z" />
+      <circle cx="8" cy="8" r="1.75" />
+    </Frame>
+  );
+}
+
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M6.4 3.95A5.7 5.7 0 0 1 8 3.75C12 3.75 14.25 8 14.25 8s-.6 1.15-1.7 2.2M4.2 5.2C2.7 6.4 1.75 8 1.75 8S4 12.25 8 12.25c1 0 1.9-.27 2.7-.65M2.5 2.5l11 11" />
+    </Frame>
+  );
+}

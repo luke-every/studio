@@ -49,7 +49,7 @@ export function slugify(name: string, fallback: string) {
  * person at the keyboard, or by Claude Code from the local git identity.
  * A login is derived so avatars and grouping have something stable to key on.
  */
-function named(name: string | undefined, fallback = "Someone") {
+export function named(name: string | undefined, fallback = "Someone") {
   const trimmed = name?.trim() || fallback;
   return { login: slugify(trimmed, "person"), name: trimmed };
 }

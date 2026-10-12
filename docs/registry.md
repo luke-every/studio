@@ -20,6 +20,7 @@ GitHub repository — the *content* repository, never this one:
 GitHub   registry.json                  teams, projects, prototypes, versions
          p/<slug>/<version>/index.html  the version's entry point
          p/<slug>/<version>/<...>       every other file in the folder pushed
+         comments/<slug>/<version>.json comments and replies left on that version
 ```
 
 A version isn't forced into one file, and nothing about it is rewritten. The
@@ -33,6 +34,13 @@ to be one request to stay fast. It holds metadata only — never files — so it
 stays small. Writes are read-modify-write, which is fine for a handful of
 people saving rarely; the alternative costs every read a fan-out it does not
 need.
+
+Comments are kept beside the registry, not in it: one file per version, so a
+comment never rewrites the registry or revalidates a page. A comment belongs to
+the version it was left on and is pinned to an element in that version's own
+files; a reply points at its comment with `parentId`. Nothing is deleted —
+a comment is resolved. They are read by the browser through server actions, so
+every page stays prerendered.
 
 Every version is one commit, written through GitHub's Git Data API (a blob
 per file, one tree, one commit, move the branch ref) — never a local `git`

@@ -64,3 +64,22 @@ export async function writeRegistryDocument(document: RegistryDocument) {
   }
   await writeRepoFile(REGISTRY_PATH, text, "Update the registry");
 }
+
+/**
+ * Any other file in the store, by path: comments live beside the registry,
+ * not in it, so adding one never rewrites everybody's pages.
+ */
+export async function readStoreFile(path: string): Promise<string | null> {
+  if (localFileMode()) return readFile(join(process.cwd(), ".local", path), "utf8").catch(() => null);
+  return readRepoFile(path);
+}
+
+export async function writeStoreFile(path: string, text: string, message: string) {
+  if (localFileMode()) {
+    const file = join(process.cwd(), ".local", path);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, text);
+    return;
+  }
+  await writeRepoFile(path, text, message);
+}

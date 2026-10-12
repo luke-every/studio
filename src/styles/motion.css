@@ -46,6 +46,10 @@
   /* fade-in: tune here. */
   --fade-duration: 0.3s;
   --fade-curve: var(--curve-entrance);
+  /* flow-reveal: how long the flow's screens stay skeletons, then how they fade in. */
+  --flow-reveal-hold: 1s;
+  --flow-reveal-duration: var(--dur-deliberate);
+  --flow-reveal-curve: var(--curve-entrance);
 }
 
 /* Reduced motion collapses distance and shortens duration, but never removes
@@ -121,6 +125,22 @@
 @utility fade-in {
   opacity: 0;
   transition: opacity var(--fade-duration) var(--fade-curve);
+
+  &[data-ready] {
+    opacity: 1;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * flow-reveal — the flow canvas's screens, all at once: skeletons hold for
+ * `--flow-reveal-hold` while the screens load and play their own entrance
+ * animations out of sight, then they fade in together. Set `data-ready` when
+ * the canvas has been laid out. Animated while MOTION_ENABLED is off, like
+ * the others here.
+ * ------------------------------------------------------------------------- */
+@utility flow-reveal {
+  opacity: 0;
+  transition: opacity var(--flow-reveal-duration) var(--flow-reveal-curve) var(--flow-reveal-hold);
 
   &[data-ready] {
     opacity: 1;

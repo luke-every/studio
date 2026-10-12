@@ -4,18 +4,23 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { DevPanel } from "@/components/prototype/dev-panel";
 import { EditBar } from "@/components/prototype/edit-bar";
+import { CommentLayer } from "@/components/prototype/comment-layer";
+import type { CommentsUi } from "@/components/prototype/comment-parts";
+import { CommentsPanel } from "@/components/prototype/comments-panel";
 import { EditPanel } from "@/components/prototype/edit-panel";
 import { FlowCanvas } from "@/components/prototype/flow-canvas";
-import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
 import { useEditSession } from "@/components/prototype/use-edit-session";
+import { useComments, useShowComments } from "@/components/prototype/use-comments";
+import { MotionSheet } from "@/components/motion";
 
-import { CodeIcon, ExternalIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
+import { CodeIcon, CommentIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
 
 import { IconButton } from "./button";
 import { Toggle } from "./toggle";
-import { withParams, type FlowScreen } from "@/lib/flow";
+import { withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
 import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
@@ -46,6 +51,10 @@ export function PrototypeFrame({
   fit = false,
   poster,
   edit,
+  comments: commentsOf,
+  flow,
+  flowOpen,
+  onFlowOpen,
   mode,
   onMode,
 }: {
@@ -65,14 +74,18 @@ export function PrototypeFrame({
   poster?: string;
   /** Which version edits are made on. Without it there is no Edit mode. */
   edit?: { slug: string; versionId: string; variantId?: string };
+  /** Which version comments are left on. Without it there are no comments. */
+  comments?: { slug: string; version: string };
+  /** The flow of this version, if it has one, and whether it is being looked at instead of the prototype. Kept by the page, which steps its side column aside for it. */
+  flow: Flow | null;
+  flowOpen: boolean;
+  onFlowOpen: (open: boolean) => void;
   /** Looking, editing or in dev mode. The last two replace the bar and bring a panel of their own. */
-  mode: "view" | "dev" | "edit";
-  onMode: (mode: "view" | "dev" | "edit") => void;
+  mode: "view" | "dev" | "edit" | "comment";
+  onMode: (mode: "view" | "dev" | "edit" | "comment") => void;
 }) {
   // The flow: the screens of the prototype and how they connect, drawn as a canvas.
   // Opening a screen from it shows the prototype on that screen; both belong to one address.
-  const flow = usePrototypeFlow(addressed?.split("?")[0]);
-  const [flowOpen, setFlowOpen] = useState(false);
   const [opened, setOpened] = useState<{ address?: string; screen: FlowScreen | null }>({ screen: null });
   const screen = opened.address === addressed ? opened.screen : null;
   const url = addressed && screen ? withParams(addressed, screen.params) : addressed;
@@ -84,14 +97,29 @@ export function PrototypeFrame({
   const editing = mode === "edit" && !!edit;
   const wireframe = look === "wireframe";
   const dev = mode === "dev" || editing;
+  // Comment mode, like editing, takes the page over: the next click on the prototype leaves a comment there, and the panel lists them all.
+  // On a phone the list is a sheet instead, opened from the bar.
+  const user = useUser();
+  const { comments, replies, error: commentsError, add: addComment, reply: replyToComment, resolve: resolveComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name);
+  const [showPins, setShowPins] = useShowComments();
+  const commenting = mode === "comment" && !!commentsOf;
+  const [listOpen, setListOpen] = useState(false);
+  const [focus, setFocus] = useState<{ id: string; at: number } | null>(null);
+  const askFor = (id: string | null) => setFocus((now) => (id ? { id, at: (now?.at ?? 0) + 1 } : null));
+  const openCount = comments.filter((comment) => !comment.resolvedAt).length;
   // The panel keeps showing what it held while it closes.
-  const panelOpen = dev && !showingFlow;
-  const [panelKind, setPanelKind] = useState<"dev" | "edit">("dev");
-  if (dev && panelKind !== (editing ? "edit" : "dev")) setPanelKind(editing ? "edit" : "dev");
+  const panelOpen = (dev && !showingFlow) || commenting;
+  const [panelKind, setPanelKind] = useState<"dev" | "edit" | "comments">("dev");
+  const wantedKind = editing ? "edit" : dev ? "dev" : "comments";
+  if (panelOpen && panelKind !== wantedKind) setPanelKind(wantedKind);
   const session = useEditSession(url);
   const [target, setTarget] = useState<Element | null>(null);
   // While Selecting, clicks pick a part; while Interacting they go to the prototype, to move between screens.
   const [interacting, setInteracting] = useState(false);
+  const commentsUi: CommentsUi | null =
+    commentsOf && !dev
+      ? { list: comments, visible: showPins || commenting, placing: commenting && !interacting, focus, onFocus: askFor, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment }
+      : null;
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
   // ⌘Z undoes, ⇧⌘Z and ⌘Y redo, whether the focus is in the studio or in the prototype.
@@ -99,14 +127,40 @@ export function PrototypeFrame({
     setTarget(null);
     setSeen((now) => ({ ...now, picked: null }));
   };
+  const changeMode = (next: "view" | "dev" | "edit" | "comment") => {
+    setListOpen(false);
+    onMode(next);
+  };
+
+  const exitMode = () => {
+    if (editing && session.edits.length && !window.confirm("Leave without saving? Your changes will be discarded.")) return;
+    session.discard();
+    setInteracting(false);
+    changeMode("view");
+  };
+
   const hotkey = (event: KeyboardEvent) => {
+    if (commentsOf && url && !dev) {
+      if (event.key.toLowerCase() === "c" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        changeMode(commenting ? "view" : "comment");
+        return;
+      }
+      if (event.key === "Escape" && commenting) {
+        exitMode();
+        return;
+      }
+    }
     if (event.key === "Escape" && dev) {
       // With a part picked, Escape only lets go of it; the prototype never sees the key.
       if (target || here.picked) {
         event.preventDefault();
         event.stopPropagation();
+        deselect();
+      } else {
+        // Nothing picked: Escape leaves the mode, asking first if there are edits that would be lost.
+        exitMode();
       }
-      deselect();
       return;
     }
     if (!editing || !(event.metaKey || event.ctrlKey)) return;
@@ -137,13 +191,6 @@ export function PrototypeFrame({
     window.addEventListener("keydown", listen);
     return () => window.removeEventListener("keydown", listen);
   }, []);
-
-  const exitMode = () => {
-    if (editing && session.edits.length && !window.confirm("Leave without saving? Your changes will be discarded.")) return;
-    session.discard();
-    setInteracting(false);
-    onMode("view");
-  };
 
   const inspect = {
     onKey: hotkey,
@@ -193,26 +240,34 @@ export function PrototypeFrame({
       onClick={(event) => dev && !(event.target as Element).closest("button, a") && deselect()}
       className="relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile max-sm:rounded-none"
     >
-      <div key={dev ? "mode" : "view"} className="bar-in grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:relative sm:z-[var(--z-raised)] sm:px-8 sm:py-8">
-        {dev ? (
-          // Editing or dev mode is the only thing going on: a way out, how clicks behave, and (editing) undo, redo and Save.
+      <div key={dev || commenting ? "mode" : "view"} className="bar-in grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:relative sm:z-[var(--z-raised)] sm:px-8 sm:py-8">
+        {dev || commenting ? (
+          // Editing, dev or comment mode is the only thing going on: a way out, how clicks behave, and (editing) undo, redo and Save.
           <>
             <IconButton onClick={exitMode} className="justify-self-start">
-              {editing ? "Cancel" : "Exit"}
+              {editing || commenting ? "Cancel" : "Exit"}
             </IconButton>
-            <div className="hidden justify-self-center sm:block">
+            <div className={`justify-self-center ${commenting ? "" : "hidden sm:block"}`}>
               <Toggle
                 label="Clicking"
                 value={interacting ? "interact" : "select"}
                 onChange={(next) => setInteracting(next === "interact")}
                 options={[
-                  { id: "select", label: "Select", showLabel: true },
+                  { id: "select", label: commenting ? "Comment" : "Select", showLabel: true },
                   { id: "interact", label: "Interact", showLabel: true },
                 ]}
               />
             </div>
             <div className="[grid-column:3] justify-self-end">
               {editing && edit ? <EditBar session={session} slug={edit.slug} baseVersionId={edit.versionId} variantId={edit.variantId} /> : null}
+              {commenting ? (
+                <span className="sm:hidden">
+                  <IconButton label="Comments" onClick={() => setListOpen(true)}>
+                    <CommentIcon />
+                    {openCount ? openCount : null}
+                  </IconButton>
+                </span>
+              ) : null}
             </div>
           </>
         ) : (
@@ -220,7 +275,7 @@ export function PrototypeFrame({
             {/* On the left, the version and how it is looked at; in the middle, the phone it is shown on; on the right, what to do with it. */}
             <div className="flex min-w-0 items-center gap-2 justify-self-start">
               {leading}
-              {url && !showingFlow ? (
+              {url ? (
                 <Toggle
                   label="Look"
                   value={look}
@@ -232,7 +287,7 @@ export function PrototypeFrame({
                 />
               ) : null}
               {url && flow && addressed && !showingFlow ? (
-                <IconButton label="Flow" onClick={() => setFlowOpen(true)}>
+                <IconButton label="Flow" onClick={() => onFlowOpen(true)}>
                   <FlowIcon />
                 </IconButton>
               ) : null}
@@ -241,14 +296,27 @@ export function PrototypeFrame({
             <div className="hidden justify-self-center sm:block">{showingFlow ? null : center?.({ scale })}</div>
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
-                {showingFlow ? <IconButton onClick={() => setFlowOpen(false)}>Back to prototype</IconButton> : null}
+                {showingFlow ? <IconButton onClick={() => onFlowOpen(false)}>Back to prototype</IconButton> : null}
+                {commentsOf ? (
+                  <>
+                    {comments.length ? (
+                      <IconButton label={showPins ? "Hide comments" : "Show comments"} onClick={() => setShowPins(!showPins)}>
+                        {showPins ? <EyeIcon /> : <EyeOffIcon />}
+                      </IconButton>
+                    ) : null}
+                    <IconButton label="Comment (C)" onClick={() => changeMode("comment")}>
+                      <CommentIcon />
+                      {openCount ? openCount : null}
+                    </IconButton>
+                  </>
+                ) : null}
                 {edit && !showingFlow ? (
                   <span className="hidden sm:block">
-                    <IconButton onClick={() => onMode("edit")}>Edit</IconButton>
+                    <IconButton onClick={() => changeMode("edit")}>Edit</IconButton>
                   </span>
                 ) : null}
                 {showingFlow || narrow ? null : (
-                  <IconButton label="Dev mode" onClick={() => onMode("dev")}>
+                  <IconButton label="Dev mode" onClick={() => changeMode("dev")}>
                     <CodeIcon />
                   </IconButton>
                 )}
@@ -273,7 +341,18 @@ export function PrototypeFrame({
           }`}
         >
           {url ? (
-            <FrameBody key={url} url={url} title={title} poster={screen ? undefined : poster} scale={scale} device={device} wireframe={wireframe} inspect={dev ? { ...inspect, picking: !interacting } : null} />
+            <FrameBody
+              key={url}
+              url={url}
+              title={title}
+              poster={screen ? undefined : poster}
+              scale={scale}
+              device={device}
+              wireframe={wireframe}
+              inspect={dev ? { ...inspect, picking: !interacting } : null}
+              onKey={(event) => hotkeyRef.current(event)}
+              comments={showingFlow ? null : commentsUi}
+            />
           ) : (
             <div className="grid size-full place-items-center">
               <p className="max-w-[30ch] px-6 text-center text-sm leading-[var(--leading-relaxed)] text-foreground-subtle">
@@ -290,9 +369,11 @@ export function PrototypeFrame({
           flow={flow}
           base={addressed.split("?")[0]}
           device={device}
+          comments={commentsUi ?? undefined}
+          wireframe={wireframe}
           onOpen={(next) => {
             setOpened({ address: addressed, screen: next });
-            setFlowOpen(false);
+            onFlowOpen(false);
           }}
         />
       ) : null}
@@ -314,6 +395,8 @@ export function PrototypeFrame({
       >
         {panelKind === "edit" && edit ? (
           <EditPanel element={target?.isConnected ? target : null} session={session} />
+        ) : panelKind === "comments" ? (
+          <CommentsPanel comments={comments} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={(comment) => askFor(comment.id)} onReply={replyToComment} onResolve={resolveComment} />
         ) : (
           <div className="p-4">
             <DevPanel picked={here.picked} motion={here.motion} />
@@ -321,6 +404,24 @@ export function PrototypeFrame({
         )}
       </div>
     </div>
+
+    {/* On a phone the list is a sheet over the prototype. */}
+    <MotionSheet open={narrow && listOpen} onClose={() => setListOpen(false)} label="Comments">
+      <div className="flex flex-col gap-2 pb-4">
+        <CommentsPanel
+          comments={comments}
+          replies={replies}
+          selectedId={focus?.id ?? null}
+          error={commentsError}
+          onSelect={(comment) => {
+            askFor(comment.id);
+            setListOpen(false);
+          }}
+          onReply={replyToComment}
+          onResolve={resolveComment}
+        />
+      </div>
+    </MotionSheet>
     </div>
   );
 }
@@ -334,6 +435,8 @@ function FrameBody({
   device,
   wireframe,
   inspect,
+  onKey,
+  comments,
 }: {
   url: string;
   title: string;
@@ -342,6 +445,9 @@ function FrameBody({
   device: Device;
   wireframe: boolean;
   inspect: { picking: boolean; onPick: (picked: Picked, element: Element) => void; onMotion: (seen: MotionSeen) => void; onEdit: (element: Element) => void; onKey: (event: KeyboardEvent) => void } | null;
+  /** Keys pressed inside the prototype, for the studio's own shortcuts. Dev mode takes them through `inspect` instead. */
+  onKey: (event: KeyboardEvent) => void;
+  comments: CommentsUi | null;
 }) {
   const [posterFailed, setPosterFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -370,7 +476,23 @@ function FrameBody({
   useEffect(() => {
     handlers.current = inspect;
   });
+  const keys = useRef(onKey);
+  useEffect(() => {
+    keys.current = onKey;
+  });
   const inspecting = inspect !== null;
+  // A key pressed while the prototype has focus is the studio's too, unless somebody is typing into it.
+  useEffect(() => {
+    const doc = frame.current?.contentDocument;
+    if (!doc || inspecting) return undefined;
+    const forward = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.defaultPrevented || target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")) return;
+      keys.current(event);
+    };
+    doc.addEventListener("keydown", forward);
+    return () => doc.removeEventListener("keydown", forward);
+  }, [inspecting, documents]);
   const picking = inspect?.picking ?? false;
   useEffect(() => {
     const doc = frame.current?.contentDocument;
@@ -404,6 +526,7 @@ function FrameBody({
         sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
       />
       ) : null}
+      {scale && comments ? <CommentLayer key={comments.placing ? "placing" : "looking"} frame={frame} scale={scale} comments={comments} /> : null}
       {loaded ? null : poster && !posterFailed ? (
         // The same picture the tile shows, so the page looks right at once and
         // the real prototype replaces it without a flash. It breathes while

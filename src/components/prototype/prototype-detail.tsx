@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import { DeviceMenu } from "@/components/prototype/device-menu";
-import { FitButton } from "@/components/prototype/fit-button";
-import { ZoomMenu } from "@/components/prototype/zoom-menu";
+import { ViewMenu } from "@/components/prototype/view-menu";
 import { ControlsPanel, VariantPicker } from "@/components/prototype/controls-panel";
 import { useVersionVariants } from "@/components/prototype/use-version-variants";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
+import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
 import { PrototypeLinks } from "@/components/prototype/prototype-links";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
@@ -79,7 +78,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // the version on screen, so switching version starts again from defaults.
   const offered = usePrototypeControls(selected.url);
   // Editing and dev mode take the page over: the side column steps aside for a panel next to the canvas.
-  const [mode, setMode] = useState<"view" | "dev" | "edit">("view");
+  const [mode, setMode] = useState<"view" | "dev" | "edit" | "comment">("view");
   const [picked, setPicked] = useState<{ id: string; values: ControlValues }>({ id: "", values: {} });
   const mine = picked.id === selected.id ? picked.values : {};
   const values = { ...defaultValues(offered), ...mine };
@@ -99,20 +98,26 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const controlled = selected.url ? applyControls(selected.url, offered, values) : undefined;
   const address = controlled && variant ? `${controlled}${controlled.includes("?") ? "&" : "?"}${VARIANT_PARAM}=${variant}` : controlled;
 
+  // The flow, when it has one, is looked at instead of the prototype; like a mode, it takes the side column's room.
+  const flow = usePrototypeFlow(address?.split("?")[0]);
+  const [flowOpen, setFlowOpen] = useState(false);
+  const showingFlow = flowOpen && !!flow && !!address;
+  const side = mode === "view" && !showingFlow;
+
   // Two columns that always fit the window; whatever is bigger scrolls inside its own column.
   return (
     <div className="flex w-full flex-col gap-6 py-4 sm:px-8 lg:gap-4 lg:h-[calc(100dvh-var(--nav-height))] overflow-x-clip lg:flex-row lg:items-stretch">
       {/* Closing up rather than unmounting, so it slides away as the panel opens beside the canvas. */}
       <aside
-        inert={mode !== "view"}
+        inert={!side}
         className={`order-2 min-w-0 px-5 sm:px-0 lg:order-1 lg:flex lg:shrink-0 lg:overflow-hidden lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
-          mode === "view" ? "lg:w-[var(--detail-side-width)]" : "invisible max-lg:hidden lg:-mr-4 lg:w-0"
+          side ? "lg:w-[var(--detail-side-width)]" : "invisible max-lg:hidden lg:-mr-4 lg:w-0"
         }`}
       >
       {/* It travels left and fades as the column closes, at the same pace as the panel arrives. */}
       <div
         className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:px-4 lg:py-6 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
-          mode === "view" ? "" : "lg:-translate-x-full lg:opacity-0"
+          side ? "" : "lg:-translate-x-full lg:opacity-0"
         }`}
       >
         <div className="flex flex-col gap-4">
@@ -162,18 +167,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           zoom={zoom}
           fit={fit}
           center={({ scale }) => (
-            <div className="flex items-center gap-2">
-              <DeviceMenu device={device} onChange={chooseDevice} />
-              <ZoomMenu
-                zoom={zoom}
-                fitted={fit ? scale : null}
-                onChange={(next) => {
-                  chooseZoom(next);
-                  chooseFit(false);
-                }}
-              />
-              <FitButton active={fit} onChange={chooseFit} />
-            </div>
+            <ViewMenu device={device} zoom={zoom} fit={fit} fitted={scale} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
           )}
           // The tile's picture is of the default phone and setup, so it is only
           // the placeholder while the prototype is shown that way.
@@ -183,6 +177,10 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               : undefined
           }
           edit={{ slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
+          comments={{ slug: prototype.slug, version: selected.key }}
+          flow={flow}
+          flowOpen={flowOpen}
+          onFlowOpen={setFlowOpen}
           mode={mode}
           onMode={setMode}
           title={`${prototype.name} ${selected.version}`}
