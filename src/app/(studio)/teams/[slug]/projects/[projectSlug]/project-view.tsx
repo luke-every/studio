@@ -56,7 +56,7 @@ export function ProjectView() {
         {contents.length > 0 ? (
           <FeedGrid>
             {contents.map((prototype) => (
-              <FeedTile key={prototype.slug} prototype={prototype} team={team} />
+              <FeedTile key={prototype.slug} prototype={prototype} />
             ))}
           </FeedGrid>
         ) : (

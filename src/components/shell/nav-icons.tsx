@@ -267,3 +267,11 @@ export function EyeOffIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function ReplyIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M6.5 3.25 2.75 7l3.75 3.75M2.75 7h6.5a4 4 0 0 1 4 4v1.75" />
+    </Frame>
+  );
+}

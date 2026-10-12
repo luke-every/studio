@@ -39,6 +39,11 @@
   /* hover-lift: tune its timing here, once, for every place it is used. */
   --lift-duration: var(--dur-standard);
   --lift-curve: var(--curve-standard);
+  /* A layer (a modal) arriving, and leaving: it leaves in half the time it took to
+   * arrive, so when one closes as another opens both are seen moving.
+   * Mirrored for JS as `layerEnter` / `layerExit` in tokens.ts. */
+  --layer-enter-duration: 400ms;
+  --layer-exit-duration: 200ms;
   /* pulse-soft: tune here. The delay means a load that's quick never pulses. */
   --pulse-duration: 1.6s;
   --pulse-delay: 0.25s;
@@ -61,6 +66,8 @@
     --dur-standard: 100ms;
     --dur-deliberate: 120ms;
     --dur-immersive: 140ms;
+    --layer-enter-duration: 120ms;
+    --layer-exit-duration: 100ms;
 
     --motion-lift: 0px;
     --motion-travel-sm: 0px;
@@ -174,6 +181,9 @@
  * layer-scrim   the dimmed, blurred page behind a layer fades in, blur and
  *               all (the blur is on the element, so its opacity fades both)
  * layer-in      a modal fades and settles up from slightly smaller and lower
+ * layer-out     and leaves the same way in reverse, in half the time (200ms
+ *               against 400ms in: `--layer-exit-duration`); layer-scrim-out
+ *               fades the page behind back to clear
  * popover-in    a menu grows out of the control that opened it; set
  *               `transform-origin` to that control's corner
  *
@@ -188,6 +198,19 @@
 
 @keyframes layer-in {
   from {
+    opacity: 0;
+    transform: translateY(var(--motion-travel-sm)) scale(var(--motion-pop-scale));
+  }
+}
+
+@keyframes layer-scrim-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes layer-out {
+  to {
     opacity: 0;
     transform: translateY(var(--motion-travel-sm)) scale(var(--motion-pop-scale));
   }
@@ -214,11 +237,19 @@
 }
 
 @utility layer-scrim {
-  animation: layer-scrim var(--dur-standard) var(--curve-entrance) both;
+  animation: layer-scrim var(--layer-enter-duration) var(--curve-entrance) both;
 }
 
 @utility layer-in {
-  animation: layer-in var(--dur-standard) var(--curve-entrance) both;
+  animation: layer-in var(--layer-enter-duration) var(--curve-entrance) both;
+}
+
+@utility layer-scrim-out {
+  animation: layer-scrim-out var(--layer-exit-duration) var(--curve-exit) both;
+}
+
+@utility layer-out {
+  animation: layer-out var(--layer-exit-duration) var(--curve-exit) both;
 }
 
 @utility popover-in {

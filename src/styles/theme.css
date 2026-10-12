@@ -31,6 +31,13 @@
   --tile: var(--alpha-graphite-06);
   --tile-hover: var(--alpha-graphite-09);
 
+  /* The five colours a person's face can sit on. */
+  --avatar-bg-1: var(--avatar-pink);
+  --avatar-bg-2: var(--avatar-stone);
+  --avatar-bg-3: var(--avatar-sage);
+  --avatar-bg-4: var(--avatar-mint);
+  --avatar-bg-5: var(--avatar-lilac);
+
   --border: var(--alpha-ink-12);
   --border-strong: var(--ink-400);
   --divider: var(--alpha-ink-08);

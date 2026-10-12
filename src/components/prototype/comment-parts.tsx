@@ -3,6 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { CheckIcon, ReplyIcon } from "@/components/shell/nav-icons";
+import { UserAvatar } from "@/components/shell/user-avatar";
 import { IconButton } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
 import type { Anchor, Comment } from "@/lib/comments";
@@ -157,8 +159,42 @@ export function Card({ at, children }: { at: { left: number; top: number }; chil
   );
 }
 
-/** What has been said back to a comment, and a way to say something more. */
-export function Replies({ replies, onReply }: { replies: Comment[]; onReply: (text: string) => Promise<boolean> }) {
+/** Resolving, as a small tick that sits beside the time. Filled once it is done. */
+export function ResolveToggle({ resolved, onToggle }: { resolved: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={resolved ? "Reopen" : "Resolve"}
+      title={resolved ? "Reopen" : "Resolve"}
+      aria-pressed={resolved}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      className={`grid size-5 shrink-0 place-items-center rounded-[var(--r-full)] transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
+        resolved ? "bg-accent text-accent-foreground" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+      }`}
+    >
+      <CheckIcon className="size-3.5" />
+    </button>
+  );
+}
+
+/**
+ * What has been said back to a comment, and the button to say something more.
+ * `extra` sits in the same row, before it.
+ */
+export function Replies({
+  replies,
+  onReply,
+  extra,
+  align = "start",
+}: {
+  replies: Comment[];
+  onReply: (text: string) => Promise<boolean>;
+  extra?: ReactNode;
+  align?: "start" | "end";
+}) {
   const [writing, setWriting] = useState(false);
   const [text, setText] = useState("");
   const [posting, setPosting] = useState(false);
@@ -179,7 +215,8 @@ export function Replies({ replies, onReply }: { replies: Comment[]; onReply: (te
     <div onClick={(event) => event.stopPropagation()} className="flex flex-col gap-2">
       {replies.map((reply) => (
         <div key={reply.id} className="flex flex-col gap-0.5 border-l border-divider pl-3">
-          <p className="text-xs text-foreground-subtle">
+          <p className="flex items-center gap-1.5 text-xs text-foreground-subtle">
+            <UserAvatar name={reply.author.name} className="size-4" />
             {reply.author.name} · <Stamp iso={reply.at} relative />
           </p>
           <p className="whitespace-pre-wrap text-sm leading-[var(--leading-relaxed)] text-foreground-muted">{reply.text}</p>
@@ -206,15 +243,16 @@ export function Replies({ replies, onReply }: { replies: Comment[]; onReply: (te
           aria-label="Reply"
           className="w-full resize-none rounded-[var(--r-md)] bg-surface-inset p-2 text-sm text-foreground outline-none placeholder:text-foreground-subtle focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
         />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setWriting(true)}
-          className="self-start text-xs text-foreground-muted transition-colors duration-[var(--dur-fast)] hover:text-foreground"
-        >
-          {replies.length ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"} · Reply` : "Reply"}
-        </button>
-      )}
+      ) : null}
+      <div className={`flex gap-2 empty:hidden ${align === "end" ? "justify-end" : ""}`}>
+        {extra}
+        {writing ? null : (
+          <IconButton onClick={() => setWriting(true)}>
+            <ReplyIcon />
+            Reply
+          </IconButton>
+        )}
+      </div>
     </div>
   );
 }
@@ -237,18 +275,18 @@ export function CommentCard({
 }) {
   return (
     <Card at={at}>
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-sm font-medium text-foreground">{comment.author.name}</p>
-        <p className="text-xs text-foreground-subtle">
-          <Stamp iso={comment.at} relative />
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
+          <UserAvatar name={comment.author.name} className="size-5" />
+          <span className="truncate">{comment.author.name}</span>
         </p>
+        <div className="flex shrink-0 items-center gap-1.5 text-xs text-foreground-subtle">
+          <ResolveToggle resolved={!!comment.resolvedAt} onToggle={() => onResolve(comment, !comment.resolvedAt)} />
+          <Stamp iso={comment.at} relative />
+        </div>
       </div>
       <p className="whitespace-pre-wrap text-sm leading-[var(--leading-relaxed)] text-foreground-muted">{comment.text}</p>
-      <Replies replies={replies} onReply={(text) => onReply(comment, text)} />
-      <div className="flex justify-end gap-2">
-        <IconButton onClick={onClose}>Close</IconButton>
-        <IconButton onClick={() => onResolve(comment, !comment.resolvedAt)}>{comment.resolvedAt ? "Reopen" : "Resolve"}</IconButton>
-      </div>
+      <Replies replies={replies} onReply={(text) => onReply(comment, text)} align="end" extra={<IconButton onClick={onClose}>Close</IconButton>} />
     </Card>
   );
 }

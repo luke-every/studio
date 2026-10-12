@@ -15,6 +15,10 @@ export const duration = {
   immersive: 0.62,
 } as const;
 
+/** How long a layer (a modal) takes to arrive and to leave, in seconds. Mirror `--layer-enter-duration` and `--layer-exit-duration`. */
+export const layerEnter = 0.4;
+export const layerExit = 0.2;
+
 /** Cubic-bézier control points, matching --curve-* in motion.css. */
 export const easing = {
   standard: [0.32, 0.72, 0, 1],

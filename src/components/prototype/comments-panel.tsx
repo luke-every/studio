@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 
-import { IconButton } from "@/components/ui/button";
+import { UserAvatar } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
 import type { Comment } from "@/lib/comments";
 
-import { Replies } from "./comment-parts";
+import { Replies, ResolveToggle } from "./comment-parts";
 
 type Show = "open" | "resolved" | "all";
 
@@ -77,23 +77,18 @@ export function CommentsPanel({
                   selectedId === comment.id ? "bg-surface-inset" : ""
                 }`}
               >
-                <p className="text-xs text-foreground-subtle">
-                  #{comment.n} · {comment.author.name} · <Stamp iso={comment.at} relative />
+                <p className="flex items-center gap-1.5 text-xs text-foreground-subtle">
+                  #{comment.n}
+                  <UserAvatar name={comment.author.name} className="size-5" />
+                  <span className="text-foreground-muted">{comment.author.name}</span>
+                  <span aria-hidden>·</span>
+                  <ResolveToggle resolved={!!comment.resolvedAt} onToggle={() => onResolve(comment, !comment.resolvedAt)} />
+                  <Stamp iso={comment.at} relative />
                 </p>
                 <p className={`whitespace-pre-wrap text-sm leading-[var(--leading-relaxed)] ${comment.resolvedAt ? "text-foreground-subtle" : "text-foreground"}`}>
                   {comment.text}
                 </p>
                 <Replies replies={replies[comment.id] ?? []} onReply={(text) => onReply(comment, text)} />
-                <div className="pt-1">
-                  <IconButton
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onResolve(comment, !comment.resolvedAt);
-                    }}
-                  >
-                    {comment.resolvedAt ? "Reopen" : "Resolve"}
-                  </IconButton>
-                </div>
               </div>
             </li>
           ))}

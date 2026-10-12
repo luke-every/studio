@@ -16,7 +16,9 @@ import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
 import { DEFAULT_DEVICE } from "@/lib/phone";
 import { useDevice, useFit, useZoom } from "@/lib/use-device";
+import { AvatarStack } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
+import { collaborators } from "@/lib/registry/select";
 import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
 
 /**
@@ -33,6 +35,7 @@ import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const { markOpened, renameVersion, isSaving, repoUrl } = useStudio();
+  const people = collaborators(prototype);
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
   const [fit, chooseFit] = useFit();
@@ -128,8 +131,13 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               </h1>
               <PrototypeMenu prototype={prototype} version={selected.version} />
             </div>
-            <p className="text-xs text-foreground-subtle">
-              Last updated <Stamp iso={prototype.updatedAt} relative />
+            <p className="flex items-center gap-1.5 text-xs text-foreground-subtle">
+              <AvatarStack people={people} className="size-5" overlap="-ml-1.5" ring="ring-tile" />
+              <span className="text-foreground-muted">{people.length > 2 ? `${people[0].name} +${people.length - 1}` : people.map((person) => person.name).join(", ")}</span>
+              <span aria-hidden>·</span>
+              <span>
+                Last updated <Stamp iso={prototype.updatedAt} relative />
+              </span>
             </p>
           </div>
           <p className="text-base leading-[var(--leading-relaxed)] text-foreground-muted">

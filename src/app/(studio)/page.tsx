@@ -12,7 +12,7 @@ import { useStudio } from "@/lib/data/studio-store";
 
  */
 export default function HomePage() {
-  const { teams, prototypes } = useStudio();
+  const { prototypes } = useStudio();
 
   const feed = latestPrototypes(prototypes.length, prototypes);
 
@@ -25,11 +25,7 @@ export default function HomePage() {
       ) : (
         <FeedGrid>
           {feed.map((prototype) => (
-            <FeedTile
-              key={prototype.slug}
-              prototype={prototype}
-              team={teams.find((team) => team.slug === prototype.teamSlug)}
-            />
+            <FeedTile key={prototype.slug} prototype={prototype} />
           ))}
         </FeedGrid>
       )}

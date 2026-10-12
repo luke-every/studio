@@ -34,14 +34,15 @@
   --signal-stop: #9c4a3c;
   --signal-stop-soft: #c07d70;
 
-  /* --- Palette: user gradients --------------------------------------------
-   * Each person's gradient is derived from their name: the hue is theirs,
-   * the lightness and chroma are shared so they sit together as a set. */
-  --avatar-lightness-from: 0.82;
-  --avatar-lightness-to: 0.62;
-  --avatar-chroma: 0.12;
-  --avatar-hue-spread: 55;
-  --avatar-ink: oklch(1 0 0 / 0.9);
+  /* --- Palette: avatar backgrounds ----------------------------------------
+   * Pastel, soft and matte, so a face sits on its colour the way a sticker
+   * sits on paper. Five, enough to tell people apart and few enough to read
+   * as a set. */
+  --avatar-pink: #ffb9b9;
+  --avatar-stone: #e3dfd7;
+  --avatar-sage: #d9e1d5;
+  --avatar-mint: #d0efe8;
+  --avatar-lilac: #d1bedc;
 
   /* --- Palette: preview tints ---------------------------------------------
    * The gradients thumbnails paint in place of the prototype itself. Quiet

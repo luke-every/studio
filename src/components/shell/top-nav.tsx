@@ -9,6 +9,7 @@ import { IconButton } from "@/components/ui/button";
 
 import { Breadcrumbs } from "./breadcrumbs";
 import { MobileMenu } from "./mobile-menu";
+import { EditProfileModal } from "./profile-modal";
 import { BellIcon, SearchIcon } from "./nav-icons";
 import { SearchDialog } from "./search-dialog";
 import { TeamMenu, TeamRow } from "./team-menu";
@@ -26,6 +27,7 @@ export function TopNav({ onSwitchUser }: { onSwitchUser: () => void }) {
   const pathname = usePathname();
   const [searchOpen, setSearchOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-[var(--z-sticky)] bg-background">
@@ -44,10 +46,10 @@ export function TopNav({ onSwitchUser }: { onSwitchUser: () => void }) {
           <IconButton label="Notifications" variant="ghost" tooltipAlign="end">
             <BellIcon className="size-[1.125rem]" />
           </IconButton>
-          <UserMenu onSwitch={onSwitchUser} onSetup={() => setSetupOpen(true)} />
+          <UserMenu onSwitch={onSwitchUser} onSetup={() => setSetupOpen(true)} onEditProfile={() => setProfileOpen(true)} />
         </nav>
         <div className="sm:hidden">
-          <MobileMenu onSearch={() => setSearchOpen(true)} onSetup={() => setSetupOpen(true)} onSwitch={onSwitchUser} />
+          <MobileMenu onSearch={() => setSearchOpen(true)} onSetup={() => setSetupOpen(true)} onSwitch={onSwitchUser} onEditProfile={() => setProfileOpen(true)} />
         </div>
       </div>
 
@@ -55,6 +57,7 @@ export function TopNav({ onSwitchUser }: { onSwitchUser: () => void }) {
       <div className="px-4 pb-2 empty:hidden sm:hidden">{pathname === "/" ? <TeamRow /> : <Breadcrumbs />}</div>
 
       <SetupDialog open={setupOpen} onClose={() => setSetupOpen(false)} />
+      <EditProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <SearchDialog open={searchOpen} onOpen={() => setSearchOpen(true)} onClose={() => setSearchOpen(false)} />
     </header>
   );

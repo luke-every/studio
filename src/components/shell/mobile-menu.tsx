@@ -15,7 +15,7 @@ const item =
  * On a phone there isn't room for search, notifications and the user as three
  * buttons, so they share one menu.
  */
-export function MobileMenu({ onSearch, onSetup, onSwitch }: { onSearch: () => void; onSetup: () => void; onSwitch: () => void }) {
+export function MobileMenu({ onSearch, onSetup, onSwitch, onEditProfile }: { onSearch: () => void; onSetup: () => void; onSwitch: () => void; onEditProfile: () => void }) {
   const { ready, name, leave } = useUser();
   const [open, setOpen] = useState(false);
 
@@ -57,6 +57,11 @@ export function MobileMenu({ onSearch, onSetup, onSwitch }: { onSearch: () => vo
             <p className="px-2.5 py-1.5 text-xs text-foreground-muted">
               {name ? `Signed in as ${name}` : "Browsing as a guest"}
             </p>
+            {name ? (
+              <button type="button" role="menuitem" onClick={choose(onEditProfile)} className={item}>
+                Edit profile
+              </button>
+            ) : null}
             <button type="button" role="menuitem" onClick={choose(onSetup)} className={item}>
               Setup
             </button>

@@ -1,4 +1,4 @@
-import type { Prototype, Team } from "./types";
+import type { Person, Prototype, Team } from "./types";
 
 /**
  * Selectors over the view model.
@@ -7,6 +7,20 @@ import type { Prototype, Team } from "./types";
  * same sort and filter logic is used by server rendering and by the client
  * store as it applies session changes.
  */
+
+/**
+ * Everybody who has worked on a prototype: whoever made it, then whoever
+ * wrote a version of it (an edit saved in the studio is a version too), in
+ * the order they first appeared. Each person once.
+ */
+export function collaborators(prototype: Prototype): Person[] {
+  const people = new Map<string, Person>();
+  for (const person of [prototype.createdBy, ...[...prototype.versions].reverse().map((version) => version.author)]) {
+    const key = person.login.toLowerCase();
+    if (!people.has(key)) people.set(key, person);
+  }
+  return [...people.values()];
+}
 
 /** When someone last opened a prototype. Per-person, so it is never in the registry. */
 export type OpenTimes = Record<string, string>;

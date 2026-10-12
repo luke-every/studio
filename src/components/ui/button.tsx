@@ -92,6 +92,7 @@ export function IconButton({
   external,
   tooltipAlign = "center",
   tooltipSide = "below",
+  tooltip = true,
   loading,
   children,
   className,
@@ -106,11 +107,13 @@ export function IconButton({
   tooltipAlign?: "start" | "center" | "end";
   /** Above it, for a control at the bottom of the window. */
   tooltipSide?: "below" | "above";
+  /** Whether `label` also shows on hover. Off for a button whose hover already opens something; it is still the accessible name. */
+  tooltip?: boolean;
   children: ReactNode;
   className?: string;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children" | "aria-label">) {
   const classes = `${controlBase} ${look[variant]} ${className ?? ""}`;
-  const tip = label ? (
+  const tip = label && tooltip ? (
     <span
       role="tooltip"
       className={`pointer-events-none absolute ${tooltipSide === "above" ? "bottom-full mb-2" : "top-full mt-2"} whitespace-nowrap rounded-[var(--r-md)] bg-accent px-2.5 py-1 text-xs font-normal text-accent-foreground opacity-0 transition-opacity duration-[var(--dur-instant)] ease-[var(--curve-entrance)] group-hover/tip:opacity-100 peer-focus-visible:opacity-100 ${

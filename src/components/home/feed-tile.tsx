@@ -1,20 +1,21 @@
 import Link from "next/link";
 
-import type { Prototype, Team } from "@/lib/registry/types";
+import { AvatarStack } from "@/components/shell/user-avatar";
+import { collaborators } from "@/lib/registry/select";
+import type { Prototype } from "@/lib/registry/types";
 
 import { TilePicture } from "./tile-picture";
 
 /**
  * One prototype in the feed: a tall tile with the prototype at its centre
- * and its version in the corner, then who it belongs to and what it is,
+ * and its version in the corner, then who worked on it and what it is,
  * underneath.
  *
  * The phone holds a picture of the prototype, taken when it was pushed, or the
- * prototype itself, running but untouchable, until that picture exists. The
- * team's icon links to the team; everything else opens the prototype. They
- * are siblings, never nested.
+ * prototype itself, running but untouchable, until that picture exists.
+ * Everything opens the prototype.
  */
-export function FeedTile({ prototype, team }: { prototype: Prototype; team: Team | undefined }) {
+export function FeedTile({ prototype }: { prototype: Prototype }) {
   const href = `/prototypes/${prototype.slug}`;
 
   return (
@@ -38,13 +39,7 @@ export function FeedTile({ prototype, team }: { prototype: Prototype; team: Team
       </Link>
 
       <div className="flex items-center gap-3 px-1">
-        <Link
-          href={team ? `/teams/${team.slug}` : href}
-          aria-label={team?.name ?? "Team"}
-          className="grid size-10 shrink-0 place-items-center rounded-[var(--r-lg)] bg-tile text-sm font-medium text-foreground"
-        >
-          {team?.name.charAt(0).toUpperCase() ?? "?"}
-        </Link>
+        <AvatarStack people={collaborators(prototype)} className="size-10" ring="ring-background" />
         <Link href={href} className="min-w-0">
           <p className="truncate text-base font-medium text-foreground">{prototype.name}</p>
           <p className="truncate text-sm text-foreground-muted">{prototype.description}</p>
