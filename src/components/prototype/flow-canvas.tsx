@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { FitIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import type { Anchor } from "@/lib/comments";
 import { bestPerRow, layoutFlow, withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
+import { applyEmbed } from "@/lib/embed";
 import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 
 import { anchorAt, Card, CommentCard, Composer, DraftPin, pageKey, Pin, spotOf, type CommentsUi, type Spot } from "./comment-parts";
@@ -499,6 +500,11 @@ function ScreenFrame({
     return () => register(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useLayoutEffect(() => {
+    const doc = frame.current?.contentDocument;
+    return loaded && doc ? applyEmbed(doc) : undefined;
+  }, [loaded]);
 
   // The wireframe look is the studio's own stylesheet in the screen's document, put back each time a document loads.
   useEffect(() => {

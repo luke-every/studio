@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { DevPanel } from "@/components/prototype/dev-panel";
 import { EditBar } from "@/components/prototype/edit-bar";
@@ -23,6 +23,7 @@ import { useMediaQuery } from "@/lib/use-media-query";
 import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
+import { applyEmbed } from "@/lib/embed";
 import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 
 /**
@@ -334,9 +335,10 @@ export function PrototypeFrame({
       <div
         ref={stage}
         className={`flex min-h-0 flex-1 overflow-auto px-4 pb-4 [scrollbar-width:thin] sm:pb-16 ${showingFlow ? "invisible" : ""}`}>
+        {/* Clipped, not hidden: below 100% the frame's full-size layout box sticks out of this one, and a hidden box can still be scrolled by the prototype (a modal taking focus), which slid the whole phone sideways in Safari. A clipped box can't be scrolled at all. */}
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
-          className={`relative isolate m-auto shrink-0 overflow-hidden rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${
+          className={`relative isolate m-auto shrink-0 overflow-clip rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${
             scale ? "" : "h-full"
           }`}
         >
@@ -465,6 +467,12 @@ function FrameBody({
   useEffect(() => {
     if (frame.current?.contentDocument?.readyState === "complete") arrived();
   }, []);
+
+  // Before the page is painted, so it never shows a scrollbar that then goes.
+  useLayoutEffect(() => {
+    const doc = frame.current?.contentDocument;
+    return doc ? applyEmbed(doc) : undefined;
+  }, [documents]);
 
   useEffect(() => {
     const doc = frame.current?.contentDocument;
