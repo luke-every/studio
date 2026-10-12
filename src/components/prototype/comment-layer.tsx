@@ -157,6 +157,30 @@ export function CommentLayer({
     };
   }, [focus, frame]);
 
+  // The glass takes clicks, not scrolling: a wheel over it scrolls whatever in the prototype is under the pointer and can
+  // still move that way, else the page, by the distance it moved on screen.
+  const scroll = (event: React.WheelEvent<HTMLDivElement>) => {
+    const doc = frame.current?.contentDocument;
+    const win = frame.current?.contentWindow;
+    if (!doc || !win) return;
+    const box = event.currentTarget.getBoundingClientRect();
+    const dx = event.deltaX / scale;
+    const dy = event.deltaY / scale;
+    let element: Element | null = doc.elementFromPoint((event.clientX - box.left) / scale, (event.clientY - box.top) / scale);
+    for (; element && element !== doc.documentElement && element !== doc.body; element = element.parentElement) {
+      const style = win.getComputedStyle(element);
+      const canY = /auto|scroll|overlay/.test(style.overflowY) && element.scrollHeight > element.clientHeight;
+      const canX = /auto|scroll|overlay/.test(style.overflowX) && element.scrollWidth > element.clientWidth;
+      const roomY = dy < 0 ? element.scrollTop > 0 : element.scrollTop + element.clientHeight < element.scrollHeight - 1;
+      const roomX = dx < 0 ? element.scrollLeft > 0 : element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+      if ((canY && dy && roomY) || (canX && dx && roomX)) {
+        element.scrollBy(dx, dy);
+        return;
+      }
+    }
+    win.scrollBy(dx, dy);
+  };
+
   const place = (event: React.MouseEvent<HTMLDivElement>) => {
     const doc = frame.current?.contentDocument;
     if (!doc?.body) return;
@@ -186,6 +210,7 @@ export function CommentLayer({
       {placing ? (
         <div
           onClick={place}
+          onWheel={scroll}
           className="pointer-events-auto absolute inset-0 cursor-crosshair"
         />
       ) : null}
