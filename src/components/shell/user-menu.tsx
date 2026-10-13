@@ -5,11 +5,12 @@ import { IconButton } from "@/components/ui/button";
 import { useHoverOpen } from "@/lib/use-hover-open";
 import { useUser } from "@/lib/use-user";
 
+import { FirstSteps } from "./first-steps";
 import { PencilIcon, ShuffleIcon } from "./nav-icons";
 import { UserAvatar } from "./user-avatar";
 
 const item =
-  "flex w-full items-center rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-sm text-foreground hover:bg-surface-hover";
+  "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-sm text-foreground hover:bg-surface-hover";
 
 /** The person at the top right: who you are, how to get set up, and a way to switch or leave. */
 export function UserMenu({ onSwitch, onSetup, onSettings, onEditProfile }: { onSwitch: () => void; onSetup: () => void; onSettings: () => void; onEditProfile: () => void }) {
@@ -73,18 +74,15 @@ export function UserMenu({ onSwitch, onSetup, onSettings, onEditProfile }: { onS
           </IconButton>
         </div>
 
+        <FirstSteps
+          className={item}
+          onSetup={() => {
+            setOpen(false);
+            onSetup();
+          }}
+        />
+
         <div className="flex flex-col border-t border-divider py-1">
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onSetup();
-            }}
-            className={item}
-          >
-            Setup
-          </button>
           <button
             type="button"
             role="menuitem"

@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
       anchor: anchor.data,
       variant: typeof body.variant === "string" && body.variant ? body.variant : undefined,
       by: typeof body.by === "string" ? body.by.slice(0, 40) : undefined,
+      avatar: typeof body.avatar === "number" ? body.avatar : undefined,
     });
     return NextResponse.json({ ok: true, n: comment.n });
   } catch (error) {

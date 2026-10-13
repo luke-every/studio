@@ -110,6 +110,14 @@
       return studio === null ? null : studio;
     } catch { return null; }
   }
+  // The face this person chose in the studio on this device, sent only so a notification can show it.
+  function avatarOf(name) {
+    try {
+      var stored = JSON.parse(localStorage.getItem("studio.people") || "null");
+      var me = Array.isArray(stored) && stored.find(function (p) { return p && p.name === name; });
+      return me && Number.isInteger(me.avatar) ? me.avatar : undefined;
+    } catch { return undefined; }
+  }
   function saveName(name) {
     try { localStorage.setItem(NAME_KEY, name); } catch { /* lasts until the page is left */ }
   }
@@ -312,7 +320,7 @@
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               slug: slug, version: version, token: token,
-              text: text, anchor: anchor, variant: setupOf(names), by: name || undefined,
+              text: text, anchor: anchor, variant: setupOf(names), by: name || undefined, avatar: avatarOf(name),
             }),
           });
         }).then(function (response) {

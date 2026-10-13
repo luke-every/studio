@@ -3,7 +3,6 @@
 import { useState, type ReactNode } from "react";
 
 import { RouteTransition } from "@/components/motion";
-import { SetupPrompt } from "@/components/onboarding/setup-prompt";
 import { useStudio } from "@/lib/data/studio-store";
 import { useUser } from "@/lib/use-user";
 
@@ -34,8 +33,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           {error} <span className="text-foreground-subtle">Tap to dismiss</span>
         </button>
       ) : null}
-
-      <SetupPrompt />
 
       <main className="min-w-0 flex-1">
         <RouteTransition>{children}</RouteTransition>

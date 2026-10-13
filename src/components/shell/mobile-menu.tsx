@@ -6,6 +6,8 @@ import { MotionPopover } from "@/components/motion";
 import { IconButton } from "@/components/ui/button";
 import { useUser } from "@/lib/use-user";
 
+import { UnreadBadge } from "./notifications-menu";
+import { FirstSteps } from "./first-steps";
 import { BellIcon, MenuIcon, SearchIcon } from "./nav-icons";
 
 const item =
@@ -15,7 +17,7 @@ const item =
  * On a phone there isn't room for search, notifications and the user as three
  * buttons, so they share one menu.
  */
-export function MobileMenu({ onSearch, onSetup, onSettings, onSwitch, onEditProfile }: { onSearch: () => void; onSetup: () => void; onSettings: () => void; onSwitch: () => void; onEditProfile: () => void }) {
+export function MobileMenu({ unread, onNotifications, onSearch, onSetup, onSettings, onSwitch, onEditProfile }: { unread: number; onNotifications: () => void; onSearch: () => void; onSetup: () => void; onSettings: () => void; onSwitch: () => void; onEditProfile: () => void }) {
   const { ready, name, leave } = useUser();
   const [open, setOpen] = useState(false);
 
@@ -38,18 +40,23 @@ export function MobileMenu({ onSearch, onSetup, onSettings, onSwitch, onEditProf
           aria-haspopup="menu"
           aria-expanded={open}
         >
-          <MenuIcon className="size-5" />
+          <span className="relative">
+            <MenuIcon className="size-5" />
+            {unread ? <span aria-label={`${unread} unread`} className="absolute -right-1 -top-1 size-2.5 rounded-full bg-destructive" /> : null}
+          </span>
         </IconButton>
       }
     >
       <div role="menu" aria-label="Menu" className="flex flex-col">
+        <FirstSteps className={item} onSetup={choose(onSetup)} />
         <button type="button" role="menuitem" onClick={choose(onSearch)} className={item}>
           <SearchIcon />
           Search
         </button>
-        <button type="button" role="menuitem" onClick={choose(() => {})} className={item}>
+        <button type="button" role="menuitem" onClick={choose(onNotifications)} className={item}>
           <BellIcon />
           Notifications
+          <UnreadBadge count={unread} className="ml-auto" />
         </button>
 
         {ready ? (
@@ -62,9 +69,6 @@ export function MobileMenu({ onSearch, onSetup, onSettings, onSwitch, onEditProf
                 Edit profile
               </button>
             ) : null}
-            <button type="button" role="menuitem" onClick={choose(onSetup)} className={item}>
-              Setup
-            </button>
             <button type="button" role="menuitem" onClick={choose(onSettings)} className={item}>
               Settings
             </button>

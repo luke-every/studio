@@ -1,0 +1,53 @@
+"use client";
+
+import Link from "next/link";
+
+import type { Activity } from "@/lib/activity";
+import type { ActivityFeed } from "@/lib/use-activity";
+
+import { UserAvatar } from "./user-avatar";
+
+const units: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["day", 86_400_000],
+  ["hour", 3_600_000],
+  ["minute", 60_000],
+];
+const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+function ago(iso: string) {
+  const elapsed = Date.parse(iso) - Date.now();
+  const [unit, size] = units.find(([, size]) => Math.abs(elapsed) >= size) ?? ["minute", 60_000];
+  return relative.format(Math.round(elapsed / size), unit);
+}
+
+/** The latest comments from the team, each opening the prototype it is on. */
+export function NotificationList({ feed, onNavigate }: { feed: ActivityFeed; onNavigate: () => void }) {
+  if (!feed.items.length) {
+    return <p className="px-3 py-6 text-center text-sm text-foreground-muted">Nothing yet. Comments from your team show up here.</p>;
+  }
+
+  return (
+    <ul className="flex max-h-[min(24rem,70dvh)] flex-col overflow-y-auto">
+      {feed.items.map((item: Activity) => (
+        <li key={item.id}>
+          <Link
+            href={`/prototypes/${item.slug}?v=${item.version}`}
+            onClick={onNavigate}
+            className="flex items-start gap-3 rounded-[var(--r-sm)] px-2.5 py-2 hover:bg-surface-hover"
+          >
+            <UserAvatar name={item.author} className="size-8" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-foreground">
+                <span className="font-medium">{item.author}</span> {item.reply ? "replied on" : "commented on"}{" "}
+                <span className="font-medium">{item.prototype}</span>
+              </p>
+              <p className="line-clamp-2 text-sm text-foreground-muted">{item.text}</p>
+              <p className="mt-0.5 text-xs text-foreground-subtle">{ago(item.at)}</p>
+            </div>
+            {feed.isNew(item) ? <span aria-label="New" className="mt-1.5 size-2 shrink-0 rounded-full bg-destructive" /> : null}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}

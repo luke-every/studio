@@ -4,6 +4,7 @@ import { anchorSchema, commentsFileSchema, type Anchor, type Comment } from "@/l
 
 import { isStoreConfigured, readStoreFile, writeStoreFile } from "./store";
 import { VERSION_PATTERN, versionSegment } from "./version";
+import { announceComment } from "./push";
 import { named } from "./write";
 
 /**
@@ -44,6 +45,8 @@ export async function addComment(input: {
   /** The setup it is left on (see `Comment`), if any. A reply takes its comment's. */
   variant?: string;
   by?: string;
+  /** The commenter's chosen face, for the notification only; it is not kept. */
+  avatar?: number;
 }) {
   const text = input.text.trim();
   if (!text) throw new Error("Write something first.");
@@ -72,6 +75,7 @@ export async function addComment(input: {
     [...comments, comment],
     `${parent ? "Reply to" : "Comment"} #${comment.n} on ${input.slug} ${input.version}`,
   );
+  await announceComment({ slug: input.slug, version: input.version, comment, avatar: input.avatar });
   return comment;
 }
 

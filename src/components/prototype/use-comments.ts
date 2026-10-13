@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import type { Anchor, Comment } from "@/lib/comments";
+import { useUser } from "@/lib/use-user";
 import { addComment, deleteComment, listComments, resolveComment, setCommentScreen } from "@/lib/registry/actions";
 
 const SHOW_KEY = "proto.show-comments";
@@ -43,6 +44,8 @@ export function useShowComments() {
  * refresh. A list grows, and comments get resolved or deleted.
  */
 export function useComments(slug: string | undefined, version: string | undefined, by: string, variant?: string) {
+  const { profileOf } = useUser();
+  const avatar = by ? profileOf(by).avatar : undefined;
   const target = slug && version ? { slug, version } : undefined;
   const key = target ? `${slug}/${version}` : "";
   const [loaded, setLoaded] = useState<{ key: string; list: Comment[] } | null>(null);
@@ -71,7 +74,7 @@ export function useComments(slug: string | undefined, version: string | undefine
   /** Posts a comment; the comment, or null if it couldn't be saved. */
   const add = async (text: string, anchor: Anchor, setup?: string) => {
     if (!target) return null;
-    const result = await addComment({ ...target, text, anchor, variant: setup === undefined ? variant : setup || undefined, by });
+    const result = await addComment({ ...target, text, anchor, variant: setup === undefined ? variant : setup || undefined, by, avatar });
     if (!result.ok) {
       setError(result.error);
       return null;
@@ -90,7 +93,7 @@ export function useComments(slug: string | undefined, version: string | undefine
 
   const reply = async (parent: Comment, text: string) => {
     if (!target) return false;
-    const result = await addComment({ ...target, text, parentId: parent.id, by });
+    const result = await addComment({ ...target, text, parentId: parent.id, by, avatar });
     if (!result.ok) {
       setError(result.error);
       return false;

@@ -47,6 +47,11 @@ export async function middleware(request: NextRequest) {
     pathname === "/install.sh" ||
     // The comment script a review link adds to a prototype, fetched by the prototype's page.
     pathname === "/studio-review.js" ||
+    // The service worker and manifest are fetched by the browser without the cookie.
+    pathname === "/sw.js" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/apple-icon.png" ||
+    pathname.startsWith("/icons/") ||
     pathname.startsWith("/skill/") ||
     pathname.startsWith("/remix/") ||
     pathname === "/favicon.ico";

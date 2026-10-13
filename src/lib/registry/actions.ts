@@ -7,7 +7,9 @@ import { mintReviewToken } from "@/lib/review";
 
 import { EDIT_IMAGE_DIR, editsSchema, type Edit } from "@/lib/edits";
 
+import * as activity from "./activity";
 import * as comments from "./comments";
+import * as push from "./push";
 import * as registry from "./write";
 
 /**
@@ -171,4 +173,22 @@ export async function resolveComment(input: Parameters<typeof comments.setResolv
 export async function studioPassword() {
   if (!(await isUnlocked())) return "";
   return process.env.STUDIO_PASSWORD?.trim() ?? "";
+}
+
+/** What a browser needs to subscribe this device to notifications. */
+export async function pushKey() {
+  return attempt(async () => push.pushPublicKey(), []);
+}
+
+export async function enablePush(subscription: unknown, name: string) {
+  return attempt(() => push.addDevice(subscription, name), []);
+}
+
+export async function disablePush(endpoint: string) {
+  return attempt(() => push.removeDevice(endpoint), []);
+}
+
+/** The latest comments across the studio, for the bell. */
+export async function listActivity() {
+  return attempt(() => activity.readActivity(), []);
 }
