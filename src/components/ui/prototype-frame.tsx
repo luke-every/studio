@@ -632,6 +632,7 @@ export function PrototypeFrame({
             key={canvas.setups ? "variants" : "flow"}
             flow={canvas.flow}
             setups={canvas.setups}
+            fullPage={!flow && !canvas.setups}
             base={addressed.split("?")[0]}
             device={device}
             // Closed, it isn't looking for pins.

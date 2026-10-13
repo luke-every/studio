@@ -68,6 +68,7 @@ export function FlowCanvas({
   comments,
   setups,
   wireframe = false,
+  fullPage: wholePage = false,
 }: {
   flow: Flow;
   /** The prototype's address, without any screen's parameters. */
@@ -79,11 +80,13 @@ export function FlowCanvas({
   setups?: Record<string, string>;
   /** The same wireframe look the prototype is shown in. */
   wireframe?: boolean;
+  /** Each screen as tall as the whole page turns out to be, not a device's height. Always so for variants. */
+  fullPage?: boolean;
 }) {
   const node = { width: device.width * SCREEN_SCALE, height: device.height * SCREEN_SCALE };
   const cell = { width: node.width + GAP.x, height: node.height + GAP.y + LABEL_HEIGHT };
   // Variants are whole pages: each as tall as it turns out to be once it has loaded.
-  const fullPage = !!setups;
+  const fullPage = !!setups || wholePage;
   // Nothing is shown while the pages load: a quiet loader, then every screen arrives together, left to right, at the size it will stay.
   const [readyIds, setReadyIds] = useState<ReadonlySet<string>>(new Set());
   const [gaveUp, setGaveUp] = useState(false);
