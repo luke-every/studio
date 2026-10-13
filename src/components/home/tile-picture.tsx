@@ -17,7 +17,9 @@ import { LivePreview } from "./live-preview";
  */
 export function TilePicture({ url, title }: { url: string; title: string }) {
   const image = useRef<HTMLImageElement>(null);
-  const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "missing">(
+    "loading",
+  );
 
   // The server-rendered <img> can finish, or fail, before React is listening.
   useEffect(() => {
@@ -29,18 +31,24 @@ export function TilePicture({ url, title }: { url: string; title: string }) {
   if (state === "missing") return <LivePreview src={url} title={title} />;
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      ref={image}
-      src={`${url}/studio-preview.jpg`}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      draggable={false}
-      onLoad={() => setState("ready")}
-      onError={() => setState("missing")}
-      data-ready={state === "ready" || undefined}
-      className="fade-in absolute inset-0 size-full object-cover object-top"
-    />
+    <>
+      <div
+        aria-hidden
+        className={`absolute inset-0 bg-surface ${state === "ready" ? "" : "pulse-soft"}`}
+      />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        ref={image}
+        src={`${url}/studio-preview.jpg`}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        onLoad={() => setState("ready")}
+        onError={() => setState("missing")}
+        data-ready={state === "ready" || undefined}
+        className="fade-in absolute inset-0 size-full object-cover object-top"
+      />
+    </>
   );
 }

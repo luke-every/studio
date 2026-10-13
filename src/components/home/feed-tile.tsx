@@ -34,7 +34,9 @@ export function FeedTile({ prototype }: { prototype: Prototype }) {
         >
           {prototype.current.url ? (
             <TilePicture url={prototype.current.url} title={`${prototype.name} ${prototype.current.version}`} />
-          ) : null}
+          ) : (
+            <div className="absolute inset-0 bg-surface pulse-soft" />
+          )}
         </div>
       </Link>
 

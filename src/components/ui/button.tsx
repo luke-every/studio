@@ -15,6 +15,7 @@ const base =
 const look = {
   primary: "bg-accent text-accent-foreground hover:bg-accent-hover",
   destructive: "bg-destructive text-destructive-foreground hover:opacity-90",
+  positive: "bg-success text-success-foreground hover:opacity-90",
   secondary: "border border-border bg-surface text-foreground hover:bg-surface-hover",
   ghost: "text-foreground-muted hover:bg-surface-hover hover:text-foreground",
 } as const;
@@ -37,7 +38,7 @@ export const controlOn = "!border-transparent !bg-accent !text-accent-foreground
 
 type Props = {
   /** `destructive` is a primary button for something that can't be taken back. */
-  variant?: "primary" | "secondary" | "destructive";
+  variant?: "primary" | "secondary" | "destructive" | "positive";
   /** Renders a link instead, to an address in the studio or (with `external`) outside it. */
   href?: string;
   external?: boolean;

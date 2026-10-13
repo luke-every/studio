@@ -102,6 +102,7 @@ export function LivePreview({ src, title }: { src: string; title: string }) {
 
   return (
     <div ref={box} className="absolute inset-0 isolate overflow-hidden [transform:translateZ(0)]">
+      <div aria-hidden className={`absolute inset-0 bg-surface ${loaded ? "" : "pulse-soft"}`} />
       {started && scale ? (
         <iframe
           src={`${src}?preview`}

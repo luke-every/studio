@@ -45,6 +45,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/fonts/") ||
     // The installer and the skill files it fetches, run from a terminal.
     pathname === "/install.sh" ||
+    // The comment script a review link adds to a prototype, fetched by the prototype's page.
+    pathname === "/studio-review.js" ||
     pathname.startsWith("/skill/") ||
     pathname.startsWith("/remix/") ||
     pathname === "/favicon.ico";

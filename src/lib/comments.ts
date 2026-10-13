@@ -40,6 +40,8 @@ export const commentSchema = z.object({
   anchor: anchorSchema,
   /** A comment is resolved, never deleted. */
   resolvedAt: z.string().optional(),
+  /** The setup it was left on: the query of the prototype's address (a control's choice, a studio variant), none for the version as it is. */
+  variant: z.string().optional(),
   /** Set on a reply, to the comment it answers. */
   parentId: z.string().optional(),
 });
@@ -48,3 +50,68 @@ export const commentsFileSchema = z.array(commentSchema);
 
 export type Anchor = z.infer<typeof anchorSchema>;
 export type Comment = z.infer<typeof commentSchema>;
+
+/**
+ * The comments given, as a prompt to paste into Claude Code, written to be
+ * edited: one numbered item each, with where it was left, then a space at the
+ * end for anything the reviewers didn't say. Which comments is the caller's
+ * choice, so nothing is filtered here.
+ *
+ * A prototype with variants gets its comments grouped by the variant they were
+ * left on, and the prompt says that each group is for that variant alone, so
+ * Claude doesn't carry a point over to the baseline or to its neighbours
+ * unless it is told to.
+ */
+export function reviewPrompt(
+  title: string,
+  comments: Comment[],
+  replies: Record<string, Comment[]>,
+  /** A setup in words, when the prototype has variants. */
+  setupLabel?: (setup?: string) => string | null,
+) {
+  const item = (comment: Comment) => {
+    const { anchor } = comment;
+    const lines = [`${comment.n}. ${comment.text.trim()}`, `   - From: ${comment.author.name}`];
+    if (anchor.text) lines.push(`   - On: "${anchor.text}"`);
+    if (anchor.selector) lines.push(`   - Element: ${anchor.selector}`);
+    if (anchor.screen) lines.push(`   - Screen: ${anchor.screen}`);
+    for (const reply of replies[comment.id] ?? []) lines.push(`   - Reply from ${reply.author.name}: ${reply.text.trim()}`);
+    return lines.join("\n");
+  };
+
+  const groups = new Map<string, Comment[]>();
+  for (const comment of comments) groups.set(comment.variant ?? "", [...(groups.get(comment.variant ?? "") ?? []), comment]);
+  const scoped = [...groups.keys()].some((setup) => setupLabel?.(setup || undefined));
+
+  if (!scoped) {
+    return [
+      `We reviewed ${title} and left this feedback. Change the prototype to address each point, and ask me if anything is unclear.`,
+      "",
+      "## Feedback",
+      "",
+      comments.map(item).join("\n\n"),
+      "",
+      "## Also",
+      "",
+      "",
+    ].join("\n");
+  }
+
+  const sections = [...groups].map(([setup, list]) => {
+    const label = setupLabel?.(setup || undefined) ?? "Baseline";
+    const heading = setup ? `## Variant: ${label} (?${setup})` : "## Baseline (no variant selected)";
+    return `${heading}\n\n${list.map(item).join("\n\n")}`;
+  });
+
+  return [
+    `We reviewed ${title} and left this feedback, grouped by the variant it was left on.`,
+    "",
+    "Each group applies to the variant in its heading and to nothing else. Change only that variant's code. Leave the baseline and every other variant exactly as they are, and don't carry a point over to another variant even if it looks like it would fit. The only exception is anything I say otherwise under Also. Ask me if anything is unclear.",
+    "",
+    sections.join("\n\n"),
+    "",
+    "## Also (this overrides the above)",
+    "",
+    "",
+  ].join("\n");
+}

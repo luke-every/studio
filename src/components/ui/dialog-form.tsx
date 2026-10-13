@@ -49,7 +49,8 @@ export function DialogForm({
   };
 
   return (
-    <MotionModal open onClose={onClose} label={title}>
+    // A question with no fields hugs its words, up to a comfortable line; a form keeps the full width its fields need.
+    <MotionModal open onClose={onClose} label={title} className={children ? undefined : "!w-fit !max-w-[24rem]"}>
       <form onSubmit={submit} className="flex flex-col gap-5">
         <div>
           <h2 className="text-md font-medium tracking-[var(--tracking-tight)]">{title}</h2>

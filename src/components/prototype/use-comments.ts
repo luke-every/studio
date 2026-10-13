@@ -42,7 +42,7 @@ export function useShowComments() {
  * window is come back to, which is how somebody else's show up without a
  * refresh. A list grows, and comments get resolved or deleted.
  */
-export function useComments(slug: string | undefined, version: string | undefined, by: string) {
+export function useComments(slug: string | undefined, version: string | undefined, by: string, variant?: string) {
   const target = slug && version ? { slug, version } : undefined;
   const key = target ? `${slug}/${version}` : "";
   const [loaded, setLoaded] = useState<{ key: string; list: Comment[] } | null>(null);
@@ -69,9 +69,9 @@ export function useComments(slug: string | undefined, version: string | undefine
     setLoaded((now) => (now && now.key === key ? { key, list: now.list.map((item) => (item.id === next.id ? next : item)) } : now));
 
   /** Posts a comment; the comment, or null if it couldn't be saved. */
-  const add = async (text: string, anchor: Anchor) => {
+  const add = async (text: string, anchor: Anchor, setup?: string) => {
     if (!target) return null;
-    const result = await addComment({ ...target, text, anchor, by });
+    const result = await addComment({ ...target, text, anchor, variant: setup === undefined ? variant : setup || undefined, by });
     if (!result.ok) {
       setError(result.error);
       return null;
@@ -120,9 +120,11 @@ export function useComments(slug: string | undefined, version: string | undefine
   };
 
   // Comments are what has pins and rows; a reply belongs to the comment it answers.
-  const all = loaded && loaded.key === key ? loaded.list : [];
+  const every = loaded && loaded.key === key ? loaded.list : [];
+  // Pins belong to the setup they were left on; the list of every comment on the version is not so particular.
+  const all = every.filter((item) => item.variant === variant);
   const replies: Record<string, Comment[]> = {};
-  for (const item of all) if (item.parentId) (replies[item.parentId] ??= []).push(item);
+  for (const item of every) if (item.parentId) (replies[item.parentId] ??= []).push(item);
 
-  return { comments: all.filter((item) => !item.parentId), replies, error, add, place, reply, resolve, remove };
+  return { comments: all.filter((item) => !item.parentId), everything: every.filter((item) => !item.parentId), replies, error, add, place, reply, resolve, remove };
 }

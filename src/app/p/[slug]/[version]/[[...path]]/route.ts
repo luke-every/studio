@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { guessContentType } from "@/lib/registry/content-type";
+import { checkReviewToken } from "@/lib/review";
 import { fetchPrototypeFile } from "@/lib/registry/github";
 import { getPrototype } from "@/lib/registry";
 
@@ -74,9 +75,16 @@ export async function GET(
   // own folder fixes every prototype at once, and anything that already sets
   // a base is left alone.
   if (relativePath === "index.html" && path.length === 0 && upstream.status === 200) {
-    const html = await upstream.text();
+    const html = withBase(await upstream.text(), `/p/${slug}/${version}/`);
     headers.delete("content-length");
-    return new NextResponse(withBase(html, `/p/${slug}/${version}/`), { status: 200, headers });
+    // A review link (from the studio's QR code) adds the comment script. The address alone never does, so a link
+    // shared for testing is the prototype and nothing else, and what is served here is never cached for everyone.
+    const token = new URL(request.url).searchParams.get("review");
+    if (token && checkReviewToken(token, slug, version)) {
+      headers.set("cache-control", "private, no-store");
+      return new NextResponse(withReview(html, { slug, version, token }), { status: 200, headers });
+    }
+    return new NextResponse(html, { status: 200, headers });
   }
 
   return new NextResponse(upstream.body, { status: upstream.status, headers });
@@ -90,6 +98,13 @@ function withBase(html: string, href: string) {
   if (head) return html.replace(head[0], `${head[0]}${tag}`);
   const root = html.match(/<html[^>]*>/i);
   return root ? html.replace(root[0], `${root[0]}${tag}`) : `${tag}${html}`;
+}
+
+/** The comment script, last thing in the page, told which version it is on and what it may do there. */
+function withReview(html: string, review: { slug: string; version: string; token: string }) {
+  const tag = `<script src="/studio-review.js" data-slug="${review.slug}" data-version="${review.version}" data-token="${review.token}"></script>`;
+  const close = html.lastIndexOf("</body>");
+  return close === -1 ? `${html}${tag}` : `${html.slice(0, close)}${tag}${html.slice(close)}`;
 }
 
 /** A version pushed before the move to GitHub, whose files are in Blob. */

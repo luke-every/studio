@@ -48,13 +48,16 @@
   --pulse-duration: 1.6s;
   --pulse-delay: 0.25s;
   --pulse-curve: ease-in-out;
+  /* spin: one turn of a loading spinner. */
+  --spin-duration: 0.9s;
+  /* shimmer: a loading shape with a light band sweeping across it. */
+  --shimmer-duration: 1.4s;
+  --shimmer-curve: linear;
   /* fade-in: tune here. */
   --fade-duration: 0.3s;
   --fade-curve: var(--curve-entrance);
-  /* flow-reveal: how long the flow's screens stay skeletons, then how they fade in. */
-  --flow-reveal-hold: 1s;
-  --flow-reveal-duration: var(--dur-deliberate);
-  --flow-reveal-curve: var(--curve-entrance);
+  /* feed-enter: each tile arrives this much after the one before it. */
+  --feed-stagger: 70ms;
 }
 
 /* Reduced motion collapses distance and shortens duration, but never removes
@@ -132,22 +135,6 @@
 @utility fade-in {
   opacity: 0;
   transition: opacity var(--fade-duration) var(--fade-curve);
-
-  &[data-ready] {
-    opacity: 1;
-  }
-}
-
-/* ---------------------------------------------------------------------------
- * flow-reveal — the flow canvas's screens, all at once: skeletons hold for
- * `--flow-reveal-hold` while the screens load and play their own entrance
- * animations out of sight, then they fade in together. Set `data-ready` when
- * the canvas has been laid out. Animated while MOTION_ENABLED is off, like
- * the others here.
- * ------------------------------------------------------------------------- */
-@utility flow-reveal {
-  opacity: 0;
-  transition: opacity var(--flow-reveal-duration) var(--flow-reveal-curve) var(--flow-reveal-hold);
 
   &[data-ready] {
     opacity: 1;
@@ -254,4 +241,114 @@
 
 @utility popover-in {
   animation: popover-in var(--dur-fast) var(--curve-entrance) both;
+}
+
+/* ---------------------------------------------------------------------------
+ * feed-enter — on a feed grid, the first two rows settle in from a touch
+ * below, one after another left to right. Only what is on screen on arrival
+ * is staggered: two tiles on a phone (one column), four on a tablet, six on
+ * desktop. Later tiles are untouched. Timing is `--feed-stagger`, then the
+ * `normal`-weight standard duration. Animated while MOTION_ENABLED is off,
+ * like the others here; reduced motion keeps the fade and drops the travel.
+ * ------------------------------------------------------------------------- */
+@keyframes feed-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-travel-md));
+  }
+}
+
+@utility feed-enter {
+  & > :nth-child(-n + 2) {
+    animation: feed-enter var(--dur-deliberate) var(--curve-entrance) both;
+    animation-delay: calc(var(--i) * var(--feed-stagger));
+  }
+  & > :nth-child(1) { --i: 0; }
+  & > :nth-child(2) { --i: 1; }
+  & > :nth-child(3) { --i: 2; }
+  & > :nth-child(4) { --i: 3; }
+  & > :nth-child(5) { --i: 4; }
+  & > :nth-child(6) { --i: 5; }
+
+  @media (width >= 40rem) {
+    & > :nth-child(-n + 4) {
+      animation: feed-enter var(--dur-deliberate) var(--curve-entrance) both;
+      animation-delay: calc(var(--i) * var(--feed-stagger));
+    }
+  }
+
+  @media (width >= 48rem) {
+    & > :nth-child(-n + 6) {
+      animation: feed-enter var(--dur-deliberate) var(--curve-entrance) both;
+      animation-delay: calc(var(--i) * var(--feed-stagger));
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * stagger-in — one panel of a page arriving, in the same way as a feed tile.
+ * Set `--i` (0, 1, …) for its place in the order. `backwards` rather than
+ * `both`, so the panel's own opacity is its own again once it has arrived.
+ * ------------------------------------------------------------------------- */
+@utility stagger-in {
+  animation: feed-enter var(--dur-deliberate) var(--curve-entrance) backwards;
+  animation-delay: calc(var(--i, 0) * var(--feed-stagger));
+}
+
+/* ---------------------------------------------------------------------------
+ * fade-enter — something arrives by fading in over what is already there (a
+ * QR code replacing the last). Timing is `--fade-duration` and `--fade-curve`.
+ * ------------------------------------------------------------------------- */
+@keyframes fade-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@utility fade-enter {
+  animation: fade-enter var(--fade-duration) var(--fade-curve) both;
+}
+
+/* ---------------------------------------------------------------------------
+ * shimmer — a skeleton shape with a band of light sweeping across it, for
+ * something loading that has a recognisable form. Set `--shimmer-base` and
+ * `--shimmer-shine`; give it a `mask-image` for the shape. Reduced motion
+ * stops the sweep and leaves the plain shape.
+ * ------------------------------------------------------------------------- */
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+@utility shimmer {
+  background-image: linear-gradient(100deg, var(--shimmer-base) 35%, var(--shimmer-shine) 50%, var(--shimmer-base) 65%);
+  background-size: 300% 100%;
+  animation: shimmer var(--shimmer-duration) var(--shimmer-curve) infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * spin — a spinner turning, for something loading with nothing to show yet.
+ * Reduced motion has it breathe in place instead of turn: still alive, no
+ * movement.
+ * ------------------------------------------------------------------------- */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@utility spin {
+  animation: spin var(--spin-duration) linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: pulse-soft var(--pulse-duration) var(--pulse-curve) infinite;
+  }
 }

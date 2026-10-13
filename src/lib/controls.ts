@@ -26,6 +26,8 @@ const common = {
 const choiceControl = z.object({
   ...common,
   type: z.literal("choice"),
+  /** This control picks between variants of the prototype, which the canvas lays out side by side. Optional when it is the only choice. */
+  variants: z.boolean().optional(),
   options: z.array(z.object({ value: z.string(), label: z.string() })).min(2),
   default: z.string(),
 });
@@ -74,4 +76,10 @@ export function applyControls(url: string, controls: Controls | null, values: Co
 
   const query = params.toString();
   return query ? `${url}?${query}` : url;
+}
+
+/** The control whose options are the prototype's variants: the one marked, else the only choice there is. */
+export function variantControl(controls: Controls | null) {
+  const choices = (controls?.controls ?? []).filter((control): control is Extract<Control, { type: "choice" }> => control.type === "choice");
+  return choices.find((control) => control.variants) ?? (choices.length === 1 ? choices[0] : undefined);
 }

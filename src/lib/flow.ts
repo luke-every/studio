@@ -41,6 +41,8 @@ export type Placed = { x: number; y: number };
 
 /** How many steps away from the first screen each screen is. Screens nothing leads to come last. */
 function stepsFromStart(flow: Flow) {
+  // Nothing leads anywhere (the variants of a prototype, side by side): in the order given.
+  if (!flow.edges.length) return new Map(flow.screens.map(({ id }, index) => [id, index]));
   const depth = new Map<string, number>();
   const queue = [flow.screens[0].id];
   depth.set(queue[0], 0);

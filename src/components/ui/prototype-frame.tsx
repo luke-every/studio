@@ -7,8 +7,10 @@ import { EditBar } from "@/components/prototype/edit-bar";
 import { CommentLayer } from "@/components/prototype/comment-layer";
 import type { CommentsUi } from "@/components/prototype/comment-parts";
 import { locateScreen } from "@/components/prototype/locate-screen";
-import type { Anchor, Comment } from "@/lib/comments";
+import { reviewPrompt, type Anchor, type Comment } from "@/lib/comments";
+import { useStudio } from "@/lib/data/studio-store";
 import { CommentsPanel } from "@/components/prototype/comments-panel";
+import { PhoneQr, withToken } from "@/components/prototype/phone-qr";
 import { EditPanel } from "@/components/prototype/edit-panel";
 import { FlowCanvas } from "@/components/prototype/flow-canvas";
 import { useEditSession } from "@/components/prototype/use-edit-session";
@@ -18,6 +20,7 @@ import { MotionSheet } from "@/components/motion";
 import { CodeIcon, CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
 
 import { controlOn, IconButton } from "./button";
+import { DialogForm } from "./dialog-form";
 import { Toggle } from "./toggle";
 import { withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
@@ -27,6 +30,9 @@ import { editInPlace } from "@/lib/edit-dom";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
 import { applyEmbed } from "@/lib/embed";
 import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
+
+/** How long a closed canvas stays loaded in case it is opened again. */
+const CANVAS_WARM_MS = 2 * 60 * 1000;
 
 /**
  * A prototype on a tile, the same grey tile the feed uses, 90% of the
@@ -56,10 +62,13 @@ export function PrototypeFrame({
   edit,
   comments: commentsOf,
   flow,
+  variants,
   flowOpen,
   onFlowOpen,
   mode,
   onMode,
+  listing,
+  onListing: setListing,
   fullscreen,
   onFullscreen,
 }: {
@@ -80,14 +89,28 @@ export function PrototypeFrame({
   /** Which version edits are made on. Without it there is no Edit mode. */
   edit?: { slug: string; versionId: string; variantId?: string };
   /** Which version comments are left on. Without it there are no comments. */
-  comments?: { slug: string; version: string };
+  comments?: {
+    slug: string;
+    version: string;
+    /** The setup on screen (see `Comment`); pins show only the comments left on it. */
+    variant?: string;
+    /** Puts the prototype in the setup a comment was left on. An empty one is the version as it is. */
+    onSetup?: (setup: string) => void;
+    /** A setup in words, for the list, or null when a prototype has only the one. */
+    setupLabel?: (setup?: string) => string | null;
+  };
   /** The flow of this version, if it has one, and whether it is being looked at instead of the prototype. Kept by the page, which steps its side column aside for it. */
   flow: Flow | null;
+  /** The prototype's variants as a canvas of their own, with the setup each one shows. It shares the flow's place: looked at instead of the prototype. */
+  variants?: { flow: Flow; setups: Record<string, string> } | null;
   flowOpen: boolean;
   onFlowOpen: (open: boolean) => void;
   /** Looking, editing or in dev mode. The last two replace the bar and bring a panel of their own. */
   mode: "view" | "dev" | "edit" | "comment";
   onMode: (mode: "view" | "dev" | "edit" | "comment") => void;
+  /** Commenting with the list of comments beside the prototype, which the page makes room for. The comment button asks for it; C starts commenting without it, to leave one quickly. */
+  listing: boolean;
+  onListing: (listing: boolean) => void;
   /** Full screen: the studio steps back so the prototype can fill the window. */
   fullscreen: boolean;
   onFullscreen: (on: boolean) => void;
@@ -97,7 +120,23 @@ export function PrototypeFrame({
   const [opened, setOpened] = useState<{ address?: string; screen: FlowScreen | null }>({ screen: null });
   const screen = opened.address === addressed ? opened.screen : null;
   const url = addressed && screen ? withParams(addressed, screen.params) : addressed;
-  const showingFlow = flowOpen && !!flow && !!addressed;
+  // The canvas: the flow if there is one, the variants if there are, and a switch between them when there are both.
+  const [canvasKind, setCanvasKind] = useState<"flow" | "variants">("flow");
+  const flowCanvas = flow ? { flow, setups: undefined } : null;
+  const canvas = (canvasKind === "variants" ? variants : flowCanvas) ?? flowCanvas ?? variants ?? null;
+  const showingFlow = flowOpen && !!canvas && !!addressed;
+  const showingVariants = showingFlow && !!canvas?.setups;
+  // A canvas that was just closed stays loaded (out of sight, and not looking at anything) for a couple of minutes, so
+  // going back to it is instant rather than a dozen pages loading again. Only the one that was opened, and only for the
+  // version it was opened on.
+  const canvasKey = addressed && canvas ? `${addressed.split("?")[0]}|${canvas.setups ? "variants" : "flow"}` : null;
+  const [warmKey, setWarmKey] = useState<string | null>(null);
+  if (showingFlow && canvasKey && warmKey !== canvasKey) setWarmKey(canvasKey);
+  useEffect(() => {
+    if (showingFlow || !warmKey) return undefined;
+    const timer = window.setTimeout(() => setWarmKey(null), CANVAS_WARM_MS);
+    return () => window.clearTimeout(timer);
+  }, [showingFlow, warmKey]);
   // Dev mode: the same preview, with its code beside it. What was picked and
   // what moved belong to the document on screen, so a new url starts them over.
   const [look, setLook] = useState<"design" | "wireframe">("design");
@@ -108,15 +147,26 @@ export function PrototypeFrame({
   // Comment mode, like editing, takes the page over: the next click on the prototype leaves a comment there, and the panel lists them all.
   // On a phone the list is a sheet instead, opened from the bar.
   const user = useUser();
-  const { comments, replies, error: commentsError, add: postComment, place: placeComment, reply: replyToComment, resolve: resolveComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name);
+  const { comments, everything, replies, error: commentsError, add: postComment, place: placeComment, reply: replyToComment, resolve: resolveComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, commentsOf?.variant);
   const [showPins, setShowPins] = useShowComments();
+  const { notify } = useStudio();
+  // Asked before leaving edit mode with changes that would be lost.
+  const [leaving, setLeaving] = useState(false);
+  const copyForClaude = async (list: Comment[]) => {
+    try {
+      await navigator.clipboard.writeText(reviewPrompt(title, list, replies, commentsOf?.setupLabel));
+      notify("Copied. Paste it into Claude Code");
+    } catch {
+      // Clipboard blocked: say nothing rather than claim a copy that didn't happen.
+    }
+  };
   const commenting = mode === "comment" && !!commentsOf;
   const [listOpen, setListOpen] = useState(false);
   const [focus, setFocus] = useState<{ id: string; at: number } | null>(null);
   const askFor = (id: string | null) => setFocus((now) => (id ? { id, at: (now?.at ?? 0) + 1 } : null));
-  const openCount = comments.filter((comment) => !comment.resolvedAt).length;
+  const openCount = everything.filter((comment) => !comment.resolvedAt).length;
   // The panel keeps showing what it held while it closes.
-  const panelOpen = (dev && !showingFlow) || commenting;
+  const panelOpen = (dev && !showingFlow) || (commenting && listing);
   const [panelKind, setPanelKind] = useState<"dev" | "edit" | "comments">("dev");
   const wantedKind = editing ? "edit" : dev ? "dev" : "comments";
   if (panelOpen && panelKind !== wantedKind) setPanelKind(wantedKind);
@@ -151,6 +201,11 @@ export function PrototypeFrame({
   const goTo = (comment: Comment) => {
     const next = (focus?.at ?? 0) + 1;
     setFocus({ id: comment.id, at: next });
+    // Left on another setup: show that one, and it is opened there once the prototype has reloaded.
+    if (!showingVariants && commentsOf?.onSetup && comment.variant !== commentsOf.variant) {
+      commentsOf.onSetup(comment.variant ?? "");
+      return;
+    }
     const known = flow?.screens.find((item) => item.id === comment.anchor.flowScreen);
     if (known && addressed && known.id !== (screen ?? flow?.screens[0])?.id) {
       setLocated(next);
@@ -158,16 +213,16 @@ export function PrototypeFrame({
     }
   };
   // Leaving a comment: which flow screen it is on is found straight after, out of sight, so going to it later is instant.
-  const addComment = async (text: string, anchor: Anchor) => {
-    const posted = await postComment(text, anchor);
-    if (posted && flow && addressed && !anchor.flowScreen) {
+  const addComment = async (text: string, anchor: Anchor, setup?: string) => {
+    const posted = await postComment(text, anchor, setup);
+    if (posted && flow && addressed && !anchor.flowScreen && setup === undefined) {
       void locateScreen(addressed, flow, device, anchor).then((found) => found && placeComment(posted, found.id));
     }
     return !!posted;
   };
   const commentsUi: CommentsUi | null =
     commentsOf && !dev
-      ? { list: comments, visible: showPins || commenting, placing: commenting && !interacting, focus, onFocus: askFor, onLocate: locate, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onDelete: deleteComment }
+      ? { list: comments, visible: showPins || commenting, placing: commenting && !interacting, focus, onFocus: askFor, onLocate: locate, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
       : null;
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
@@ -180,17 +235,23 @@ export function PrototypeFrame({
   const [restarts, setRestarts] = useState(0);
   const changeMode = (next: "view" | "dev" | "edit" | "comment") => {
     setListOpen(false);
+    if (next !== "comment") setListing(false);
     onMode(next);
   };
 
-  const exitMode = () => {
-    if (editing && session.edits.length && !window.confirm("Leave without saving? Your changes will be discarded.")) return;
+  const leaveMode = () => {
     session.discard();
     setInteracting(false);
     changeMode("view");
   };
+  const exitMode = () => {
+    if (editing && session.edits.length) setLeaving(true);
+    else leaveMode();
+  };
 
   const hotkey = (event: KeyboardEvent) => {
+    // A dialog is asking something: its keys are its own.
+    if (leaving) return;
     if (commentsOf && url && !dev) {
       if (event.key.toLowerCase() === "c" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
@@ -202,8 +263,13 @@ export function PrototypeFrame({
         return;
       }
     }
+    // The canvas closes on Escape (a screen selected on it lets go first, which is the canvas's own; full screen is left first).
+    if (event.key === "Escape" && showingFlow && !commenting && !dev && !fullscreen) {
+      onFlowOpen(false);
+      return;
+    }
     if (mode === "view" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      if (event.key.toLowerCase() === "f" && url && !showingFlow) {
+      if (event.key.toLowerCase() === "f" && url) {
         event.preventDefault();
         onFullscreen(!fullscreen);
         return;
@@ -282,6 +348,17 @@ export function PrototypeFrame({
   // Safari resizes the window as the address bar slides away while scrolling,
   // and redrawing the prototype for every step of that is slow.
   const narrow = useMediaQuery("(max-width: 639px)");
+  // On a phone or tablet the new window gets the long-press comment script; on a desktop it is the plain prototype.
+  const touch = useMediaQuery("(pointer: coarse)");
+  const openWithComments = (href: string) => {
+    // Opened now, while the tap still counts as a gesture, and pointed at the address once its token has arrived.
+    const opened = window.open("", "_blank");
+    const address = new URL(href, window.location.href).href;
+    void withToken(address, new Map()).then(
+      (tokened) => (opened ? (opened.location.href = tokened) : window.open(tokened, "_blank")),
+      () => (opened ? (opened.location.href = address) : undefined),
+    );
+  };
   useEffect(() => {
     const element = stage.current;
     if (!element) return;
@@ -329,12 +406,20 @@ export function PrototypeFrame({
             <div className="[grid-column:3] justify-self-end">
               {editing && edit ? <EditBar session={session} slug={edit.slug} baseVersionId={edit.versionId} variantId={edit.variantId} /> : null}
               {commenting ? (
-                <span className="sm:hidden">
-                  <IconButton label="Comments" onClick={() => setListOpen(true)}>
-                    <CommentIcon />
-                    {openCount ? openCount : null}
-                  </IconButton>
-                </span>
+                <>
+                  <span className="sm:hidden">
+                    <IconButton label="Comments" onClick={() => setListOpen(true)}>
+                      <CommentIcon />
+                      {openCount ? openCount : null}
+                    </IconButton>
+                  </span>
+                  <span className="hidden sm:block">
+                    <IconButton label={listing ? "Hide the list" : "Show the list"} aria-pressed={listing} onClick={() => setListing(!listing)} className={listing ? controlOn : ""}>
+                      <CommentIcon />
+                      {openCount ? openCount : null}
+                    </IconButton>
+                  </span>
+                </>
               ) : null}
             </div>
           </>
@@ -359,14 +444,28 @@ export function PrototypeFrame({
                   <CodeIcon />
                 </IconButton>
               ) : null}
-              {url && flow && addressed && !showingFlow ? (
-                <IconButton label="Flow" onClick={() => onFlowOpen(true)}>
+              {url && (flow || variants) && addressed && !showingFlow ? (
+                <IconButton label="Canvas" onClick={() => onFlowOpen(true)}>
                   <FlowIcon />
                 </IconButton>
               ) : null}
             </div>
             {/* Picking a phone makes no sense on a phone. */}
-            <div className="hidden justify-self-center sm:block">{showingFlow ? null : center?.({ scale })}</div>
+            <div className="hidden justify-self-center sm:block">
+              {showingFlow ? (
+                flow && variants ? (
+                  <div className="flex items-center gap-2" role="group" aria-label="Canvas">
+                    {(["flow", "variants"] as const).map((kind) => (
+                      <IconButton key={kind} aria-pressed={(showingVariants ? "variants" : "flow") === kind} onClick={() => setCanvasKind(kind)} className={(showingVariants ? "variants" : "flow") === kind ? controlOn : ""}>
+                        {kind === "flow" ? "Flow" : "Variants"}
+                      </IconButton>
+                    ))}
+                  </div>
+                ) : null
+              ) : (
+                center?.({ scale })
+              )}
+            </div>
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
                 {showingFlow ? <IconButton onClick={() => onFlowOpen(false)}>Back to prototype</IconButton> : null}
@@ -377,7 +476,7 @@ export function PrototypeFrame({
                         {showPins ? <EyeIcon /> : <EyeOffIcon />}
                       </IconButton>
                     ) : null}
-                    <IconButton label="Comment (C)" onClick={() => changeMode("comment")}>
+                    <IconButton label="Comment (C)" onClick={() => { changeMode("comment"); setListing(true); }}>
                       <CommentIcon />
                       {openCount ? openCount : null}
                     </IconButton>
@@ -389,23 +488,27 @@ export function PrototypeFrame({
                   </span>
                 ) : null}
                 {showingFlow ? null : (
-                  <IconButton label="Open in a new window" href={newTab} external>
-                    <ExternalIcon />
-                  </IconButton>
-                )}
-                {showingFlow ? null : (
-                  <span className="hidden lg:block">
-                    <IconButton
-                      label={fullscreen ? "Exit full screen (F)" : "Full screen (F)"}
-                      tooltipAlign="end"
-                      aria-pressed={fullscreen}
-                      className={fullscreen ? controlOn : undefined}
-                      onClick={() => onFullscreen(!fullscreen)}
-                    >
-                      <ExpandIcon />
+                  touch && newTab ? (
+                    <IconButton label="Open in a new window" onClick={() => openWithComments(newTab)}>
+                      <ExternalIcon />
                     </IconButton>
-                  </span>
+                  ) : (
+                    <IconButton label="Open in a new window" href={newTab} external>
+                      <ExternalIcon />
+                    </IconButton>
+                  )
                 )}
+                <span className="hidden lg:block">
+                  <IconButton
+                    label={fullscreen ? "Exit full screen (F)" : "Full screen (F)"}
+                    tooltipAlign="end"
+                    aria-pressed={fullscreen}
+                    className={fullscreen ? controlOn : undefined}
+                    onClick={() => onFullscreen(!fullscreen)}
+                  >
+                    <ExpandIcon />
+                  </IconButton>
+                </span>
               </div>
             ) : null}
           </>
@@ -414,7 +517,7 @@ export function PrototypeFrame({
 
       <div
         ref={stage}
-        className={`flex min-h-0 flex-1 overflow-auto px-4 pb-4 [scrollbar-width:thin] sm:pb-16 ${showingFlow ? "invisible" : ""}`}>
+        className={`flex min-h-0 flex-1 overflow-auto px-4 pb-4 [scrollbar-width:thin] sm:pb-10 ${showingFlow ? "invisible" : ""}`}>
         {/* Clipped, not hidden: below 100% the frame's full-size layout box sticks out of this one, and a hidden box can still be scrolled by the prototype (a modal taking focus), which slid the whole phone sideways in Safari. A clipped box can't be scrolled at all. */}
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
@@ -446,18 +549,28 @@ export function PrototypeFrame({
         </div>
       </div>
 
-      {showingFlow && flow && addressed ? (
-        <FlowCanvas
-          flow={flow}
-          base={addressed.split("?")[0]}
-          device={device}
-          comments={commentsUi ?? undefined}
-          wireframe={wireframe}
-          onOpen={(next) => {
-            setOpened({ address: addressed, screen: next });
-            onFlowOpen(false);
-          }}
-        />
+      {mode === "view" && url && !showingFlow && !fullscreen ? <PhoneQr stage={stage} /> : null}
+
+      {(showingFlow || (canvasKey && warmKey === canvasKey)) && canvas && addressed ? (
+        <div inert={!showingFlow} className={`absolute inset-0 ${showingFlow ? "" : "pointer-events-none invisible"}`}>
+          <FlowCanvas
+            // The two canvases are different layouts of different screens, so each starts afresh.
+            key={canvas.setups ? "variants" : "flow"}
+            flow={canvas.flow}
+            setups={canvas.setups}
+            base={addressed.split("?")[0]}
+            device={device}
+            // Closed, it isn't looking for pins.
+            comments={showingFlow && commentsUi ? (canvas.setups ? { ...commentsUi, list: everything } : commentsUi) : undefined}
+            wireframe={wireframe}
+            onOpen={(next) => {
+              // A variant opens as the prototype put in that setup; a step of the flow, as the prototype on that screen.
+              if (canvas.setups) commentsOf?.onSetup?.(canvas.setups[next.id]);
+              else setOpened({ address: addressed, screen: next });
+              onFlowOpen(false);
+            }}
+          />
+        </div>
       ) : null}
     </div>
 
@@ -478,7 +591,7 @@ export function PrototypeFrame({
         {panelKind === "edit" && edit ? (
           <EditPanel element={target?.isConnected ? target : null} session={session} />
         ) : panelKind === "comments" ? (
-          <CommentsPanel comments={comments} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={goTo} onResolve={resolveComment} onDelete={deleteComment} />
+          <CommentsPanel comments={everything} setupLabel={commentsOf?.setupLabel} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={goTo} onResolve={resolveComment} onDelete={deleteComment} onCopy={copyForClaude} />
         ) : (
           <div className="p-4">
             <DevPanel picked={here.picked} motion={here.motion} />
@@ -491,7 +604,8 @@ export function PrototypeFrame({
     <MotionSheet open={narrow && listOpen} onClose={() => setListOpen(false)} label="Comments">
       <div className="flex flex-col gap-2 pb-4">
         <CommentsPanel
-          comments={comments}
+          comments={everything}
+          setupLabel={commentsOf?.setupLabel}
           replies={replies}
           selectedId={focus?.id ?? null}
           error={commentsError}
@@ -501,9 +615,21 @@ export function PrototypeFrame({
           }}
           onResolve={resolveComment}
           onDelete={deleteComment}
+          onCopy={copyForClaude}
         />
       </div>
     </MotionSheet>
+
+    {leaving ? (
+      <DialogForm
+        title="Leave without saving?"
+        description="Your changes will be discarded."
+        submitLabel="Leave"
+        destructive
+        onClose={() => setLeaving(false)}
+        onSubmit={leaveMode}
+      />
+    ) : null}
     </div>
   );
 }

@@ -49,6 +49,7 @@ export function CommentLayer({
     onReply,
     onResolve,
     onDelete,
+    onCopy,
   } = ui;
 
   const [draft, setDraft] = useState<Anchor | null>(null);
@@ -159,20 +160,39 @@ export function CommentLayer({
 
   // The glass takes clicks, not scrolling: a wheel over it scrolls whatever in the prototype is under the pointer and can
   // still move that way, else the page, by the distance it moved on screen.
-  const scroll = (event: React.WheelEvent<HTMLDivElement>) => {
+  const scroll = (event: WheelEvent) => {
+    // The browser would scroll the page the glass is in as well, so it is told not to; this does the scrolling.
+    event.preventDefault();
     const doc = frame.current?.contentDocument;
     const win = frame.current?.contentWindow;
     if (!doc || !win) return;
-    const box = event.currentTarget.getBoundingClientRect();
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
     const dx = event.deltaX / scale;
     const dy = event.deltaY / scale;
-    let element: Element | null = doc.elementFromPoint((event.clientX - box.left) / scale, (event.clientY - box.top) / scale);
-    for (; element && element !== doc.documentElement && element !== doc.body; element = element.parentElement) {
+    let element: Element | null = doc.elementFromPoint(
+      (event.clientX - box.left) / scale,
+      (event.clientY - box.top) / scale,
+    );
+    for (
+      ;
+      element && element !== doc.documentElement && element !== doc.body;
+      element = element.parentElement
+    ) {
       const style = win.getComputedStyle(element);
-      const canY = /auto|scroll|overlay/.test(style.overflowY) && element.scrollHeight > element.clientHeight;
-      const canX = /auto|scroll|overlay/.test(style.overflowX) && element.scrollWidth > element.clientWidth;
-      const roomY = dy < 0 ? element.scrollTop > 0 : element.scrollTop + element.clientHeight < element.scrollHeight - 1;
-      const roomX = dx < 0 ? element.scrollLeft > 0 : element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+      const canY =
+        /auto|scroll|overlay/.test(style.overflowY) &&
+        element.scrollHeight > element.clientHeight;
+      const canX =
+        /auto|scroll|overlay/.test(style.overflowX) &&
+        element.scrollWidth > element.clientWidth;
+      const roomY =
+        dy < 0
+          ? element.scrollTop > 0
+          : element.scrollTop + element.clientHeight < element.scrollHeight - 1;
+      const roomX =
+        dx < 0
+          ? element.scrollLeft > 0
+          : element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
       if ((canY && dy && roomY) || (canX && dx && roomX)) {
         element.scrollBy(dx, dy);
         return;
@@ -180,6 +200,20 @@ export function CommentLayer({
     }
     win.scrollBy(dx, dy);
   };
+
+  // Listened to by hand: React's wheel handlers are passive, which can't stop the page scrolling too.
+  const glass = useRef<HTMLDivElement>(null);
+  const scrolling = useRef(scroll);
+  useEffect(() => {
+    scrolling.current = scroll;
+  });
+  useEffect(() => {
+    const element = glass.current;
+    if (!placing || !element) return undefined;
+    const onWheel = (event: WheelEvent) => scrolling.current(event);
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
+  }, [placing]);
 
   const place = (event: React.MouseEvent<HTMLDivElement>) => {
     const doc = frame.current?.contentDocument;
@@ -210,7 +244,7 @@ export function CommentLayer({
       {placing ? (
         <div
           onClick={place}
-          onWheel={scroll}
+          ref={glass}
           className="pointer-events-auto absolute inset-0 cursor-crosshair"
         />
       ) : null}
@@ -243,6 +277,7 @@ export function CommentLayer({
           onReply={onReply}
           onResolve={onResolve}
           onDelete={onDelete}
+          onCopy={onCopy}
         />
       ) : null}
 

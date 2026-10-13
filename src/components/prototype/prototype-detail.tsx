@@ -11,7 +11,8 @@ import { PrototypeLinks } from "@/components/prototype/prototype-links";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
-import { applyControls, defaultValues, type ControlValues } from "@/lib/controls";
+import { applyControls, defaultValues, variantControl, type ControlValues } from "@/lib/controls";
+import type { Flow } from "@/lib/flow";
 import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
 import { DEFAULT_DEVICE } from "@/lib/phone";
@@ -82,6 +83,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const offered = usePrototypeControls(selected.url);
   // Editing and dev mode take the page over: the side column steps aside for a panel next to the canvas.
   const [mode, setMode] = useState<"view" | "dev" | "edit" | "comment">("view");
+  const [listing, setListing] = useState(false);
   const [picked, setPicked] = useState<{ id: string; values: ControlValues }>({ id: "", values: {} });
   const mine = picked.id === selected.id ? picked.values : {};
   const values = { ...defaultValues(offered), ...mine };
@@ -101,11 +103,52 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const controlled = selected.url ? applyControls(selected.url, offered, values) : undefined;
   const address = controlled && variant ? `${controlled}${controlled.includes("?") ? "&" : "?"}${VARIANT_PARAM}=${variant}` : controlled;
 
+  // Comments are listed for the whole version; choosing one left on another setup puts the prototype in that setup.
+  const showSetup = (setup: string) => {
+    const params = new URLSearchParams(setup);
+    const next: ControlValues = {};
+    for (const control of offered?.controls ?? []) {
+      const raw = params.get(control.param ?? control.id);
+      if (raw !== null) next[control.id] = control.type === "toggle" ? "on" : raw;
+    }
+    setPicked({ id: selected.id, values: next });
+    chooseVariant(params.get(VARIANT_PARAM));
+  };
+  const setupLabel = (setup?: string) => {
+    if (!offered && !variants.length) return null;
+    if (!setup) return "Baseline";
+    const params = new URLSearchParams(setup);
+    const parts: string[] = [];
+    for (const control of offered?.controls ?? []) {
+      const raw = params.get(control.param ?? control.id);
+      if (raw === null) continue;
+      parts.push(control.type === "toggle" ? control.label : (control.options.find((option) => option.value === raw)?.label ?? raw));
+    }
+    const made = variants.find((item) => item.id === params.get(VARIANT_PARAM));
+    if (made) parts.push(made.label);
+    return parts.join(" · ") || "Baseline";
+  };
+
+  // The prototype's variants as a canvas of their own: one screen for each option of the control that picks between them,
+  // each with the setup (see `Comment`) it is, so a comment left on one belongs to that variant.
+  const variantsCanvas = (() => {
+    const control = variantControl(offered);
+    if (!control || !selected.url) return null;
+    const setups: Record<string, string> = {};
+    const screens = control.options.map((option) => {
+      const query = applyControls(selected.url!, offered, { ...defaultValues(offered), ...mine, [control.id]: option.value }).split("?")[1] ?? "";
+      setups[option.value] = query;
+      return { id: option.value, name: option.label, params: option.value === control.default ? {} : { [control.param ?? control.id]: option.value } };
+    });
+    return { flow: { screens, edges: [] } satisfies Flow, setups };
+  })();
+
   // The flow, when it has one, is looked at instead of the prototype; like a mode, it takes the side column's room.
   const flow = usePrototypeFlow(address?.split("?")[0]);
   const [flowOpen, setFlowOpen] = useState(false);
-  const showingFlow = flowOpen && !!flow && !!address;
-  const side = mode === "view" && !showingFlow;
+  const showingFlow = flowOpen && (!!flow || !!variantsCanvas) && !!address;
+  // Commenting quickly (C) leaves it be; the comment button brings the list, which takes its room.
+  const side = (mode === "view" || (mode === "comment" && !listing)) && !showingFlow;
   // Full screen: the nav and the side column go, the prototype fills the window, and the column slides back in while the pointer is at the left edge.
   const [focus, setFocus] = useState(false);
   const [peek, setPeek] = useState(false);
@@ -130,7 +173,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       <aside
         inert={focus ? away : !side}
         onPointerLeave={() => setPeek(false)}
-        className={`order-2 min-w-0 px-5 sm:px-0 lg:relative lg:order-1 lg:flex lg:shrink-0 lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+        className={`stagger-in [--i:1] lg:[--i:0] order-2 min-w-0 px-5 sm:px-0 lg:relative lg:order-1 lg:flex lg:shrink-0 lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
           side && !focus
             ? "lg:w-[var(--detail-side-width)] lg:overflow-hidden"
             : focus
@@ -153,7 +196,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               </h1>
               <PrototypeMenu prototype={prototype} version={selected.version} />
             </div>
-            <p className="flex items-center gap-1.5 text-xs text-foreground-subtle">
+            <p className="flex items-center gap-1.5 text-ui text-foreground-subtle">
               <AvatarStack people={people} className="size-5" overlap="-ml-1.5" ring="ring-tile" />
               <span className="text-foreground-muted">{people.length > 2 ? `${people[0].name} +${people.length - 1}` : people.map((person) => person.name).join(", ")}</span>
               <span aria-hidden>·</span>
@@ -190,7 +233,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       </div>
       </aside>
 
-      <div className="order-1 min-w-0 flex-1 lg:order-2 lg:min-h-0">
+      <div className="stagger-in [--i:0] lg:[--i:1] order-1 min-w-0 flex-1 lg:order-2 lg:min-h-0">
         <PrototypeFrame
           url={address}
           device={device}
@@ -207,12 +250,15 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               : undefined
           }
           edit={{ slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
-          comments={{ slug: prototype.slug, version: selected.key }}
+          comments={{ slug: prototype.slug, version: selected.key, variant: address?.split("?")[1] || undefined, onSetup: showSetup, setupLabel }}
           flow={flow}
+          variants={variantsCanvas}
           flowOpen={flowOpen}
           onFlowOpen={setFlowOpen}
           mode={mode}
           onMode={setMode}
+          listing={listing}
+          onListing={setListing}
           fullscreen={focus}
           onFullscreen={(next) => {
             setFocus(next);

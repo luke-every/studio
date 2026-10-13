@@ -2,6 +2,8 @@
 
 import { useReducer, type ReactNode } from "react";
 
+import { PanelEmpty } from "@/components/prototype/panel-empty";
+import { PencilIcon } from "@/components/shell/nav-icons";
 import type { EditSession } from "@/components/prototype/use-edit-session";
 import { Check, Choice, ColorField, Field, Glyph, NumberField, PanelButton, Row, Section, SelectField } from "@/components/prototype/edit-fields";
 import { parseShadow, pictureOf, rgbaOf, shadowCss, sizeProperties, sizingOf, textOf, toRgba, type Axis, type Shadow, type Sizing } from "@/lib/edit-dom";
@@ -547,9 +549,9 @@ export function EditPanel({ element, session }: { element: Element | null; sessi
             ) : null}
           </>
         ) : (
-          <p className="px-4 py-4 text-xs leading-[var(--leading-relaxed)] text-foreground-muted">
-            Click anything in the prototype to change it, and double-click text to type into it. It changes right here; nothing is saved until you save.
-          </p>
+          <PanelEmpty icon={<PencilIcon />}>
+            Click anything in the prototype to change it, and double-click text to type into it. Nothing is saved until you save.
+          </PanelEmpty>
         )}
       </div>
 

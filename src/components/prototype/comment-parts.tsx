@@ -9,15 +9,17 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { MotionPopover } from "@/components/motion";
 import {
   CheckIcon,
+  EllipsisIcon,
   ReplyIcon,
   SendIcon,
-  TrashIcon,
 } from "@/components/shell/nav-icons";
 import { UserAvatar } from "@/components/shell/user-avatar";
 import { useUser } from "@/lib/use-user";
 import { IconButton } from "@/components/ui/button";
+import { ConfirmPopover } from "@/components/ui/confirm-popover";
 import { Stamp } from "@/components/ui/stamp";
 import type { Anchor, Comment } from "@/lib/comments";
 import { selectorFor } from "@/lib/edit-dom";
@@ -40,10 +42,14 @@ export type CommentsUi = {
   onLocate?: (comment: Comment) => void;
   /** What has been said back to each comment, oldest first. */
   replies: Record<string, Comment[]>;
-  onAdd: (text: string, anchor: Anchor) => Promise<boolean>;
+  /** `setup` puts it on a particular setup of the prototype (see `Comment`); an empty one is the version as it is, and none is the setup on screen. */
+  onAdd: (text: string, anchor: Anchor, setup?: string) => Promise<boolean>;
   onReply: (parent: Comment, text: string) => Promise<boolean>;
   onResolve: (comment: Comment, resolved: boolean) => void;
+  /** Deletes it, once the comment's own menu has asked. */
   onDelete: (comment: Comment) => void;
+  /** Copies it, as a prompt for Claude Code. */
+  onCopy: (comment: Comment) => void;
 };
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
@@ -388,7 +394,12 @@ export function Card({
   );
 }
 
-/** Resolving, as a small tick that sits beside the time. Filled once it is done. */
+/**
+ * Resolving, as a small tick that sits beside the time. Filled once it is done.
+ * Resolving asks first, in a small card that grows out of the tick itself so
+ * the answer is right under the finger; reopening is easily undone, so it
+ * doesn't ask.
+ */
 export function ResolveToggle({
   resolved,
   onToggle,
@@ -396,24 +407,37 @@ export function ResolveToggle({
   resolved: boolean;
   onToggle: () => void;
 }) {
+  const [asking, setAsking] = useState(false);
+
   return (
-    <button
-      type="button"
-      aria-label={resolved ? "Reopen" : "Resolve"}
-      title={resolved ? "Reopen" : "Resolve"}
-      aria-pressed={resolved}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-      className={`grid size-5 shrink-0 place-items-center rounded-[var(--r-full)] transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
-        resolved
-          ? "bg-accent text-accent-foreground"
-          : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
-      }`}
-    >
-      <CheckIcon className="size-3.5" />
-    </button>
+    // Whatever holds the comment (a row that opens it) must not hear presses meant for the tick or its question.
+    <div onClick={(event) => event.stopPropagation()}>
+      <ConfirmPopover
+        open={asking}
+        onClose={() => setAsking(false)}
+        message="Are you sure you want to resolve this comment?"
+        confirmLabel="Resolve"
+        onConfirm={onToggle}
+        trigger={
+          <button
+            type="button"
+            aria-label={resolved ? "Reopen" : "Resolve"}
+            title={resolved ? "Reopen" : "Resolve"}
+            aria-pressed={resolved}
+            aria-haspopup={resolved ? undefined : "dialog"}
+            aria-expanded={resolved ? undefined : asking}
+            onClick={() => (resolved ? onToggle() : setAsking((now) => !now))}
+            className={`grid size-5 shrink-0 place-items-center rounded-[var(--r-full)] transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
+              resolved
+                ? "bg-accent text-accent-foreground"
+                : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+            }`}
+          >
+            <CheckIcon className="size-3.5" />
+          </button>
+        }
+      />
+    </div>
   );
 }
 
@@ -527,11 +551,13 @@ export function CommentActions({
   comment,
   onResolve,
   onDelete,
+  onCopy,
   bleed,
 }: {
   comment: Comment;
   onResolve: (comment: Comment, resolved: boolean) => void;
   onDelete: (comment: Comment) => void;
+  onCopy: (comment: Comment) => void;
   /** Pulls the divider out to the edges of whatever holds it: the opposite of that container's side padding. */
   bleed: string;
 }) {
@@ -547,20 +573,83 @@ export function CommentActions({
           resolved={!!comment.resolvedAt}
           onToggle={() => onResolve(comment, !comment.resolvedAt)}
         />
-        <button
-          type="button"
-          aria-label="Delete"
-          title="Delete"
-          onClick={(event) => {
-            event.stopPropagation();
-            if (window.confirm("Delete this comment and its replies?"))
-              onDelete(comment);
-          }}
-          className="grid size-5 shrink-0 place-items-center rounded-[var(--r-full)] text-foreground-muted transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover hover:text-foreground"
-        >
-          <TrashIcon className="size-3.5" />
-        </button>
+        <CommentMenu comment={comment} onDelete={onDelete} onCopy={onCopy} />
       </div>
+    </div>
+  );
+}
+
+/** The ellipsis beside a comment: copy it for Claude Code, or delete it (after being asked, right under the ellipsis). */
+function CommentMenu({
+  comment,
+  onDelete,
+  onCopy,
+}: {
+  comment: Comment;
+  onDelete: (comment: Comment) => void;
+  onCopy: (comment: Comment) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const item =
+    "flex w-full items-center rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-nav hover:bg-surface-hover";
+
+  return (
+    // Whatever holds the comment (a row that opens it) must not hear presses meant for the menu.
+    <div onClick={(event) => event.stopPropagation()}>
+      <ConfirmPopover
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        message="Are you sure you want to delete this comment? Its replies go with it."
+        confirmLabel="Delete"
+        tone="destructive"
+        onConfirm={() => onDelete(comment)}
+        trigger={
+          <MotionPopover
+            open={open}
+            onClose={() => setOpen(false)}
+            className="w-52"
+            trigger={
+              <button
+                type="button"
+                aria-label="More"
+                title="More"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                onClick={() => setOpen((value) => !value)}
+                className="grid size-5 shrink-0 place-items-center rounded-[var(--r-full)] text-foreground-muted transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover hover:text-foreground"
+              >
+                <EllipsisIcon className="size-3.5" />
+              </button>
+            }
+          >
+            <div role="menu" className="flex flex-col">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onCopy(comment);
+                }}
+                className={`${item} text-foreground`}
+              >
+                Copy to Claude Code
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  setDeleting(true);
+                }}
+                className={`${item} text-destructive`}
+              >
+                Delete
+              </button>
+            </div>
+          </MotionPopover>
+        }
+      />
     </div>
   );
 }
@@ -574,6 +663,7 @@ export function CommentCard({
   onReply,
   onResolve,
   onDelete,
+  onCopy,
 }: {
   comment: Comment;
   replies: Comment[];
@@ -582,6 +672,7 @@ export function CommentCard({
   onReply: (parent: Comment, text: string) => Promise<boolean>;
   onResolve: (comment: Comment, resolved: boolean) => void;
   onDelete: (comment: Comment) => void;
+  onCopy: (comment: Comment) => void;
 }) {
   return (
     <Card at={at} onOutside={onClose}>
@@ -589,6 +680,7 @@ export function CommentCard({
         comment={comment}
         onResolve={onResolve}
         onDelete={onDelete}
+        onCopy={onCopy}
         bleed="-mx-3 px-3"
       />
       <div className="flex items-center justify-between gap-3">

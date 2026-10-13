@@ -41,6 +41,8 @@ export async function addComment(input: {
   anchor?: Anchor;
   /** The comment this answers. Replies go one level deep. */
   parentId?: string;
+  /** The setup it is left on (see `Comment`), if any. A reply takes its comment's. */
+  variant?: string;
   by?: string;
 }) {
   const text = input.text.trim();
@@ -52,14 +54,16 @@ export async function addComment(input: {
   const anchor = parent?.anchor ?? (input.anchor ? anchorSchema.parse(input.anchor) : null);
   if (!anchor) throw new Error("A comment has to be left somewhere.");
 
+  const variant = parent ? parent.variant : input.variant;
   const comment: Comment = {
     id: crypto.randomUUID(),
     // A reply shares its comment's number: it is part of that thread, not a new one.
-    n: parent?.n ?? Math.max(0, ...comments.map((item) => item.n)) + 1,
+    n: parent?.n ?? Math.max(0, ...comments.filter((item) => item.variant === variant).map((item) => item.n)) + 1,
     author: named(input.by),
     at: new Date().toISOString(),
     text,
     anchor,
+    variant,
     parentId: parent?.id,
   };
   await save(

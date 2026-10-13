@@ -28,8 +28,14 @@
   --surface-pressed: var(--alpha-ink-08);
 
   /* A feed tile. */
-  --tile: var(--alpha-graphite-06);
-  --tile-hover: var(--alpha-graphite-09);
+  --tile: var(--graphite-100);
+  --tile-hover: var(--graphite-200);
+
+  /* A QR code is dark on light in every theme, so any phone camera reads it. */
+  --qr-bg: var(--paper-50);
+  --qr-fg: var(--ink-900);
+  --qr-skeleton: var(--paper-300);
+  --qr-skeleton-shine: var(--paper-100);
 
   /* The five colours a person's face can sit on. */
   --avatar-bg-1: var(--avatar-pink);
@@ -51,7 +57,7 @@
   --destructive: var(--signal-stop);
   --destructive-foreground: var(--paper-50);
   --success: var(--signal-live);
-  --success-foreground: var(--paper-50);
+  --success-foreground: var(--ink-900);
   --review: var(--signal-review);
 
   --focus-ring: var(--ink-900);
@@ -108,9 +114,9 @@
     --accent-foreground: var(--ink-900);
     --accent-muted: var(--alpha-paper-10);
 
-    --destructive: var(--signal-stop-soft);
-    --destructive-foreground: var(--ink-900);
-    --success: var(--signal-live-soft);
+    --destructive: var(--signal-stop);
+    --destructive-foreground: var(--paper-50);
+    --success: var(--signal-live);
     --success-foreground: var(--ink-900);
     --review: var(--signal-review-soft);
 
@@ -153,9 +159,9 @@
   --accent-foreground: var(--ink-900);
   --accent-muted: var(--alpha-paper-10);
 
-  --destructive: var(--signal-stop-soft);
-  --destructive-foreground: var(--ink-900);
-  --success: var(--signal-live-soft);
+  --destructive: var(--signal-stop);
+  --destructive-foreground: var(--paper-50);
+  --success: var(--signal-live);
   --success-foreground: var(--ink-900);
   --review: var(--signal-review-soft);
 

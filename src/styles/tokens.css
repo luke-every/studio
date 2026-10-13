@@ -17,6 +17,11 @@
   --paper-400: #d2cfca;
   --paper-500: #b9b6b0;
 
+  /* Solid greys for the tile (a prototype's tile and its frame, and the info column), what a 6% and a 9% graphite wash
+   * come to on white. Solid, not translucent, so a tile looks the same over anything and can slide behind another. */
+  --graphite-100: #f4f4f4;
+  --graphite-200: #eeeeee;
+
   /* --- Palette: ink -------------------------------------------------------- */
   --ink-900: #121211;
   --ink-800: #1b1b19;
@@ -27,12 +32,10 @@
 
   /* --- Palette: signals ----------------------------------------------------
    * Used in small doses: a status dot, a state label. Never as decoration. */
-  --signal-live: #3f7d58;
-  --signal-live-soft: #6fa387;
+  --signal-live: #34c759;
   --signal-review: #9a6b2f;
   --signal-review-soft: #c19a62;
-  --signal-stop: #9c4a3c;
-  --signal-stop-soft: #c07d70;
+  --signal-stop: #ff3b30;
 
   /* --- Palette: avatar backgrounds ----------------------------------------
    * Pastel, soft and matte, so a face sits on its colour the way a sticker
@@ -88,8 +91,6 @@
   /* --- Alpha ramps (for borders, scrims, elevation on either theme) ------- */
   --alpha-ink-04: color-mix(in oklab, var(--ink-900) 4%, transparent);
   --alpha-ink-08: color-mix(in oklab, var(--ink-900) 8%, transparent);
-  --alpha-graphite-06: rgba(64, 64, 64, 0.06);
-  --alpha-graphite-09: rgba(64, 64, 64, 0.09);
   --alpha-ink-12: color-mix(in oklab, var(--ink-900) 12%, transparent);
   --alpha-ink-60: color-mix(in oklab, var(--ink-900) 60%, transparent);
   --alpha-paper-06: color-mix(in oklab, var(--paper-50) 6%, transparent);

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { isUnlocked } from "@/lib/gate";
+import { mintReviewToken } from "@/lib/review";
 
 import { EDIT_IMAGE_DIR, editsSchema, type Edit } from "@/lib/edits";
 
@@ -143,6 +144,11 @@ export async function listComments(slug: string, version: string) {
 
 export async function addComment(input: Parameters<typeof comments.addComment>[0]) {
   return attempt(() => comments.addComment(input), []);
+}
+
+/** A review link's token for a version, for the QR code: a phone that scans it can leave comments. `version` is the folder form (v0-2). */
+export async function reviewToken(slug: string, version: string) {
+  return attempt(async () => mintReviewToken(slug, version), []);
 }
 
 export async function setCommentScreen(input: Parameters<typeof comments.setFlowScreen>[0]) {
