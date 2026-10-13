@@ -102,6 +102,51 @@ export function HeartIcon({ className, filled }: IconProps & { filled?: boolean 
   );
 }
 
+/** The devices, for choosing how a prototype is previewed. Drawn roughly to their proportions. */
+export function SmallPhoneIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="4.5" y="2" width="7" height="12" rx="1.5" />
+      <path d="M7 12h2" />
+    </Frame>
+  );
+}
+
+export function LargePhoneIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="4.25" y="1.5" width="7.5" height="13" rx="1.75" />
+      <path d="M7 3.25h2" />
+    </Frame>
+  );
+}
+
+export function TabletIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="3" y="2" width="10" height="12" rx="1.5" />
+      <path d="M7 12h2" />
+    </Frame>
+  );
+}
+
+export function DesktopIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="1.75" y="2.5" width="12.5" height="8.5" rx="1" />
+      <path d="M5.5 13.5h5M8 11v2.5" />
+    </Frame>
+  );
+}
+
+export function MinusIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M3.5 8h9" />
+    </Frame>
+  );
+}
+
 export function ChevronDownIcon(props: IconProps) {
   return (
     <Frame {...props}>

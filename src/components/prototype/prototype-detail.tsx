@@ -157,7 +157,9 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // Commenting quickly (C) leaves it be; the comment button brings the list, which takes its room.
   const side = (mode === "view" || (mode === "comment" && !listing)) && !showingFlow;
   // Full screen: the nav and the side column go, the prototype fills the window, and the column slides back in while the pointer is at the left edge.
-  const [focus, setFocus] = useState(false);
+  // The canvas is always looked at this way, whatever the choice was: closing it puts things back as they were.
+  const [focusChoice, setFocus] = useState(false);
+  const focus = focusChoice || showingFlow;
   const [peek, setPeek] = useState(false);
   const away = focus && !peek;
   // The nav is the shell's, so it is told through the document: it slides up out of the way while the page below grows into its place.
@@ -170,7 +172,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   return (
     <div
       className={`flex w-full flex-col gap-6 py-4 sm:px-8 lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:flex-row lg:items-stretch ${
-        focus ? "lg:h-dvh lg:px-4" : "lg:h-[calc(100dvh-var(--nav-height))]"
+        focus ? "lg:h-dvh lg:p-0" : "lg:h-[calc(100dvh-var(--nav-height))]"
       }`}
     >
       {focus ? (
@@ -244,6 +246,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
         <PrototypeFrame
           url={address}
           device={device}
+          onDevice={chooseDevice}
           zoom={zoom}
           fit={fit}
           center={({ scale }) => (
@@ -268,6 +271,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           onListing={setListing}
           fullscreen={focus}
           onFullscreen={(next) => {
+            // On the canvas it is full screen already, and a choice made there would only show once it is closed.
+            if (showingFlow) return;
             setFocus(next);
             setPeek(false);
           }}

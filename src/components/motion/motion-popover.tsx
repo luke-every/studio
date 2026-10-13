@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 
-type Align = "start" | "end";
+type Align = "start" | "center" | "end";
 
 /**
  * MotionPopover — a layer with a visible origin.
@@ -55,10 +55,10 @@ export function MotionPopover({
       {open ? (
         <div
           style={{
-            transformOrigin: align === "end" ? "top right" : "top left",
+            transformOrigin: align === "end" ? "top right" : align === "center" ? "top center" : "top left",
             zIndex: "var(--z-popover)",
           }}
-          className={`popover-in absolute top-[calc(100%+0.5rem)] ${align === "end" ? "right-0" : "left-0"} overflow-hidden rounded-[var(--r-lg)] border border-border bg-surface-elevated p-1 shadow-[var(--elev-floating)] ${className ?? ""}`}
+          className={`popover-in absolute top-[calc(100%+0.5rem)] ${align === "end" ? "right-0" : align === "center" ? "left-1/2 -translate-x-1/2" : "left-0"} overflow-hidden rounded-[var(--r-lg)] border border-border bg-surface-elevated p-1 shadow-[var(--elev-floating)] ${className ?? ""}`}
         >
           {children}
         </div>

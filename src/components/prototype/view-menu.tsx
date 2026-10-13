@@ -1,24 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { MotionPopover } from "@/components/motion";
-import { CheckIcon, ChevronDownIcon } from "@/components/shell/nav-icons";
+import { ChevronDownIcon, DesktopIcon, FitIcon, LargePhoneIcon, MinusIcon, PlusIcon, SmallPhoneIcon, TabletIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { DEVICES, ZOOMS, type Device } from "@/lib/phone";
 
 const percent = (zoom: number) => `${Math.round(zoom * 100)}%`;
 
-const row = "flex w-full items-center gap-3 rounded-[var(--r-sm)] px-2.5 py-2 text-left text-sm hover:bg-surface-hover";
-const heading = "px-2.5 pb-1 pt-2 text-xs text-foreground-subtle";
+const icons: Record<string, ReactNode> = {
+  "iphone-se": <SmallPhoneIcon className="size-6" />,
+  "iphone-14": <LargePhoneIcon className="size-6" />,
+  tablet: <TabletIcon className="size-6" />,
+  desktop: <DesktopIcon className="size-6" />,
+};
 
-function Tick({ on }: { on: boolean }) {
-  return <span className="grid size-4 place-items-center">{on ? <CheckIcon className="text-foreground" /> : null}</span>;
-}
+const step = "grid size-8 place-items-center rounded-[var(--r-full)] text-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover disabled:opacity-30 disabled:hover:bg-transparent";
 
 /**
- * How the prototype is previewed, in one place: which phone, and how big it is
- * drawn — a set size, or scaled to fit the room there is.
+ * How the prototype is previewed, in one place: how big it is drawn (a step
+ * down or up, or fitted to the room) and which device it is laid out for.
  */
 export function ViewMenu({
   device,
@@ -40,75 +42,80 @@ export function ViewMenu({
 }) {
   const [open, setOpen] = useState(false);
 
+  // What is on screen now, whether chosen or fitted; a step goes from there to the next size in that direction.
+  const now = fit && fitted ? fitted : zoom;
+  const smaller = [...ZOOMS].reverse().find((size) => size < now - 0.005);
+  const larger = ZOOMS.find((size) => size > now + 0.005);
+  const go = (size: number | undefined) => {
+    if (size === undefined) return;
+    onZoom(size);
+    onFit(false);
+  };
+
   return (
     <MotionPopover
       open={open}
       onClose={() => setOpen(false)}
-      align="start"
+      align="center"
       className="w-72"
       trigger={
         <IconButton onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open}>
           <span>
-            {device.name} · {percent(fit && fitted ? fitted : zoom)}
+            {device.name} · {percent(now)}
           </span>
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
         </IconButton>
       }
     >
-      <div className="flex max-h-[32rem] flex-col overflow-y-auto">
-        <p className={heading}>Size</p>
-        <button
-          type="button"
-          aria-pressed={fit}
-          onClick={() => {
-            onFit(true);
-            setOpen(false);
-          }}
-          className={row}
-        >
-          <span className="flex-1 font-medium text-foreground">Fit to view</span>
-          <Tick on={fit} />
-        </button>
-        {ZOOMS.map((option) => (
+      <div className="flex flex-col gap-3 p-1.5">
+        {/* Size: a step down, the size, a step up, and fitting to the room. */}
+        <div className="flex items-center justify-between gap-2">
+          <div role="group" aria-label="Zoom" className="inline-flex h-9 items-center rounded-[var(--r-control)] border border-border bg-surface p-0.5">
+            <button type="button" aria-label="Zoom out" disabled={smaller === undefined} onClick={() => go(smaller)} className={step}>
+              <MinusIcon />
+            </button>
+            <span aria-live="polite" className="min-w-12 text-center text-sm font-medium tabular-nums text-foreground">
+              {percent(now)}
+            </span>
+            <button type="button" aria-label="Zoom in" disabled={larger === undefined} onClick={() => go(larger)} className={step}>
+              <PlusIcon />
+            </button>
+          </div>
           <button
-            key={option}
             type="button"
-            aria-pressed={!fit && option === zoom}
-            onClick={() => {
-              onZoom(option);
-              onFit(false);
-              setOpen(false);
-            }}
-            className={row}
+            aria-pressed={fit}
+            onClick={() => onFit(true)}
+            className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-[var(--r-control)] border px-4 text-sm font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
+              fit ? "border-transparent bg-accent text-accent-foreground" : "border-border bg-surface text-foreground hover:bg-surface-hover"
+            }`}
           >
-            <span className="flex-1 font-medium text-foreground">{percent(option)}</span>
-            <Tick on={!fit && option === zoom} />
+            <FitIcon className="size-4" />
+            Fit
           </button>
-        ))}
+        </div>
 
-        <p className={`${heading} mt-1 border-t border-divider`}>Phone</p>
-        <ul role="listbox" aria-label="Phones">
-          {DEVICES.map((option) => (
-            <li key={option.id}>
+        {/* Device: a tile each, drawn to its proportions. */}
+        <div role="radiogroup" aria-label="Device" className="grid grid-cols-4 gap-1.5">
+          {DEVICES.map((option) => {
+            const on = option.id === device.id;
+            return (
               <button
+                key={option.id}
                 type="button"
-                role="option"
-                aria-selected={option.id === device.id}
-                onClick={() => {
-                  onDevice(option);
-                  setOpen(false);
-                }}
-                className={row}
+                role="radio"
+                aria-checked={on}
+                title={`${option.width} × ${option.height}`}
+                onClick={() => onDevice(option)}
+                className={`flex flex-col items-center gap-1.5 rounded-[var(--r-lg)] px-1 py-2.5 text-center transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
+                  on ? "bg-surface-inset text-foreground ring-1 ring-border-strong" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+                }`}
               >
-                <span className="flex-1 font-medium text-foreground">{option.name}</span>
-                <span className="text-foreground-subtle">
-                  {option.width} × {option.height}
-                </span>
-                <Tick on={option.id === device.id} />
+                {icons[option.id]}
+                <span className="text-xs font-medium leading-tight">{option.name}</span>
               </button>
-            </li>
-          ))}
-        </ul>
+            );
+          })}
+        </div>
       </div>
     </MotionPopover>
   );

@@ -17,13 +17,13 @@ import { useEditSession } from "@/components/prototype/use-edit-session";
 import { useComments, useShowComments } from "@/components/prototype/use-comments";
 import { MotionSheet } from "@/components/motion";
 
-import { CodeIcon, CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
+import { CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
 
 import { controlOn, IconButton } from "./button";
 import { DialogForm } from "./dialog-form";
 import { Toggle } from "./toggle";
 import { withParams, type Flow, type FlowScreen } from "@/lib/flow";
-import type { Device } from "@/lib/phone";
+import { DEFAULT_DEVICE, DEVICES, type Device } from "@/lib/phone";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
@@ -33,6 +33,10 @@ import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 
 /** How long a closed canvas stays loaded in case it is opened again. */
 const CANVAS_WARM_MS = 2 * 60 * 1000;
+
+/** How long a change of device takes to play, matching `--dur-standard`; and the transition that plays it. */
+const SIZING_MS = 280;
+const SIZING = "transition-[width,height,transform] duration-[var(--dur-standard)] ease-[var(--curve-spatial)]";
 
 /**
  * A prototype on a tile, the same grey tile the feed uses, 90% of the
@@ -56,6 +60,7 @@ export function PrototypeFrame({
   leading,
   center,
   device,
+  onDevice,
   zoom = 1,
   fit = false,
   poster,
@@ -80,6 +85,8 @@ export function PrototypeFrame({
   center?: (info: { scale: number | null }) => ReactNode;
   /** The phone it is laid out for. */
   device: Device;
+  /** Dragging an edge of the frame snaps between devices; this is told which. */
+  onDevice?: (device: Device) => void;
   /** How big to draw it, as a multiple of the phone's real size; 1 is its exact size. */
   zoom?: number;
   /** Scale it to the room there is instead; `zoom` is ignored while this is on. */
@@ -267,8 +274,9 @@ export function PrototypeFrame({
         return;
       }
     }
-    // The canvas closes on Escape (a screen selected on it lets go first, which is the canvas's own; full screen is left first).
-    if (event.key === "Escape" && showingFlow && !commenting && !dev && !fullscreen) {
+    // The canvas closes on Escape (a screen selected on it lets go first, which is the canvas's own). It is full screen
+    // itself, so that is no reason to wait: full screen chosen before it opened is what is left next.
+    if (event.key === "Escape" && showingFlow && !commenting && !dev) {
       onFlowOpen(false);
       return;
     }
@@ -405,13 +413,43 @@ export function PrototypeFrame({
       : zoom
     : null;
 
+  // Dragging an edge of the frame picks the device whose frame is nearest the width the pointer has reached, so the
+  // size jumps between mobile, tablet and desktop rather than following the pointer anywhere. It is drawn as it would be.
+  // A change of device is animated: the frame's box and the prototype in it change size together, so it is seen being
+  // resized. Only then; the window being resized, or a zoom step, follows at once.
+  const [sizedFor, setSizedFor] = useState(device.id);
+  const [sizing, setSizing] = useState(false);
+  if (sizedFor !== device.id) {
+    setSizedFor(device.id);
+    setSizing(true);
+  }
+  useEffect(() => {
+    if (!sizing) return undefined;
+    const timer = window.setTimeout(() => setSizing(false), SIZING_MS);
+    return () => window.clearTimeout(timer);
+  }, [sizing, sizedFor]);
+  const scaleOf = (candidate: Device) => (space ? (fit || narrow ? Math.min(space.width / candidate.width, space.height / candidate.height) : zoom) : null);
+  const anchors = [device.kind === "phone" ? device : DEFAULT_DEVICE, ...DEVICES.filter((candidate) => candidate.kind !== "phone")];
+  const widthOf = (candidate: Device) => candidate.width * (scaleOf(candidate) ?? 1);
+  // Dragging an edge picks the device whose frame is nearest the width the pointer has reached, as it goes: the size jumps
+  // between mobile, tablet and desktop rather than following the pointer anywhere, and each jump is played.
+  const pickWidth = (wanted: number) => {
+    const nearest = anchors.reduce((best, candidate) => (Math.abs(widthOf(candidate) - wanted) < Math.abs(widthOf(best) - wanted) ? candidate : best));
+    if (nearest.id !== device.id) onDevice?.(nearest);
+  };
+  const stepDevice = (direction: 1 | -1) => {
+    const here = anchors.findIndex((candidate) => candidate.kind === device.kind);
+    const next = anchors[here + direction];
+    if (next) onDevice?.(next);
+  };
+
   // A set height, the window's on a wide screen: a bigger phone scrolls inside the tile instead of stretching the page.
   return (
     <div className="flex h-[var(--frame-height)] w-full gap-4 lg:h-full">
     <div
       // Clicking the tile around the phone lets go of what was picked, unless it was a button that was pressed. A click inside the prototype never reaches here.
       onClick={(event) => dev && !(event.target as Element).closest("button, a") && deselect()}
-      className="relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile max-sm:rounded-none"
+      className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${fullscreen ? "lg:rounded-none" : ""}`}
     >
       <div key={dev || commenting ? "mode" : "view"} className="bar-in grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:relative sm:z-[var(--z-raised)] sm:px-8 sm:py-8">
         {dev || commenting ? (
@@ -466,11 +504,6 @@ export function PrototypeFrame({
                     { id: "wireframe", label: "Wireframe", icon: <WireframeIcon /> },
                   ]}
                 />
-              ) : null}
-              {url && !showingFlow && !narrow ? (
-                <IconButton label="Dev mode" onClick={() => changeMode("dev")}>
-                  <CodeIcon />
-                </IconButton>
               ) : null}
               {url && (flow || variants) && addressed && !showingFlow ? (
                 <IconButton label="Canvas" onClick={() => onFlowOpen(true)}>
@@ -549,8 +582,17 @@ export function PrototypeFrame({
         {/* Clipped, not hidden: below 100% the frame's full-size layout box sticks out of this one, and a hidden box can still be scrolled by the prototype (a modal taking focus), which slid the whole phone sideways in Safari. A clipped box can't be scrolled at all. */}
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
-          className={`relative isolate m-auto shrink-0 overflow-clip rounded-[var(--r-device)] bg-surface [transform:translateZ(0)] ${
-            scale ? "" : "h-full"
+          className={`relative m-auto shrink-0 ${scale ? "" : "h-full"} ${sizing ? SIZING : ""}`}
+        >
+        {onDevice && !narrow && !showingFlow ? (
+          <>
+            <ResizeHandle side="left" onWidth={pickWidth} onStep={stepDevice} />
+            <ResizeHandle side="right" onWidth={pickWidth} onStep={stepDevice} />
+          </>
+        ) : null}
+        <div
+          className={`relative isolate size-full overflow-clip bg-surface [transform:translateZ(0)] ${
+            device.kind === "phone" ? "rounded-[var(--r-device)]" : "rounded-[var(--r-lg)]"
           }`}
         >
           {url ? (
@@ -561,6 +603,7 @@ export function PrototypeFrame({
               poster={screen ? undefined : poster}
               scale={scale}
               device={device}
+              sizing={sizing}
               wireframe={wireframe}
               inspect={dev ? { ...inspect, picking: !interacting } : null}
               onKey={(event) => hotkeyRef.current(event)}
@@ -574,6 +617,7 @@ export function PrototypeFrame({
               </p>
             </div>
           )}
+        </div>
         </div>
       </div>
 
@@ -670,6 +714,7 @@ function FrameBody({
   poster,
   scale,
   device,
+  sizing,
   wireframe,
   inspect,
   onKey,
@@ -680,6 +725,8 @@ function FrameBody({
   poster?: string;
   scale: number | null;
   device: Device;
+  /** The device has just changed: the prototype is resized with its frame rather than at once. */
+  sizing: boolean;
   wireframe: boolean;
   inspect: { picking: boolean; onPick: (picked: Picked, element: Element) => void; onMotion: (seen: MotionSeen) => void; onEdit: (element: Element) => void; onKey: (event: KeyboardEvent) => void } | null;
   /** Keys pressed inside the prototype, for the studio's own shortcuts. Dev mode takes them through `inspect` instead. */
@@ -762,7 +809,7 @@ function FrameBody({
           transform: `scale(${scale})`,
           filter: wireframe ? WIREFRAME_FRAME_FILTER : undefined,
         }}
-        className="origin-top-left border-0"
+        className={`origin-top-left border-0 ${sizing ? SIZING : ""}`}
         // Same-origin now that the studio serves these, so the frame is
         // sandboxed: a prototype can do everything it needs and cannot reach
         // out into the page around it.
@@ -786,5 +833,46 @@ function FrameBody({
         <div aria-hidden className="pulse-soft absolute inset-0 bg-surface" />
       )}
     </>
+  );
+}
+
+/**
+ * A bar at one side of the frame, there to be dragged. It sits in the gap beside the frame, its middle 8px from the edge, so it never covers the prototype. It appears when the pointer comes to the edge (or has focus) and
+ * stays while it is being dragged. The frame stays centred, so how far the pointer is from the middle is half the width
+ * it is asking for. Arrow keys step between devices for anyone not dragging.
+ */
+function ResizeHandle({ side, onWidth, onStep }: { side: "left" | "right"; onWidth: (width: number) => void; onStep: (direction: 1 | -1) => void }) {
+  const [dragging, setDragging] = useState(false);
+  const centre = useRef(0);
+  const wider = side === "right" ? 1 : -1;
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize preview. Arrow keys change device."
+      tabIndex={0}
+      data-dragging={dragging || undefined}
+      onPointerDown={(event) => {
+        const box = event.currentTarget.parentElement!.getBoundingClientRect();
+        centre.current = box.left + box.width / 2;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setDragging(true);
+      }}
+      onPointerMove={(event) => dragging && onWidth(Math.abs(event.clientX - centre.current) * 2)}
+      onPointerUp={() => setDragging(false)}
+      onPointerCancel={() => setDragging(false)}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          onStep(((event.key === "ArrowRight" ? 1 : -1) * wider) as 1 | -1);
+        }
+      }}
+      className={`group/handle absolute inset-y-0 z-[var(--z-raised)] flex w-4 cursor-ew-resize touch-none items-center justify-center outline-none ${
+        side === "left" ? "right-full" : "left-full"
+      }`}
+    >
+      <span className="h-12 w-1 rounded-[var(--r-full)] bg-foreground-muted opacity-0 transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] group-hover/handle:opacity-100 group-focus-visible/handle:opacity-100 group-data-[dragging]/handle:opacity-100" />
+    </div>
   );
 }
