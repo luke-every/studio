@@ -52,6 +52,8 @@ export async function middleware(request: NextRequest) {
     pathname === "/manifest.webmanifest" ||
     pathname === "/apple-icon.png" ||
     pathname.startsWith("/icons/") ||
+    // A notification's picture, fetched by the browser without the cookie.
+    pathname.startsWith("/avatars/") ||
     pathname.startsWith("/skill/") ||
     pathname.startsWith("/remix/") ||
     pathname === "/favicon.ico";

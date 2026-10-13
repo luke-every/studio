@@ -31,7 +31,7 @@ export function NotificationList({ feed, onNavigate }: { feed: ActivityFeed; onN
       {feed.items.map((item: Activity) => (
         <li key={item.id}>
           <Link
-            href={`/prototypes/${item.slug}?v=${item.version}`}
+            href={`/prototypes/${item.slug}?v=${item.version}${item.comment ? `&comment=${item.comment}` : ""}`}
             onClick={onNavigate}
             className="flex items-start gap-3 rounded-[var(--r-sm)] px-2.5 py-2 hover:bg-surface-hover"
           >

@@ -107,6 +107,7 @@ export async function announceComment(input: { slug: string; version: string; co
       prototype: prototype?.name ?? input.slug,
       text: comment.text,
       reply: !!comment.parentId,
+      comment: comment.parentId ?? comment.id,
     });
 
     const devices = await load();
@@ -122,7 +123,7 @@ export async function announceComment(input: { slug: string; version: string; co
       title: `${comment.author.name} ${comment.parentId ? "replied" : "commented"} on ${prototype?.name ?? input.slug}`,
       body: comment.text,
       icon: avatarSrc(avatar),
-      url: `/prototypes/${input.slug}?v=${input.version}`,
+      url: `/prototypes/${input.slug}?v=${input.version}&comment=${comment.parentId ?? comment.id}`,
     });
 
     const gone: string[] = [];

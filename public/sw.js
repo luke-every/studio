@@ -8,7 +8,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "New comment", {
       body: data.body,
-      icon: data.icon,
+      icon: data.icon ? new URL(data.icon, self.location.origin).href : undefined,
       data: { url: data.url || "/" },
     }),
   );

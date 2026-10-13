@@ -10,4 +10,6 @@ export type Activity = {
   prototype: string;
   text: string;
   reply: boolean;
+  /** The comment to open: the thread the comment or reply belongs to. Absent on the oldest entries. */
+  comment?: string;
 };

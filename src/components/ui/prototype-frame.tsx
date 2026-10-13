@@ -164,6 +164,8 @@ export function PrototypeFrame({
   const [listOpen, setListOpen] = useState(false);
   const [focus, setFocus] = useState<{ id: string; at: number } | null>(null);
   const askFor = (id: string | null) => setFocus((now) => (id ? { id, at: (now?.at ?? 0) + 1 } : null));
+  // A link from a notification names a comment: open the list and go to it, once the comments have loaded.
+  const [asked] = useState(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("comment")));
   const openCount = everything.filter((comment) => !comment.resolvedAt).length;
   // The panel keeps showing what it held while it closes.
   const panelOpen = (dev && !showingFlow) || (commenting && listing);
@@ -359,6 +361,21 @@ export function PrototypeFrame({
       () => (opened ? (opened.location.href = address) : undefined),
     );
   };
+  // A link from a notification names a comment: once the comments have loaded, open the list and go to it, once.
+  const askedDone = useRef(false);
+  useEffect(() => {
+    const comment = asked && !askedDone.current ? everything.find((item) => item.id === asked) : undefined;
+    if (!comment) return;
+    askedDone.current = true;
+    const address = new URL(window.location.href);
+    address.searchParams.delete("comment");
+    window.history.replaceState(null, "", address);
+    changeMode("comment");
+    setListing(!narrow);
+    goTo(comment);
+    // Runs when the comments arrive; the rest is read from the render that sees them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked, everything]);
   useEffect(() => {
     const element = stage.current;
     if (!element) return;
