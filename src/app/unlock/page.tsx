@@ -30,31 +30,27 @@ export default async function UnlockPage({ searchParams }: PageProps<"/unlock">)
   return (
     <div className="grid min-h-dvh place-items-center px-5">
       <div className="w-full max-w-[22rem]">
-        <p className="text-eyebrow">Prototype Studio</p>
-        <h1 className="mt-2 text-xl font-medium tracking-[var(--tracking-tight)] text-foreground">
-          What&rsquo;s the word?
-        </h1>
-        <p className="mt-2 text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
-          Ask anyone on the team. You only need it once on this device.
-        </p>
+        <p className="text-center text-md font-medium tracking-[var(--tracking-tight)] text-foreground">Test Kitchen</p>
 
-        <form action={open} className="mt-6 flex flex-col gap-3">
+        <form action={open} className="mt-8 flex flex-col gap-3">
           <input type="hidden" name="next" value={to} />
           <input
             name="password"
             type="password"
             autoFocus
             autoComplete="off"
+            placeholder="Password"
+            aria-label="Password"
             className="w-full rounded-[var(--r-sm)] border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:border-border-strong focus:outline-none"
           />
           <Button type="submit" variant="primary">
-            Come in
+            Continue
           </Button>
         </form>
 
         {wrong ? (
-          <p className="mt-3 text-xs text-foreground-muted">
-            That&rsquo;s not it. Try again.
+          <p role="alert" className="mt-3 text-center text-xs text-foreground-muted">
+            Wrong password.
           </p>
         ) : null}
       </div>
