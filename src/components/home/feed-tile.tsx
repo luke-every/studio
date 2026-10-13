@@ -23,14 +23,14 @@ export function FeedTile({ prototype }: { prototype: Prototype }) {
       <Link
         href={href}
         aria-label={prototype.name}
-        className="relative flex items-center justify-center rounded-[var(--r-tile)] bg-tile px-[25%] py-14 hover-lift md:h-[var(--tile-height)] md:py-0"
+        className="group/tile relative flex items-center justify-center rounded-[var(--r-tile)] bg-tile px-[25%] py-14 hover-lift md:h-[var(--tile-height)] md:py-0"
       >
         <span className="absolute left-3 top-3 md:left-4 md:top-4 rounded-[var(--r-tag)] bg-surface px-2.5 py-1 text-xs font-medium text-foreground">
           {prototype.current.version}
         </span>
         <div
           aria-hidden
-          className="relative aspect-[9/19.5] w-[min(100%,var(--tile-device-width))] overflow-hidden rounded-[var(--r-device)]"
+          className="relative aspect-[9/19.5] w-[min(100%,var(--tile-device-width))] overflow-hidden rounded-[var(--r-device)] transition-transform duration-[var(--lift-duration)] ease-[var(--lift-curve)] group-hover/tile:scale-[1.03]"
         >
           {prototype.current.url ? (
             <TilePicture url={prototype.current.url} title={`${prototype.name} ${prototype.current.version}`} />
