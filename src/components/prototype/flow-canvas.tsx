@@ -125,6 +125,7 @@ export function FlowCanvas({
   const frames = useRef(new Map<string, HTMLIFrameElement>());
   const [found, setFound] = useState<{ key: string; id: string; screenId: string; spot: Spot }[]>([]);
   const [draft, setDraft] = useState<{ anchor: Anchor; screenId: string } | null>(null);
+  const [retry, setRetry] = useState({ text: "" });
   // Where the canvas is in the window, so a card can be drawn outside its clipping and still sit by its pin.
   const [origin, setOrigin] = useState({ left: 0, top: 0 });
   const placing = !!comments?.placing;
@@ -503,7 +504,11 @@ export function FlowCanvas({
           at={inWindow(onCanvas(openAt.screenId, openAt.spot))}
           onClose={() => comments?.onFocus(null)}
           onReply={comments!.onReply}
-          onResolve={comments!.onResolve}
+          onResolve={(comment, resolved) => {
+            // Resolving closes it at once.
+            if (resolved) comments!.onFocus(null);
+            comments!.onResolve(comment, resolved);
+          }}
           onDelete={comments!.onDelete}
           onCopy={comments!.onCopy}
         />
@@ -512,9 +517,21 @@ export function FlowCanvas({
         <Card at={inWindow(onCanvas(draftAt.screenId, draftAt.spot))}>
           <Composer
             key={`${draft.screenId}${draft.anchor.selector}${draft.anchor.x}${draft.anchor.y}`}
-            onCancel={() => setDraft(null)}
-            onPost={async (text) => {
-              if (await comments.onAdd(text, draft.anchor, setups?.[draft.screenId])) setDraft(null);
+            onCancel={() => {
+              setDraft(null);
+              setRetry({ text: "" });
+            }}
+            initialText={retry.text}
+            onPost={(text) => {
+              // Closed at once; the comment is on the canvas, breathing, until it is saved. If it isn't, what was written comes back.
+              const placed = draft;
+              setDraft(null);
+              setRetry({ text: "" });
+              void comments.onAdd(text, placed.anchor, setups?.[placed.screenId]).then((saved) => {
+                if (saved) return;
+                setRetry({ text });
+                setDraft(placed);
+              });
             }}
           />
         </Card>

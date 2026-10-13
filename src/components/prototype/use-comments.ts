@@ -91,16 +91,34 @@ export function useComments(slug: string | undefined, version: string | undefine
   const replace = (next: Comment) =>
     setLoaded((now) => (now && now.key === key ? { key, list: now.list.map((item) => (item.id === next.id ? next : item)) } : now));
 
-  /** Posts a comment; the comment, or null if it couldn't be saved. */
+  /**
+   * Posts a comment; the comment, or null if it couldn't be saved. It is on the list at once, as a comment still being saved
+   * (which breathes), and is swapped for the saved one when that lands or taken away again if it fails.
+   */
   const add = async (text: string, anchor: Anchor, setup?: string) => {
     if (!target) return null;
-    const result = await addComment({ ...target, text, anchor, variant: setup === undefined ? variant : setup || undefined, by, avatar });
+    const pendingId = `pending-${crypto.randomUUID()}`;
+    const setupOf = setup === undefined ? variant : setup || undefined;
+    setLoaded((now) => {
+      const list = now && now.key === key ? now.list : [];
+      const n = Math.max(0, ...list.filter((item) => item.variant === setupOf).map((item) => item.n)) + 1;
+      const pending: Comment = { id: pendingId, n, author: { login: "pending", name: by || "Someone" }, at: new Date().toISOString(), text: text.trim(), anchor, variant: setupOf };
+      return { key, list: [...list, pending] };
+    });
+    setWorking(pendingId, true);
+    const result = await addComment({ ...target, text, anchor, variant: setupOf, by, avatar }).finally(() => setWorking(pendingId, false));
     if (!result.ok) {
+      setLoaded((now) => (now && now.key === key ? { key, list: now.list.filter((item) => item.id !== pendingId) } : now));
       setError(result.error);
       return null;
     }
     setError(null);
-    setLoaded((now) => ({ key, list: [...(now && now.key === key ? now.list : []), result.value] }));
+    // Swapped in place; if a refresh has dropped the pending one meanwhile, the saved comment is added unless it is already there.
+    setLoaded((now) => {
+      if (!now || now.key !== key) return now;
+      if (now.list.some((item) => item.id === pendingId)) return { key, list: now.list.map((item) => (item.id === pendingId ? result.value : item)) };
+      return now.list.some((item) => item.id === result.value.id) ? now : { key, list: [...now.list, result.value] };
+    });
     return result.value;
   };
 
@@ -123,12 +141,16 @@ export function useComments(slug: string | undefined, version: string | undefine
     return true;
   };
 
+  /** Resolving or reopening shows at once, and is put back if it couldn't be saved. */
   const resolve = async (comment: Comment, resolved: boolean) => {
     if (!target) return;
-    setWorking(comment.id, true);
-    const result = await resolveComment({ ...target, id: comment.id, resolved }).finally(() => setWorking(comment.id, false));
+    replace({ ...comment, resolvedAt: resolved ? new Date().toISOString() : undefined });
+    const result = await resolveComment({ ...target, id: comment.id, resolved });
     if (result.ok) replace(result.value);
-    else setError(result.error);
+    else {
+      replace(comment);
+      setError(result.error);
+    }
   };
 
   const remove = async (comment: Comment) => {

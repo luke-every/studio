@@ -53,6 +53,7 @@ export function CommentLayer({
   } = ui;
 
   const [draft, setDraft] = useState<Anchor | null>(null);
+  const [retry, setRetry] = useState({ text: "" });
   const [spots, setSpots] = useState<Record<string, Spot>>({});
   // Where the layer is in the window, so a card can be drawn outside the frame's clipping and still sit by its pin.
   const [origin, setOrigin] = useState({ left: 0, top: 0 });
@@ -275,7 +276,11 @@ export function CommentLayer({
           at={windowAt(spots[open.id])}
           onClose={() => onFocus(null)}
           onReply={onReply}
-          onResolve={onResolve}
+          onResolve={(comment, resolved) => {
+            // Resolving closes it at once.
+            if (resolved) onFocus(null);
+            onResolve(comment, resolved);
+          }}
           onDelete={onDelete}
           onCopy={onCopy}
         />
@@ -287,9 +292,21 @@ export function CommentLayer({
           <Card at={windowAt(spots.draft)}>
             <Composer
               key={`${shownDraft.selector}${shownDraft.fx}${shownDraft.fy}`}
-              onCancel={() => setDraft(null)}
-              onPost={async (text) => {
-                if (await onAdd(text, shownDraft)) setDraft(null);
+              onCancel={() => {
+                setDraft(null);
+                setRetry({ text: "" });
+              }}
+              initialText={retry.text}
+              onPost={(text) => {
+                // Closed at once; the comment is on the page, breathing, until it is saved. If it isn't, what was written comes back.
+                const anchor = shownDraft;
+                setDraft(null);
+                setRetry({ text: "" });
+                void onAdd(text, anchor).then((saved) => {
+                  if (saved) return;
+                  setRetry({ text });
+                  setDraft(anchor);
+                });
               }}
             />
           </Card>

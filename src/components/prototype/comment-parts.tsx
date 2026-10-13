@@ -204,6 +204,8 @@ export function Pin({
   const [open, setOpen] = useState(false);
   const timer = useRef<number>(0);
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  // Still being saved: it breathes, and can't be opened until it is there.
+  const working = useWorking(comment.id);
 
   const enter = (event: React.PointerEvent<HTMLButtonElement>) => {
     window.clearTimeout(timer.current);
@@ -216,6 +218,9 @@ export function Pin({
     setOpen(false);
     timer.current = window.setTimeout(() => setAt(null), 300);
   };
+
+  // A resolved comment is done with: no pin, though it stays in the list.
+  if (comment.resolvedAt) return null;
 
   return (
     <button
@@ -232,7 +237,7 @@ export function Pin({
       onPointerEnter={enter}
       onPointerLeave={leave}
       style={{ left, top }}
-      className={`pointer-events-auto absolute -translate-y-full ${comment.resolvedAt ? "opacity-60" : ""}`}
+      className={`absolute -translate-y-full ${working ? "pulse-soft pointer-events-none" : "pointer-events-auto"}`}
     >
       <PinFace name={comment.author.name} selected={selected} />
       {at && !selected ? (
@@ -518,7 +523,7 @@ export function Replies({
                 onEscape?.();
               } else if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                void post();
+                post();
               }
             }}
             rows={2}
@@ -725,18 +730,18 @@ export function CommentCard({
 export function Composer({
   onPost,
   onCancel,
+  initialText = "",
 }: {
-  onPost: (text: string) => Promise<void>;
+  /** Called at once, and the composer is closed by it; saving carries on without it. */
+  onPost: (text: string) => void;
   onCancel: () => void;
+  /** What was written before, when a post didn't save and it is opened again. */
+  initialText?: string;
 }) {
-  const [text, setText] = useState("");
-  const [posting, setPosting] = useState(false);
+  const [text, setText] = useState(initialText);
 
-  const post = async () => {
-    if (!text.trim() || posting) return;
-    setPosting(true);
-    await onPost(text);
-    setPosting(false);
+  const post = () => {
+    if (text.trim()) onPost(text);
   };
 
   return (
@@ -762,12 +767,7 @@ export function Composer({
       />
       <div className="flex justify-end gap-2">
         <IconButton onClick={onCancel}>Cancel</IconButton>
-        <IconButton
-          variant="primary"
-          loading={posting}
-          disabled={!text.trim()}
-          onClick={post}
-        >
+        <IconButton variant="primary" disabled={!text.trim()} onClick={post}>
           Post
         </IconButton>
       </div>
