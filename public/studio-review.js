@@ -166,11 +166,17 @@
   var ring = shadow.querySelector(".ring");
   var layer = shadow.querySelector(".layer");
 
-  // Holding must not select text or pop the browser's own menu.
+  // A long press must not select text or pop the browser's own menu. iOS Safari decides that when the finger goes down,
+  // so it is off for the whole page (fields excepted, so typing still works), not switched off once a hold has begun.
   var hold = document.createElement("style");
   hold.textContent =
-    "html[data-studio-holding],html[data-studio-holding] *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}";
+    "html,html *:not(input):not(textarea):not([contenteditable]){-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}";
   document.head.appendChild(hold);
+  document.addEventListener("selectstart", function (event) {
+    var t = event.target && event.target.nodeType === 3 ? event.target.parentElement : event.target;
+    var field = t && t.closest ? t.closest("input,textarea,[contenteditable]") : null;
+    if (!field) event.preventDefault();
+  }, true);
 
   function toast(text) {
     var el = document.createElement("div");

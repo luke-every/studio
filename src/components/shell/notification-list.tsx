@@ -32,7 +32,13 @@ export function NotificationList({ feed, onNavigate }: { feed: ActivityFeed; onN
         <li key={item.id}>
           <Link
             href={`/prototypes/${item.slug}?v=${item.version}${item.comment ? `&comment=${item.comment}` : ""}`}
-            onClick={onNavigate}
+            onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+              // The prototype page reads the comment it is asked for when it loads, so this is a full load, like a tapped notification.
+              event.preventDefault();
+              onNavigate();
+              window.location.assign(event.currentTarget.href);
+            }}
             className="flex items-start gap-3 rounded-[var(--r-sm)] px-2.5 py-2 hover:bg-surface-hover"
           >
             <UserAvatar name={item.author} className="size-8" />
