@@ -153,7 +153,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // The flow, when it has one, is looked at instead of the prototype; like a mode, it takes the side column's room.
   const flow = usePrototypeFlow(address?.split("?")[0]);
   const [flowOpen, setFlowOpen] = useState(false);
-  const showingFlow = flowOpen && (!!flow || !!variantsCanvas) && !!address;
+  const showingFlow = flowOpen && !!address;
   // Commenting quickly (C) leaves it be; the comment button brings the list, which takes its room.
   const side = (mode === "view" || (mode === "comment" && !listing)) && !showingFlow;
   // Full screen: the nav and the side column go, the prototype fills the window, and the column slides back in while the pointer is at the left edge.

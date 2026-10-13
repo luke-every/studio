@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { DevPanel } from "@/components/prototype/dev-panel";
 import { EditBar } from "@/components/prototype/edit-bar";
@@ -131,7 +131,9 @@ export function PrototypeFrame({
   const url = addressed && screen ? withParams(addressed, screen.params) : addressed;
   // The canvas: the flow if there is one, the variants if there are, and a switch between them when there are both.
   const [canvasKind, setCanvasKind] = useState<"flow" | "variants">("flow");
-  const flowCanvas = flow ? { flow, setups: undefined } : null;
+  // With neither, the prototype is a canvas of one screen, so the whole page can still be looked at there.
+  const single = useMemo<Flow>(() => ({ screens: [{ id: "page", name: title, params: {} }], edges: [] }), [title]);
+  const flowCanvas = flow || !variants ? { flow: flow ?? single, setups: undefined } : null;
   const canvas = (canvasKind === "variants" ? variants : flowCanvas) ?? flowCanvas ?? variants ?? null;
   const showingFlow = flowOpen && !!canvas && !!addressed;
   const showingVariants = showingFlow && !!canvas?.setups;
@@ -505,7 +507,7 @@ export function PrototypeFrame({
                   ]}
                 />
               ) : null}
-              {url && (flow || variants) && addressed && !showingFlow ? (
+              {url && addressed && !showingFlow ? (
                 <IconButton label="Canvas" onClick={() => onFlowOpen(true)}>
                   <FlowIcon />
                 </IconButton>
