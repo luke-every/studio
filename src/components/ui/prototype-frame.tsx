@@ -96,6 +96,8 @@ export function PrototypeFrame({
     variant?: string;
     /** Puts the prototype in the setup a comment was left on. An empty one is the version as it is. */
     onSetup?: (setup: string) => void;
+    /** Whether the setup a comment was left on can be shown yet: the options it names load after the page. */
+    canShow?: (setup?: string) => boolean;
     /** A setup in words, for the list, or null when a prototype has only the one. */
     setupLabel?: (setup?: string) => string | null;
   };
@@ -165,7 +167,7 @@ export function PrototypeFrame({
   const [focus, setFocus] = useState<{ id: string; at: number } | null>(null);
   const askFor = (id: string | null) => setFocus((now) => (id ? { id, at: (now?.at ?? 0) + 1 } : null));
   // A link from a notification names a comment: open the list and go to it, once the comments have loaded.
-  const [asked] = useState(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("comment")));
+  const [asked, setAsked] = useState(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("comment")));
   const openCount = everything.filter((comment) => !comment.resolvedAt).length;
   // The panel keeps showing what it held while it closes.
   const panelOpen = (dev && !showingFlow) || (commenting && listing);
@@ -361,21 +363,30 @@ export function PrototypeFrame({
       () => (opened ? (opened.location.href = address) : undefined),
     );
   };
-  // A link from a notification names a comment: once the comments have loaded, open the list and go to it, once.
-  const askedDone = useRef(false);
+  // A link from a notification names a comment. It is gone to once the comment has loaded and the setup it was left on can
+  // be shown, which is after the page: the prototype's options and variants load on their own. The same as choosing it in the list.
+  const [waited, setWaited] = useState(false);
   useEffect(() => {
-    const comment = asked && !askedDone.current ? everything.find((item) => item.id === asked) : undefined;
-    if (!comment) return;
-    askedDone.current = true;
+    if (!asked) return undefined;
+    const timer = window.setTimeout(() => setWaited(true), 4000);
+    return () => window.clearTimeout(timer);
+  }, [asked]);
+  const askedComment = asked ? everything.find((item) => item.id === asked) : undefined;
+  const askedReady = !!askedComment && !!url && (waited || (commentsOf?.canShow?.(askedComment.variant) ?? true));
+  /* eslint-disable react-hooks/set-state-in-effect -- going to a comment is a reaction to it having arrived */
+  useEffect(() => {
+    if (!askedReady || !askedComment) return;
+    setAsked(null);
     const address = new URL(window.location.href);
     address.searchParams.delete("comment");
     window.history.replaceState(null, "", address);
     changeMode("comment");
     setListing(!narrow);
-    goTo(comment);
-    // Runs when the comments arrive; the rest is read from the render that sees them.
+    goTo(askedComment);
+    // Once, when it becomes ready; the rest is read from the render that sees it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asked, everything]);
+  }, [askedReady]);
+  /* eslint-enable react-hooks/set-state-in-effect */
   useEffect(() => {
     const element = stage.current;
     if (!element) return;

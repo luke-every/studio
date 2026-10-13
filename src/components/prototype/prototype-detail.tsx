@@ -114,6 +114,13 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     setPicked({ id: selected.id, values: next });
     chooseVariant(params.get(VARIANT_PARAM));
   };
+  // Whether the controls and variants a setup names are known yet; they load after the page does.
+  const canShow = (setup?: string) => {
+    if (!setup) return true;
+    const known = new Set((offered?.controls ?? []).map((control) => control.param ?? control.id));
+    const made = new Set(variants.map((item) => item.id));
+    return [...new URLSearchParams(setup)].every(([key, value]) => (key === VARIANT_PARAM ? made.has(value) : known.has(key)));
+  };
   const setupLabel = (setup?: string) => {
     if (!offered && !variants.length) return null;
     if (!setup) return "Baseline";
@@ -250,7 +257,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               : undefined
           }
           edit={{ slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
-          comments={{ slug: prototype.slug, version: selected.key, variant: address?.split("?")[1] || undefined, onSetup: showSetup, setupLabel }}
+          comments={{ slug: prototype.slug, version: selected.key, variant: address?.split("?")[1] || undefined, onSetup: showSetup, canShow, setupLabel }}
           flow={flow}
           variants={variantsCanvas}
           flowOpen={flowOpen}
