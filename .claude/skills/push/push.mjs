@@ -19,7 +19,7 @@
  *   node push.mjs --dir . --name "Quiz results" --author "Luke" \
  *     --title "Tighter results layout" --changes "Cut the second card." \
  *     [--entry index.html] [--slug quiz-results] [--team acquisition] \
- *     [--project some-project] [--description "..."] [--version v0.5] [--figma <url>] [--notion <url>] \
+ *     [--project some-project] [--description "..."] [--version v0.5] [--small] [--figma <url>] [--notion <url>] \
  *     [--flow flow.json]
  *
  * Studio address and password come from ~/.claude/prototype-studio.json
@@ -184,7 +184,7 @@ async function studio(path, body) {
 }
 
 // 1. Which version this becomes, and where it goes.
-const start = await studio("/api/push/start", { name, slug: flag("slug"), team: flag("team"), version: flag("version") });
+const start = await studio("/api/push/start", { name, slug: flag("slug"), team: flag("team"), version: flag("version"), small: args.includes("--small") });
 // A studio that predates --version ignores it and picks its own number;
 // better to stop than to save the files under a number nobody asked for.
 if (flag("version") && start.version !== flag("version")) {

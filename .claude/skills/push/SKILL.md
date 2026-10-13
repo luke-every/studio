@@ -154,6 +154,12 @@ If the person gives a Figma or Notion link for the prototype, add
 `--figma <url>` and/or `--notion <url>`. The studio shows them under the
 prototype, and keeps the last ones it was given. Only pass what you were given.
 
+**Small edit or new version.** Decide this yourself from what changed this
+session. Copy, spelling, a colour or spacing tweak, a bug fix: add `--small`, and
+v3.2 becomes v3.2.1 instead of v3.3. A new screen, a changed flow, a different
+approach: leave it off. If it's genuinely unclear, leave it off. Say which you
+chose in your closing line.
+
 The version number is normally the next one, chosen by the studio. If the
 person asks for a specific number ("push this as v1.0"), add `--version v1.0`.
 It must look like `v0.8` and be one that prototype doesn't already have —

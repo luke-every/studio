@@ -193,7 +193,7 @@ type VersionNotes = {
  */
 function plan(
   document: RegistryDocument,
-  input: { name: string; slug?: string; teamSlug?: string; version?: string },
+  input: { name: string; slug?: string; teamSlug?: string; version?: string; small?: boolean },
 ) {
   const slug = slugify(input.slug ?? input.name, "prototype");
   const existing = document.prototypes.find((prototype) => prototype.slug === slug);
@@ -209,6 +209,12 @@ function plan(
   }
 
   let version = nextVersion(mine);
+  if (input.small && mine.length) {
+    const latest = mine.reduce((top, other) =>
+      compareVersions(other.label ?? other.version, top.label ?? top.version) > 0 ? other : top,
+    );
+    version = nextMicroVersion(mine, latest);
+  }
   if (input.version) {
     if (!VERSION_PATTERN.test(input.version)) {
       throw new StoreError(`"${input.version}" isn't a version number. They look like v0.8.`);
@@ -417,6 +423,8 @@ export async function reserveVersion(input: {
   slug?: string;
   teamSlug?: string;
   version?: string;
+  /** A small edit: v3.2 becomes v3.2.1 rather than v3.3. */
+  small?: boolean;
 }) {
   const document = await load();
   const { slug, version } = plan(document, input);
