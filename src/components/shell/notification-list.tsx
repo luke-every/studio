@@ -2,23 +2,11 @@
 
 import Link from "next/link";
 
+import { Stamp } from "@/components/ui/stamp";
 import type { Activity } from "@/lib/activity";
 import type { ActivityFeed } from "@/lib/use-activity";
 
 import { UserAvatar } from "./user-avatar";
-
-const units: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["day", 86_400_000],
-  ["hour", 3_600_000],
-  ["minute", 60_000],
-];
-const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-function ago(iso: string) {
-  const elapsed = Date.parse(iso) - Date.now();
-  const [unit, size] = units.find(([, size]) => Math.abs(elapsed) >= size) ?? ["minute", 60_000];
-  return relative.format(Math.round(elapsed / size), unit);
-}
 
 /** The latest comments from the team, each opening the prototype it is on. */
 export function NotificationList({ feed, onNavigate }: { feed: ActivityFeed; onNavigate: () => void }) {
@@ -48,7 +36,7 @@ export function NotificationList({ feed, onNavigate }: { feed: ActivityFeed; onN
                 <span className="font-medium">{item.prototype}</span>
               </p>
               <p className="line-clamp-2 text-sm text-foreground-muted">{item.text}</p>
-              <p className="mt-0.5 text-xs text-foreground-subtle">{ago(item.at)}</p>
+              <p className="mt-0.5 text-xs text-foreground-subtle"><Stamp iso={item.at} relative /></p>
             </div>
             {feed.isNew(item) ? <span aria-label="New" className="mt-1.5 size-2 shrink-0 rounded-full bg-destructive" /> : null}
           </Link>

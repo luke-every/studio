@@ -43,8 +43,20 @@ export function formatStamp(iso: string, local = true): string {
   return `${day}, ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
+/** Within the last two hours, the way you'd say it; null once it is better said as a time. */
+function formatAgo(date: Date): string | null {
+  const minutes = Math.floor((Date.now() - date.getTime()) / 60_000);
+  if (minutes < 0 || minutes >= 120) return null;
+  if (minutes < 1) return "Just now";
+  if (minutes === 1) return "A minute ago";
+  if (minutes <= 3) return "A few mins ago";
+  if (minutes < 60) return `${minutes} mins ago`;
+  return "An hour ago";
+}
+
 /**
- * When something last changed, the way you'd say it: "Today, 14:00",
+ * When something last changed, the way you'd say it: "Just now", "12 mins ago",
+ * "An hour ago", then "Today, 14:00",
  * "Yesterday, 09:30", and from the day before that the date, "3 Oct, 14:00".
  * Days are the reader's own, so like `formatStamp` this is for the browser;
  * `local = false` gives the server's date-only version.
@@ -53,6 +65,8 @@ export function formatWhen(iso: string, local = true): string {
   if (!local) return formatStamp(iso, false);
 
   const date = new Date(iso);
+  const recent = iso.includes("T") ? formatAgo(date) : null;
+  if (recent) return recent;
   const startOfDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
   const daysAgo = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
   if (daysAgo !== 0 && daysAgo !== 1) return formatStamp(iso, true);

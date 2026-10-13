@@ -58,10 +58,24 @@ export function useWorking(id: string) {
   );
 }
 
+/** Saves of this person's own in flight, and how many have been started: a read that overlapped one may be older than what it would overwrite. */
+let inflight = 0;
+let started = 0;
+const track = <T,>(save: Promise<T>) => {
+  inflight++;
+  started++;
+  return save.finally(() => void inflight--);
+};
+
+const POLL_MS = 5000;
+
 /**
- * The comments on one version. Read when it is opened and again whenever the
- * window is come back to, which is how somebody else's show up without a
- * refresh. A list grows, and comments get resolved or deleted.
+ * The comments on one version. Read when it is opened, again whenever the
+ * window is come back to, and every few seconds while it is in view, which is
+ * how somebody else's comments and likes show up without a refresh. (The
+ * store is a repository, so there is nothing to push from: asking is the
+ * boring way, and it stops while the tab is hidden.) A list grows, and
+ * comments get resolved or deleted.
  */
 export function useComments(slug: string | undefined, version: string | undefined, by: string, variant?: string) {
   const { profileOf } = useUser();
@@ -74,17 +88,26 @@ export function useComments(slug: string | undefined, version: string | undefine
   useEffect(() => {
     if (!slug || !version) return;
     let current = true;
-    const read = () =>
-      listComments(slug, version).then((result) => {
-        if (!current) return;
-        if (result.ok) setLoaded({ key, list: result.value });
-        else setError(result.error);
+    const read = () => {
+      if (document.visibilityState === "hidden") return;
+      const before = started;
+      void listComments(slug, version).then((result) => {
+        // One that overlapped a save of ours would put back what the save has just changed; the next one will be right.
+        if (!current || inflight || started !== before) return;
+        if (result.ok) {
+          setLoaded((now) => (now && now.key === key && JSON.stringify(now.list) === JSON.stringify(result.value) ? now : { key, list: result.value }));
+        } else setError(result.error);
       });
-    void read();
+    };
+    read();
+    const timer = window.setInterval(read, POLL_MS);
     window.addEventListener("focus", read);
+    document.addEventListener("visibilitychange", read);
     return () => {
       current = false;
+      window.clearInterval(timer);
       window.removeEventListener("focus", read);
+      document.removeEventListener("visibilitychange", read);
     };
   }, [slug, version, key]);
 
@@ -106,7 +129,7 @@ export function useComments(slug: string | undefined, version: string | undefine
       return { key, list: [...list, pending] };
     });
     setWorking(pendingId, true);
-    const result = await addComment({ ...target, text, anchor, variant: setupOf, by, avatar }).finally(() => setWorking(pendingId, false));
+    const result = await track(addComment({ ...target, text, anchor, variant: setupOf, by, avatar })).finally(() => setWorking(pendingId, false));
     if (!result.ok) {
       setLoaded((now) => (now && now.key === key ? { key, list: now.list.filter((item) => item.id !== pendingId) } : now));
       setError(result.error);
@@ -125,13 +148,13 @@ export function useComments(slug: string | undefined, version: string | undefine
   /** Notes which flow screen a comment is on, so going to it next time needs no looking. */
   const place = async (comment: Comment, flowScreen: string) => {
     if (!target || comment.anchor.flowScreen === flowScreen) return;
-    const result = await setCommentScreen({ ...target, id: comment.id, flowScreen });
+    const result = await track(setCommentScreen({ ...target, id: comment.id, flowScreen }));
     if (result.ok) replace(result.value);
   };
 
   const reply = async (parent: Comment, text: string) => {
     if (!target) return false;
-    const result = await addComment({ ...target, text, parentId: parent.id, by, avatar });
+    const result = await track(addComment({ ...target, text, parentId: parent.id, by, avatar }));
     if (!result.ok) {
       setError(result.error);
       return false;
@@ -146,7 +169,7 @@ export function useComments(slug: string | undefined, version: string | undefine
     if (!target || !by) return;
     const others = (comment.likes ?? []).filter((name) => name !== by);
     replace({ ...comment, likes: liked ? [...others, by] : others });
-    const result = await likeComment({ ...target, id: comment.id, by, liked, avatar });
+    const result = await track(likeComment({ ...target, id: comment.id, by, liked, avatar }));
     if (result.ok) replace(result.value);
     else {
       replace(comment);
@@ -158,7 +181,7 @@ export function useComments(slug: string | undefined, version: string | undefine
   const resolve = async (comment: Comment, resolved: boolean) => {
     if (!target) return;
     replace({ ...comment, resolvedAt: resolved ? new Date().toISOString() : undefined });
-    const result = await resolveComment({ ...target, id: comment.id, resolved });
+    const result = await track(resolveComment({ ...target, id: comment.id, resolved }));
     if (result.ok) replace(result.value);
     else {
       replace(comment);
@@ -169,7 +192,7 @@ export function useComments(slug: string | undefined, version: string | undefine
   const remove = async (comment: Comment) => {
     if (!target) return;
     setWorking(comment.id, true);
-    const result = await deleteComment({ ...target, id: comment.id }).finally(() => setWorking(comment.id, false));
+    const result = await track(deleteComment({ ...target, id: comment.id })).finally(() => setWorking(comment.id, false));
     if (!result.ok) {
       setError(result.error);
       return;
