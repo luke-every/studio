@@ -67,6 +67,28 @@ export async function removeDevice(endpoint: string) {
   }
 }
 
+/** Readies web-push with this studio's keys. */
+function configure() {
+  const base = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  webpush.setVapidDetails(base ? `https://${base}` : "mailto:studio@localhost.invalid", keys().publicKey, keys().privateKey);
+}
+
+/** Sends one device a test, and says exactly what the push service answered if it refused. */
+export async function sendTest(endpoint: string) {
+  const device = (await load()).find((item) => item.subscription.endpoint === endpoint);
+  if (!device) throw new Error("This device isn't registered. Switch notifications off and on again.");
+  configure();
+  try {
+    await webpush.sendNotification(
+      device.subscription,
+      JSON.stringify({ title: "Test Kitchen", body: "Notifications are working.", icon: avatarSrc(defaultProfile(device.name || "Guest").avatar), url: "/" }),
+    );
+  } catch (error) {
+    const failure = error as { statusCode?: number; body?: string };
+    throw new Error(`The push service refused it (${failure.statusCode ?? "no answer"}): ${failure.body || "no reason given"}`);
+  }
+}
+
 /**
  * Tells people a comment was left: it goes on the bell's list, and every
  * device but the author's gets a push. Never throws: a comment is saved
@@ -91,8 +113,7 @@ export async function announceComment(input: { slug: string; version: string; co
     const targets = devices.filter((device) => device.name.toLowerCase() !== comment.author.name.toLowerCase());
     if (!targets.length) return;
 
-    const base = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-    webpush.setVapidDetails(base ? `https://${base}` : "mailto:studio@localhost.invalid", keys().publicKey, keys().privateKey);
+    configure();
 
     // The face they chose if the commenter's device said which, else the one their name works out to.
     const chosen = input.avatar;
@@ -107,13 +128,15 @@ export async function announceComment(input: { slug: string; version: string; co
     const gone: string[] = [];
     await Promise.all(
       targets.map((device) =>
-        webpush.sendNotification(device.subscription, payload, { TTL: 60 * 60 * 24 }).catch((error: { statusCode?: number }) => {
+        webpush.sendNotification(device.subscription, payload, { TTL: 60 * 60 * 24 }).catch((error: { statusCode?: number; body?: string }) => {
           if (error.statusCode === 404 || error.statusCode === 410) gone.push(device.subscription.endpoint);
+          else console.error("push refused", error.statusCode, error.body);
         }),
       ),
     );
     if (gone.length) await save(devices.filter((device) => !gone.includes(device.subscription.endpoint)), "Drop devices that stopped listening");
-  } catch {
+  } catch (error) {
     // Notifying is a courtesy; the comment is already saved.
+    console.error("announcing a comment failed", error);
   }
 }

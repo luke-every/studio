@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { disablePush, enablePush, pushKey } from "@/lib/registry/actions";
+import { disablePush, enablePush, pushKey, testPush } from "@/lib/registry/actions";
 
 import { useUser } from "./use-user";
 
@@ -93,5 +93,13 @@ export function usePush() {
     }
   };
 
-  return { state, enable, disable };
+  /** Has the studio send this device a notification now. Returns what went wrong, or null. */
+  const test = async () => {
+    const subscription = await currentSubscription().catch(() => null);
+    if (!subscription) return "This device isn't subscribed. Switch notifications off and on again.";
+    const result = await testPush(subscription.endpoint);
+    return result.ok ? null : result.error;
+  };
+
+  return { state, enable, disable, test };
 }

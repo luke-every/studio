@@ -192,3 +192,8 @@ export async function disablePush(endpoint: string) {
 export async function listActivity() {
   return attempt(() => activity.readActivity(), []);
 }
+
+/** Sends this device a test notification, so a refusal can be seen. */
+export async function testPush(endpoint: string) {
+  return attempt(() => push.sendTest(endpoint), []);
+}

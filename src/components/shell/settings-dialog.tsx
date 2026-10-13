@@ -13,7 +13,7 @@ const row = "flex items-center justify-between gap-3 px-2.5 py-1.5";
 
 /** Whether this device hears about new comments. */
 function NotificationsRow() {
-  const { state, enable, disable } = usePush();
+  const { state, enable, disable, test } = usePush();
   const [problem, setProblem] = useState<string | null>(null);
   const message =
     state === "unsupported"
@@ -44,6 +44,11 @@ function NotificationsRow() {
         )}
       </div>
       {message ? <p className="px-2.5 text-xs text-foreground-muted">{message}</p> : null}
+      {state === "on" ? (
+        <div className="px-2.5 pt-1">
+          <Button onClick={async () => setProblem((await test()) ?? "Sent. It should arrive in a moment.")}>Send a test notification</Button>
+        </div>
+      ) : null}
       {state === "blocked" ? (
         <div className="px-2.5 pt-1">
           <Button onClick={() => window.location.reload()}>Reload and try again</Button>
