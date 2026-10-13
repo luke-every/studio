@@ -25,6 +25,7 @@
  * Studio address and password come from ~/.claude/prototype-studio.json
  * unless --studio-url / --studio-password override them.
  */
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
@@ -227,16 +228,35 @@ try {
   if (error.status !== 404) throw error;
 }
 
+// Files the repository already holds (same git hash) are referenced, not
+// re-sent. Every version is still a full snapshot. A truncated listing only
+// means a few extra uploads.
+const known = new Set();
+{
+  const head = await github(`/git/ref/heads/${branch}`);
+  const headCommit = await github(`/git/commits/${head.object.sha}`);
+  const listing = await github(`/git/trees/${headCommit.tree.sha}?recursive=1`);
+  for (const entry of listing.tree) if (entry.type === "blob") known.add(entry.sha);
+}
+
 const tree = [];
 let uploaded = 0;
+let reused = 0;
 const queue = [...files];
 async function uploadNext() {
   for (let file = queue.shift(); file; file = queue.shift()) {
-    const blob = await github("/git/blobs", {
-      method: "POST",
-      body: JSON.stringify({ content: (file.content ?? readFileSync(file.filePath)).toString("base64"), encoding: "base64" }),
-    });
-    tree.push({ path: `${prefix}/${file.path}`, mode: "100644", type: "blob", sha: blob.sha });
+    const data = file.content ?? readFileSync(file.filePath);
+    const hash = createHash("sha1").update(`blob ${Buffer.byteLength(data)}\0`).update(data).digest("hex");
+    let sha = hash;
+    if (known.has(hash)) reused += 1;
+    else {
+      const blob = await github("/git/blobs", {
+        method: "POST",
+        body: JSON.stringify({ content: Buffer.from(data).toString("base64"), encoding: "base64" }),
+      });
+      sha = blob.sha;
+    }
+    tree.push({ path: `${prefix}/${file.path}`, mode: "100644", type: "blob", sha });
     uploaded += 1;
     process.stdout.write(`\rUploading ${uploaded}/${files.length}`);
   }
@@ -283,7 +303,7 @@ if (!notes.author) notes.author = "Someone";
 
 const result = await studio("/api/push", notes);
 
-console.log(`Uploaded ${files.length} file(s), ${(totalBytes / 1024 / 1024).toFixed(1)} MB`);
+console.log(`Uploaded ${files.length - reused} new file(s), ${reused} unchanged, ${(totalBytes / 1024 / 1024).toFixed(1)} MB total`);
 console.log(`Pushed ${result.slug} ${result.version}`);
 console.log(result.studio);
 console.log(
