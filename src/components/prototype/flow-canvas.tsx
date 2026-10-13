@@ -529,7 +529,7 @@ export function FlowCanvas({
           <span className="text-md leading-none">+</span>
         </IconButton>
         <IconButton
-          label="Fit to the room"
+          label="Fit to view"
           onClick={() => {
             if (!size) return;
             touch(false);

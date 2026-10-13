@@ -66,7 +66,7 @@ export function ViewMenu({
           }}
           className={row}
         >
-          <span className="flex-1 font-medium text-foreground">Fit to the room</span>
+          <span className="flex-1 font-medium text-foreground">Fit to view</span>
           <Tick on={fit} />
         </button>
         {ZOOMS.map((option) => (

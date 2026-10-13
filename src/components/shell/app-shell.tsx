@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { RouteTransition } from "@/components/motion";
 import { useStudio } from "@/lib/data/studio-store";
@@ -19,6 +19,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { error, dismissError } = useStudio();
   const { ready, current } = useUser();
   const [switching, setSwitching] = useState(false);
+
+  // A tapped notification can ask this page to go to a comment (see public/sw.js).
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return undefined;
+    const onMessage = (event: MessageEvent) => {
+      if (typeof event.data?.open === "string") window.location.assign(event.data.open);
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    navigator.serviceWorker.startMessages?.();
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, []);
 
   return (
     <div className="flex min-h-dvh flex-col">

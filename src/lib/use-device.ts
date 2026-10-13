@@ -55,10 +55,10 @@ export function useDevice() {
   return [device, (next: Device) => set(next.id)] as const;
 }
 
-/** Whether they have the preview scaled to fit the frame, rather than at a size. */
+/** Whether they have the preview scaled to fit the frame, rather than at a size. On until somebody chooses a size. */
 export function useFit() {
   const [stored, set] = useStored("proto.fit");
-  return [stored === "1", (next: boolean) => set(next ? "1" : "0")] as const;
+  return [stored !== "0", (next: boolean) => set(next ? "1" : "0")] as const;
 }
 
 /** How big they have the preview, as a multiple of the phone's real size. */

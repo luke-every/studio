@@ -14,13 +14,17 @@ self.addEventListener("push", (event) => {
   );
 });
 
+// Take over open pages right away, so a tab that was open when this was installed can be steered by a tap.
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = new URL(event.notification.data.url, self.location.origin).href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       for (const client of windows) {
-        if ("navigate" in client) return client.focus().then(() => client.navigate(url));
+        // A page this worker doesn't control refuses to be navigated; it is asked to go there itself instead.
+        if ("navigate" in client) return client.focus().then(() => client.navigate(url)).catch(() => client.postMessage({ open: url }));
       }
       return self.clients.openWindow(url);
     }),
