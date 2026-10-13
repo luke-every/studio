@@ -84,7 +84,10 @@ export function ViewMenu({
           <button
             type="button"
             aria-pressed={fit}
-            onClick={() => onFit(true)}
+            onClick={() => {
+              onFit(true);
+              setOpen(false);
+            }}
             className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-[var(--r-control)] border px-4 text-sm font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
               fit ? "border-transparent bg-accent text-accent-foreground" : "border-border bg-surface text-foreground hover:bg-surface-hover"
             }`}
@@ -105,7 +108,10 @@ export function ViewMenu({
                 role="radio"
                 aria-checked={on}
                 title={`${option.width} × ${option.height}`}
-                onClick={() => onDevice(option)}
+                onClick={() => {
+                  onDevice(option);
+                  setOpen(false);
+                }}
                 className={`flex flex-col items-center gap-1.5 rounded-[var(--r-lg)] px-1 py-2.5 text-center transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
                   on ? "bg-surface-inset text-foreground ring-1 ring-border-strong" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
                 }`}
