@@ -5,6 +5,7 @@ import { createECDH, createHmac } from "node:crypto";
 import webpush, { type PushSubscription } from "web-push";
 
 import { avatarSrc, AVATAR_COUNT, defaultProfile } from "@/lib/avatars";
+import type { Activity } from "@/lib/activity";
 import type { Comment } from "@/lib/comments";
 
 import { recordActivity } from "./activity";
@@ -89,41 +90,33 @@ export async function sendTest(endpoint: string) {
   }
 }
 
+/** The face to show: the one the person's own device said they chose, else the one their name works out to. */
+function faceOf(name: string, chosen?: number) {
+  return avatarSrc(chosen !== undefined && Number.isInteger(chosen) && chosen >= 0 && chosen < AVATAR_COUNT ? chosen : defaultProfile(name).avatar);
+}
+
 /**
- * Tells people a comment was left: it goes on the bell's list, and every
- * device but the author's gets a push. Never throws: a comment is saved
- * whether or not anyone is told.
+ * Puts something on the bell's list and pushes it to the devices that should hear: everyone's but `from`'s, or only
+ * `to`'s when it is for one person. Never throws: what happened is saved whether or not anyone is told.
  */
-export async function announceComment(input: { slug: string; version: string; comment: Comment; avatar?: number }) {
+async function announce(input: { activity: Activity; title: string; icon: string; to?: string }) {
   try {
-    const { comment } = input;
-    const prototype = await getPrototype(input.slug);
-    await recordActivity({
-      id: comment.id,
-      at: comment.at,
-      author: comment.author.name,
-      slug: input.slug,
-      version: input.version,
-      prototype: prototype?.name ?? input.slug,
-      text: comment.text,
-      reply: !!comment.parentId,
-      comment: comment.parentId ?? comment.id,
-    });
+    const { activity } = input;
+    await recordActivity(activity);
 
     const devices = await load();
-    const targets = devices.filter((device) => device.name.toLowerCase() !== comment.author.name.toLowerCase());
+    const targets = devices.filter((device) => {
+      const name = device.name.toLowerCase();
+      return input.to ? name === input.to.toLowerCase() : name !== activity.author.toLowerCase();
+    });
     if (!targets.length) return;
 
     configure();
-
-    // The face they chose if the commenter's device said which, else the one their name works out to.
-    const chosen = input.avatar;
-    const avatar = chosen !== undefined && Number.isInteger(chosen) && chosen >= 0 && chosen < AVATAR_COUNT ? chosen : defaultProfile(comment.author.name).avatar;
     const payload = JSON.stringify({
-      title: `${comment.author.name} ${comment.parentId ? "replied" : "commented"} on ${prototype?.name ?? input.slug}`,
-      body: comment.text,
-      icon: avatarSrc(avatar),
-      url: `/prototypes/${input.slug}?v=${input.version}&comment=${comment.parentId ?? comment.id}`,
+      title: input.title,
+      body: activity.text,
+      icon: input.icon,
+      url: `/prototypes/${activity.slug}?v=${activity.version}&comment=${activity.comment}`,
     });
 
     const gone: string[] = [];
@@ -137,7 +130,52 @@ export async function announceComment(input: { slug: string; version: string; co
     );
     if (gone.length) await save(devices.filter((device) => !gone.includes(device.subscription.endpoint)), "Drop devices that stopped listening");
   } catch (error) {
-    // Notifying is a courtesy; the comment is already saved.
-    console.error("announcing a comment failed", error);
+    console.error("announcing failed", error);
   }
+}
+
+/** A comment or reply was left: everyone but its author hears. */
+export async function announceComment(input: { slug: string; version: string; comment: Comment; avatar?: number }) {
+  const { comment } = input;
+  const prototype = (await getPrototype(input.slug).catch(() => undefined))?.name ?? input.slug;
+  await announce({
+    activity: {
+      id: comment.id,
+      at: comment.at,
+      author: comment.author.name,
+      slug: input.slug,
+      version: input.version,
+      prototype,
+      text: comment.text,
+      reply: !!comment.parentId,
+      comment: comment.parentId ?? comment.id,
+    },
+    title: `${comment.author.name} ${comment.parentId ? "replied" : "commented"} on ${prototype}`,
+    icon: faceOf(comment.author.name, input.avatar),
+  });
+}
+
+/** Somebody liked a comment: only the person who wrote it hears. */
+export async function announceLike(input: { slug: string; version: string; comment: Comment; by: string; avatar?: number }) {
+  const { comment, by } = input;
+  const prototype = (await getPrototype(input.slug).catch(() => undefined))?.name ?? input.slug;
+  await announce({
+    activity: {
+      // One entry per person and comment, so liking again moves it up rather than listing it twice.
+      id: `like:${comment.id}:${by}`,
+      at: new Date().toISOString(),
+      author: by,
+      slug: input.slug,
+      version: input.version,
+      prototype,
+      text: comment.text,
+      reply: false,
+      like: true,
+      to: comment.author.name,
+      comment: comment.parentId ?? comment.id,
+    },
+    title: `${by} liked your ${comment.parentId ? "reply" : "comment"} on ${prototype}`,
+    icon: faceOf(by, input.avatar),
+    to: comment.author.name,
+  });
 }

@@ -42,6 +42,8 @@ export const commentSchema = z.object({
   resolvedAt: z.string().optional(),
   /** The setup it was left on: the query of the prototype's address (a control's choice, a studio variant), none for the version as it is. */
   variant: z.string().optional(),
+  /** The names of the people who liked it. */
+  likes: z.array(z.string()).optional(),
   /** Set on a reply, to the comment it answers. */
   parentId: z.string().optional(),
 });

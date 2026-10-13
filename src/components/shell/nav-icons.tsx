@@ -91,6 +91,17 @@ export function SystemIcon(props: IconProps) {
   );
 }
 
+export function HeartIcon({ className, filled }: IconProps & { filled?: boolean }) {
+  return (
+    <Frame className={className}>
+      <path
+        d="M8 13.25S2.5 10 2.5 6.1A2.9 2.9 0 0 1 8 4.9a2.9 2.9 0 0 1 5.5 1.2C13.5 10 8 13.25 8 13.25Z"
+        fill={filled ? "currentColor" : "none"}
+      />
+    </Frame>
+  );
+}
+
 export function ChevronDownIcon(props: IconProps) {
   return (
     <Frame {...props}>

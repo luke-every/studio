@@ -9,6 +9,7 @@ import { Button, controlOn, IconButton } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
 import type { Comment } from "@/lib/comments";
 
+import { LikeButton } from "./comment-like";
 import { CommentActions, WhileWorking } from "./comment-parts";
 import { PanelEmpty } from "./panel-empty";
 
@@ -36,6 +37,7 @@ export function CommentsPanel({
   error,
   onSelect,
   onResolve,
+  onLike,
   onDelete,
   onCopy,
   setupLabel,
@@ -46,6 +48,7 @@ export function CommentsPanel({
   error: string | null;
   onSelect: (comment: Comment) => void;
   onResolve: (comment: Comment, resolved: boolean) => void;
+  onLike: (comment: Comment, liked: boolean) => void;
   onDelete: (comment: Comment) => void;
   /** Copies these, as a prompt for Claude Code. */
   onCopy: (comments: Comment[]) => void;
@@ -197,11 +200,14 @@ export function CommentsPanel({
                     >
                       {comment.text}
                     </p>
-                    {replies[comment.id]?.length ? (
-                      <p className="text-ui font-medium text-foreground-muted">
-                        {replies[comment.id].length} {replies[comment.id].length === 1 ? "reply" : "replies"}
-                      </p>
-                    ) : null}
+                    <div className="flex items-center justify-between gap-3">
+                      <LikeButton comment={comment} onLike={onLike} />
+                      {replies[comment.id]?.length ? (
+                        <p className="text-ui font-medium text-foreground-muted">
+                          {replies[comment.id].length} {replies[comment.id].length === 1 ? "reply" : "replies"}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 </WhileWorking>

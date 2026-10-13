@@ -54,6 +54,7 @@
   --color-accent-muted: var(--accent-muted);
 
   --color-destructive: var(--destructive);
+  --color-like: var(--like);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);

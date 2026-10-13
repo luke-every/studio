@@ -21,7 +21,7 @@ on its own merits. Do not flip the flag back on wholesale.
 
 Reintroduced so far: `hover-lift` (a CSS preset in `src/styles/motion.css`) on
 the feed tiles. It animates even with the flag off; its timing is
-`--lift-duration` / `--lift-curve`. The canvas (flow or variants): a quiet loader in the middle while its pages load,
+`--lift-duration` / `--lift-curve`. `like` (CSS in `src/styles/motion.css`, the count rolling via the `emphasis` register) on the comment like button: a bloom and burst on press, nothing on load. The canvas (flow or variants): a quiet loader in the middle while its pages load,
 then every screen arrives together with `stagger-in`, left to right. `feed-enter` on the feed grid: the first two rows (two tiles on a phone) stagger in left to right, and each tile's preview holds a pulsing skeleton until the picture or live prototype has loaded. `stagger-in` on the prototype page: the info panel, then the prototype frame (frame first on a phone), arrive the same way.
 
 Everything below describes how motion works when it is enabled.

@@ -149,7 +149,7 @@ export function PrototypeFrame({
   // Comment mode, like editing, takes the page over: the next click on the prototype leaves a comment there, and the panel lists them all.
   // On a phone the list is a sheet instead, opened from the bar.
   const user = useUser();
-  const { comments, everything, replies, error: commentsError, add: postComment, place: placeComment, reply: replyToComment, resolve: resolveComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, commentsOf?.variant);
+  const { comments, everything, replies, error: commentsError, add: postComment, place: placeComment, reply: replyToComment, resolve: resolveComment, like: likeComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, commentsOf?.variant);
   const [showPins, setShowPins] = useShowComments();
   const { notify } = useStudio();
   // Asked before leaving edit mode with changes that would be lost.
@@ -226,7 +226,7 @@ export function PrototypeFrame({
   };
   const commentsUi: CommentsUi | null =
     commentsOf && !dev
-      ? { list: comments, visible: showPins || commenting, placing: commenting && !interacting, focus, onFocus: askFor, onLocate: locate, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
+      ? { list: comments, visible: showPins || commenting, placing: commenting && !interacting, focus, onFocus: askFor, onLocate: locate, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
       : null;
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
@@ -619,7 +619,7 @@ export function PrototypeFrame({
         {panelKind === "edit" && edit ? (
           <EditPanel element={target?.isConnected ? target : null} session={session} />
         ) : panelKind === "comments" ? (
-          <CommentsPanel comments={everything} setupLabel={commentsOf?.setupLabel} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={goTo} onResolve={resolveComment} onDelete={deleteComment} onCopy={copyForClaude} />
+          <CommentsPanel comments={everything} setupLabel={commentsOf?.setupLabel} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={goTo} onResolve={resolveComment} onLike={likeComment} onDelete={deleteComment} onCopy={copyForClaude} />
         ) : (
           <div className="p-4">
             <DevPanel picked={here.picked} motion={here.motion} />
@@ -642,6 +642,7 @@ export function PrototypeFrame({
             setListOpen(false);
           }}
           onResolve={resolveComment}
+          onLike={likeComment}
           onDelete={deleteComment}
           onCopy={copyForClaude}
         />

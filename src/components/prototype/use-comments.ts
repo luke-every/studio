@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import type { Anchor, Comment } from "@/lib/comments";
 import { useUser } from "@/lib/use-user";
-import { addComment, deleteComment, listComments, resolveComment, setCommentScreen } from "@/lib/registry/actions";
+import { addComment, deleteComment, likeComment, listComments, resolveComment, setCommentScreen } from "@/lib/registry/actions";
 
 const SHOW_KEY = "proto.show-comments";
 const showListeners = new Set<() => void>();
@@ -141,6 +141,19 @@ export function useComments(slug: string | undefined, version: string | undefine
     return true;
   };
 
+  /** Liking or unliking shows at once, and is put back if it couldn't be saved. */
+  const like = async (comment: Comment, liked: boolean) => {
+    if (!target || !by) return;
+    const others = (comment.likes ?? []).filter((name) => name !== by);
+    replace({ ...comment, likes: liked ? [...others, by] : others });
+    const result = await likeComment({ ...target, id: comment.id, by, liked, avatar });
+    if (result.ok) replace(result.value);
+    else {
+      replace(comment);
+      setError(result.error);
+    }
+  };
+
   /** Resolving or reopening shows at once, and is put back if it couldn't be saved. */
   const resolve = async (comment: Comment, resolved: boolean) => {
     if (!target) return;
@@ -173,5 +186,5 @@ export function useComments(slug: string | undefined, version: string | undefine
   const replies: Record<string, Comment[]> = {};
   for (const item of every) if (item.parentId) (replies[item.parentId] ??= []).push(item);
 
-  return { comments: all.filter((item) => !item.parentId), everything: every.filter((item) => !item.parentId), replies, error, add, place, reply, resolve, remove };
+  return { comments: all.filter((item) => !item.parentId), everything: every.filter((item) => !item.parentId), replies, error, add, place, reply, resolve, like, remove };
 }

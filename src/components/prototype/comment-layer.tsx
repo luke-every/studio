@@ -48,6 +48,7 @@ export function CommentLayer({
     onAdd,
     onReply,
     onResolve,
+    onLike,
     onDelete,
     onCopy,
   } = ui;
@@ -281,6 +282,7 @@ export function CommentLayer({
             if (resolved) onFocus(null);
             onResolve(comment, resolved);
           }}
+          onLike={onLike}
           onDelete={onDelete}
           onCopy={onCopy}
         />

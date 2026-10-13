@@ -44,7 +44,7 @@ export function NotificationList({ feed, onNavigate }: { feed: ActivityFeed; onN
             <UserAvatar name={item.author} className="size-8" />
             <div className="min-w-0 flex-1">
               <p className="text-sm text-foreground">
-                <span className="font-medium">{item.author}</span> {item.reply ? "replied on" : "commented on"}{" "}
+                <span className="font-medium">{item.author}</span> {item.like ? "liked your comment on" : item.reply ? "replied on" : "commented on"}{" "}
                 <span className="font-medium">{item.prototype}</span>
               </p>
               <p className="line-clamp-2 text-sm text-foreground-muted">{item.text}</p>

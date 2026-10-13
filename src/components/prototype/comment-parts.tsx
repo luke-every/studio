@@ -1,5 +1,6 @@
 "use client";
 
+import { LikeButton } from "./comment-like";
 import { useWorking } from "./use-comments";
 import {
   useEffect,
@@ -47,6 +48,7 @@ export type CommentsUi = {
   onAdd: (text: string, anchor: Anchor, setup?: string) => Promise<boolean>;
   onReply: (parent: Comment, text: string) => Promise<boolean>;
   onResolve: (comment: Comment, resolved: boolean) => void;
+  onLike: (comment: Comment, liked: boolean) => void;
   /** Deletes it, once the comment's own menu has asked. */
   onDelete: (comment: Comment) => void;
   /** Copies it, as a prompt for Claude Code. */
@@ -682,6 +684,7 @@ export function CommentCard({
   onClose,
   onReply,
   onResolve,
+  onLike,
   onDelete,
   onCopy,
 }: {
@@ -691,6 +694,7 @@ export function CommentCard({
   onClose: () => void;
   onReply: (parent: Comment, text: string) => Promise<boolean>;
   onResolve: (comment: Comment, resolved: boolean) => void;
+  onLike: (comment: Comment, liked: boolean) => void;
   onDelete: (comment: Comment) => void;
   onCopy: (comment: Comment) => void;
 }) {
@@ -717,6 +721,7 @@ export function CommentCard({
       <p className="whitespace-pre-wrap py-2 text-base leading-[var(--leading-relaxed)] text-foreground">
         {comment.text}
       </p>
+      <LikeButton comment={comment} onLike={onLike} />
       <Replies
         replies={replies}
         onReply={(text) => onReply(comment, text)}

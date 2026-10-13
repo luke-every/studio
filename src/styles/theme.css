@@ -55,6 +55,8 @@
   --accent-muted: var(--alpha-ink-08);
 
   --destructive: var(--signal-stop);
+  /* A liked heart. */
+  --like: var(--signal-stop);
   --destructive-foreground: var(--paper-50);
   --success: var(--signal-live);
   --success-foreground: var(--ink-900);

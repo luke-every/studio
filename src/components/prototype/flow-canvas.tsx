@@ -509,6 +509,7 @@ export function FlowCanvas({
             if (resolved) comments!.onFocus(null);
             comments!.onResolve(comment, resolved);
           }}
+          onLike={comments!.onLike}
           onDelete={comments!.onDelete}
           onCopy={comments!.onCopy}
         />

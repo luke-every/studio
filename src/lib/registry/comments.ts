@@ -4,7 +4,7 @@ import { anchorSchema, commentsFileSchema, type Anchor, type Comment } from "@/l
 
 import { isStoreConfigured, readStoreFile, writeStoreFile } from "./store";
 import { VERSION_PATTERN, versionSegment } from "./version";
-import { announceComment } from "./push";
+import { announceComment, announceLike } from "./push";
 import { named } from "./write";
 
 /**
@@ -77,6 +77,29 @@ export async function addComment(input: {
   );
   await announceComment({ slug: input.slug, version: input.version, comment, avatar: input.avatar });
   return comment;
+}
+
+/** Likes or unlikes a comment for somebody, by name: nobody signs in, so a name is who a like is from. */
+export async function setLiked(input: { slug: string; version: string; id: string; by: string; liked: boolean; avatar?: number }) {
+  const by = input.by.trim();
+  if (!by) throw new Error("Choose who you are to like a comment.");
+  const comments = await load(input.slug, input.version);
+  const found = comments.find((item) => item.id === input.id);
+  if (!found) throw new Error("That comment isn't there any more.");
+
+  const others = (found.likes ?? []).filter((name) => name !== by);
+  const next: Comment = { ...found, likes: input.liked ? [...others, by] : others };
+  await save(
+    input.slug,
+    input.version,
+    comments.map((item) => (item.id === next.id ? next : item)),
+    `${input.liked ? "Like" : "Unlike"} comment #${found.n} on ${input.slug} ${input.version}`,
+  );
+  // Only a new like of somebody else's comment is news.
+  if (input.liked && !found.likes?.includes(by) && by.toLowerCase() !== found.author.name.toLowerCase()) {
+    await announceLike({ slug: input.slug, version: input.version, comment: next, by, avatar: input.avatar });
+  }
+  return next;
 }
 
 export async function setResolved(input: { slug: string; version: string; id: string; resolved: boolean }) {

@@ -153,6 +153,10 @@ export async function reviewToken(slug: string, version: string) {
   return attempt(async () => mintReviewToken(slug, version), []);
 }
 
+export async function likeComment(input: Parameters<typeof comments.setLiked>[0]) {
+  return attempt(() => comments.setLiked(input), []);
+}
+
 export async function setCommentScreen(input: Parameters<typeof comments.setFlowScreen>[0]) {
   return attempt(() => comments.setFlowScreen(input), []);
 }

@@ -18,6 +18,6 @@ export async function readActivity(): Promise<Activity[]> {
 }
 
 export async function recordActivity(entry: Activity) {
-  const next = [entry, ...(await readActivity())].slice(0, KEEP);
+  const next = [entry, ...(await readActivity()).filter((item) => item.id !== entry.id)].slice(0, KEEP);
   await writeStoreFile(PATH, `${JSON.stringify(next, null, 2)}\n`, "Note a comment");
 }

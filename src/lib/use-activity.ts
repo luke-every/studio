@@ -74,7 +74,8 @@ export function useActivity() {
     if (seen === null && all.length) markSeen(all[0].at);
   }, [seen, all, markSeen]);
 
-  const others = all.filter((item) => item.author.toLowerCase() !== name.toLowerCase());
+  const me = name.toLowerCase();
+  const others = all.filter((item) => item.author.toLowerCase() !== me && (!item.to || item.to.toLowerCase() === me));
   const isNew = (item: Activity) => seen !== null && item.at > seen;
   return {
     items: others,
