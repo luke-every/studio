@@ -38,6 +38,26 @@ export function useShowComments() {
   return [shown, set] as const;
 }
 
+/** Comments with a save in flight (deleting, resolving), wherever they are drawn: the save waits on the store, and what it is saving should show it. */
+const working = new Set<string>();
+const workingListeners = new Set<() => void>();
+const setWorking = (id: string, on: boolean) => {
+  if (on) working.add(id);
+  else working.delete(id);
+  workingListeners.forEach((listener) => listener());
+};
+
+export function useWorking(id: string) {
+  return useSyncExternalStore(
+    (listener) => {
+      workingListeners.add(listener);
+      return () => void workingListeners.delete(listener);
+    },
+    () => working.has(id),
+    () => false,
+  );
+}
+
 /**
  * The comments on one version. Read when it is opened and again whenever the
  * window is come back to, which is how somebody else's show up without a
@@ -105,14 +125,16 @@ export function useComments(slug: string | undefined, version: string | undefine
 
   const resolve = async (comment: Comment, resolved: boolean) => {
     if (!target) return;
-    const result = await resolveComment({ ...target, id: comment.id, resolved });
+    setWorking(comment.id, true);
+    const result = await resolveComment({ ...target, id: comment.id, resolved }).finally(() => setWorking(comment.id, false));
     if (result.ok) replace(result.value);
     else setError(result.error);
   };
 
   const remove = async (comment: Comment) => {
     if (!target) return;
-    const result = await deleteComment({ ...target, id: comment.id });
+    setWorking(comment.id, true);
+    const result = await deleteComment({ ...target, id: comment.id }).finally(() => setWorking(comment.id, false));
     if (!result.ok) {
       setError(result.error);
       return;

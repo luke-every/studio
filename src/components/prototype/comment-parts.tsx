@@ -1,5 +1,6 @@
 "use client";
 
+import { useWorking } from "./use-comments";
 import {
   useEffect,
   useLayoutEffect,
@@ -342,9 +343,12 @@ export function Card({
   at,
   children,
   onOutside,
+  busy,
 }: {
   at: Tip;
   children: ReactNode;
+  /** Being worked on (a delete or resolve in flight): it breathes and can't be pressed. */
+  busy?: boolean;
   /** Pressing anywhere else, in the studio or in the prototype, calls this. */ onOutside?: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -386,7 +390,8 @@ export function Card({
     <div
       ref={box}
       style={corner.style}
-      className={`fixed flex w-64 flex-col gap-2 rounded-2xl ${corner.square} border border-border bg-surface p-3 shadow-floating`}
+      className={`fixed flex w-64 flex-col gap-2 rounded-2xl ${corner.square} border border-border bg-surface p-3 shadow-floating ${busy ? "pulse-soft pointer-events-none" : ""}`}
+      aria-busy={busy || undefined}
     >
       {children}
     </div>,
@@ -654,6 +659,16 @@ function CommentMenu({
   );
 }
 
+/** Whatever shows a comment, breathing and unpressable while a save on the comment is in flight, so the wait is seen. */
+export function WhileWorking({ id, children }: { id: string; children: ReactNode }) {
+  const working = useWorking(id);
+  return (
+    <div aria-busy={working || undefined} className={working ? "pulse-soft pointer-events-none" : ""}>
+      {children}
+    </div>
+  );
+}
+
 /** An open comment: who, when, what, the replies, and a way to close or resolve it. */
 export function CommentCard({
   comment,
@@ -674,8 +689,10 @@ export function CommentCard({
   onDelete: (comment: Comment) => void;
   onCopy: (comment: Comment) => void;
 }) {
+  const working = useWorking(comment.id);
+
   return (
-    <Card at={at} onOutside={onClose}>
+    <Card at={at} onOutside={onClose} busy={working}>
       <CommentActions
         comment={comment}
         onResolve={onResolve}

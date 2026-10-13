@@ -9,7 +9,7 @@ import { Button, controlOn, IconButton } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
 import type { Comment } from "@/lib/comments";
 
-import { CommentActions } from "./comment-parts";
+import { CommentActions, WhileWorking } from "./comment-parts";
 import { PanelEmpty } from "./panel-empty";
 
 type Show = "open" | "resolved" | "all";
@@ -135,6 +135,7 @@ export function CommentsPanel({
 
             return (
               <li key={comment.id} className="border-t border-divider first:border-t-0">
+                <WhileWorking id={comment.id}>
                 <div
                   // Selecting, the whole row is the target, the circle and the gaps as well as the comment.
                   onClick={selecting ? () => tick(comment.id) : undefined}
@@ -203,6 +204,7 @@ export function CommentsPanel({
                     ) : null}
                   </div>
                 </div>
+                </WhileWorking>
               </li>
             );
           })}
