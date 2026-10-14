@@ -36,7 +36,7 @@ import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
  * else can open.
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
-  const { markOpened, renameVersion, isSaving, repoUrl } = useStudio();
+  const { markOpened, repoUrl } = useStudio();
   const people = collaborators(prototype);
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
@@ -72,11 +72,6 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     url.searchParams.delete("variant");
     window.history.replaceState(null, "", url);
     showInAddressBar(version);
-  };
-
-  const rename = (version: PrototypeVersion, label: string) => {
-    renameVersion({ slug: prototype.slug, versionId: version.id, label }, ["version"], "Renamed");
-    if (version.id === selected.id) showInAddressBar({ ...version, version: label });
   };
 
   // What the prototype offers to adjust, if anything. The choices belong to
@@ -184,8 +179,6 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       selectedId={selected.id}
       currentId={prototype.current.id}
       onSelect={choose}
-      onRename={rename}
-      saving={isSaving("version")}
     />
   );
 
