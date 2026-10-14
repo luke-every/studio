@@ -25,7 +25,7 @@ export function TeamView() {
   const contents = prototypesInTeam(team.slug, prototypes, opened);
 
   return (
-    <div className="w-full px-5 pb-8 pt-4 sm:px-8 sm:pb-10">
+    <div className="w-full px-5 pb-8 pt-2 sm:px-8 sm:pb-10">
       <div>
         <ProjectStrip teamSlug={team.slug} />
       </div>

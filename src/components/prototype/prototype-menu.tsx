@@ -4,22 +4,21 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
-import { EllipsisIcon } from "@/components/shell/nav-icons";
+import { ArchiveIcon, EllipsisIcon, GithubIcon, PencilIcon, SendIcon, ShuffleIcon, SlidersIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { DialogForm, fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
 import type { Prototype } from "@/lib/registry/types";
 
-import { LinksDialog } from "./prototype-links";
 import { RemixDialog } from "./remix-dialog";
 
-type Dialog = "rename" | "move" | "links" | "remix" | "archive";
+type Dialog = "rename" | "move" | "remix" | "archive";
 
 const item =
-  "flex w-full items-center rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-nav hover:bg-surface-hover";
+  "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-nav hover:bg-surface-hover";
 
-/** The ellipsis beside a prototype's title: remix the version on screen, rename it, move it, edit its links, archive it. */
-export function PrototypeMenu({ prototype, version }: { prototype: Prototype; version: string }) {
+/** The ellipsis beside a prototype's title: remix the version on screen, rename it, move it, open its files on GitHub, archive it. Edit and Remix, the two ways of making something from it, sit together. */
+export function PrototypeMenu({ prototype, version, githubUrl, onEdit }: { prototype: Prototype; version: string; githubUrl?: string; onEdit?: () => void }) {
   const { isSaving, updatePrototype } = useStudio();
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -35,7 +34,7 @@ export function PrototypeMenu({ prototype, version }: { prototype: Prototype; ve
       <MotionPopover
         open={open}
         onClose={() => setOpen(false)}
-        className="w-48"
+        className="w-56"
         trigger={
           <IconButton
             label="More"
@@ -61,23 +60,47 @@ export function PrototypeMenu({ prototype, version }: { prototype: Prototype; ve
               }}
               className={`${item} text-foreground`}
             >
+              <UndoIcon />
               Unarchive
             </button>
           ) : (
             <>
+              {onEdit ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onEdit();
+                  }}
+                  className={`${item} text-foreground max-sm:hidden`}
+                >
+                  <SlidersIcon />
+                  Edit design
+                </button>
+              ) : null}
               <button type="button" role="menuitem" onClick={() => choose("remix")} className={`${item} text-foreground`}>
+                <ShuffleIcon />
                 Remix
               </button>
+              <div role="separator" className="my-1 h-px bg-border" />
               <button type="button" role="menuitem" onClick={() => choose("rename")} className={`${item} text-foreground`}>
+                <PencilIcon />
                 Rename
               </button>
               <button type="button" role="menuitem" onClick={() => choose("move")} className={`${item} text-foreground`}>
+                <SendIcon />
                 Move to…
               </button>
-              <button type="button" role="menuitem" onClick={() => choose("links")} className={`${item} text-foreground`}>
-                Edit links
-              </button>
+              {githubUrl ? (
+                <a role="menuitem" href={githubUrl} target="_blank" rel="noreferrer" onClick={() => setOpen(false)} className={`${item} text-foreground`}>
+                  <GithubIcon />
+                  Open in GitHub
+                </a>
+              ) : null}
+              <div role="separator" className="my-1 h-px bg-border" />
               <button type="button" role="menuitem" onClick={() => choose("archive")} className={`${item} text-destructive`}>
+                <ArchiveIcon />
                 Archive
               </button>
             </>
@@ -88,8 +111,7 @@ export function PrototypeMenu({ prototype, version }: { prototype: Prototype; ve
       <RemixDialog slug={prototype.slug} version={version} name={prototype.name} open={dialog === "remix"} onClose={close} />
       {dialog === "rename" ? <RenameDialog prototype={prototype} onClose={close} /> : null}
       {dialog === "move" ? <MoveDialog prototype={prototype} onClose={close} /> : null}
-      {dialog === "links" ? <LinksDialog prototype={prototype} kinds={["figma", "notion"]} onClose={close} /> : null}
-      {dialog === "archive" ? <ArchiveDialog prototype={prototype} onClose={close} /> : null}
+            {dialog === "archive" ? <ArchiveDialog prototype={prototype} onClose={close} /> : null}
     </>
   );
 }

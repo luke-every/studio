@@ -1,5 +1,9 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
+
+import { MotionPopover } from "@/components/motion";
+import { ChevronDownIcon } from "@/components/shell/nav-icons";
 import { controlOn, IconButton } from "@/components/ui/button";
 import { visibleControls, type ControlValues, type Controls } from "@/lib/controls";
 
@@ -85,5 +89,28 @@ export function VariantPicker({
         ))}
       </div>
     </div>
+  );
+}
+
+/** On a phone the variants and controls are one dropdown at the foot of the prototype, opening upward, instead of a block beside it. */
+export function VariantsDropdown({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <MotionPopover
+      open={open}
+      onClose={() => setOpen(false)}
+      align="center"
+      above
+      className="w-[min(20rem,calc(100vw-2rem))]"
+      trigger={
+        <IconButton onClick={() => setOpen((value) => !value)} aria-haspopup="true" aria-expanded={open}>
+          {label}
+          <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
+        </IconButton>
+      }
+    >
+      <div className="flex max-h-[50svh] flex-col gap-6 overflow-y-auto p-3 [scrollbar-width:thin]">{children}</div>
+    </MotionPopover>
   );
 }

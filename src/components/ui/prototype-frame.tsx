@@ -10,8 +10,9 @@ import { useStudio } from "@/lib/data/studio-store";
 import { useEditSession } from "@/components/prototype/use-edit-session";
 import { useComments, useShowComments } from "@/components/prototype/use-comments";
 import { MotionSheet } from "@/components/motion";
+import { ShareMenu } from "@/components/prototype/share-menu";
 
-import { CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
+import { CommentIcon, ExpandIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
 
 import { controlOn, IconButton } from "./button";
 import { DialogForm } from "./dialog-form";
@@ -30,7 +31,6 @@ const DevPanel = dynamic(() => import("@/components/prototype/dev-panel").then((
 const EditBar = dynamic(() => import("@/components/prototype/edit-bar").then((m) => m.EditBar), { ssr: false });
 const EditPanel = dynamic(() => import("@/components/prototype/edit-panel").then((m) => m.EditPanel), { ssr: false });
 const FlowCanvas = dynamic(() => import("@/components/prototype/flow-canvas").then((m) => m.FlowCanvas), { ssr: false });
-const PhoneQr = dynamic(() => import("@/components/prototype/phone-qr").then((m) => m.PhoneQr), { ssr: false });
 // The comments code is fetched once the page has painted, so it is ready without being asked for and never holds the prototype up.
 const CommentsPanel = dynamic(() => import("@/components/prototype/comments-panel").then((m) => m.CommentsPanel), { ssr: false });
 const CommentLayer = dynamic(() => import("@/components/prototype/comment-layer").then((m) => m.CommentLayer), { ssr: false });
@@ -66,6 +66,8 @@ export function PrototypeFrame({
   url: addressed,
   title,
   leading,
+  share,
+  bottom,
   center,
   device,
   onDevice,
@@ -89,6 +91,10 @@ export function PrototypeFrame({
   title: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
+  /** Which version the Share menu in the corner links to. */
+  share?: { slug: string; versionKey: string; version: string };
+  /** On a phone only: a control at the foot of the prototype, in the middle. */
+  bottom?: ReactNode;
   /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at. */
   center?: (info: { scale: number | null }) => ReactNode;
   /** The phone it is laid out for. */
@@ -524,7 +530,7 @@ export function PrototypeFrame({
                 />
               ) : null}
               {url && addressed && !showingFlow ? (
-                <IconButton label="Canvas" onClick={() => onFlowOpen(true)}>
+                <IconButton label="Canvas" onClick={() => onFlowOpen(true)} className="max-sm:hidden">
                   <FlowIcon />
                 </IconButton>
               ) : null}
@@ -561,22 +567,6 @@ export function PrototypeFrame({
                     </IconButton>
                   </>
                 ) : null}
-                {edit && !showingFlow ? (
-                  <span className="hidden sm:block">
-                    <IconButton onClick={() => changeMode("edit")}>Edit</IconButton>
-                  </span>
-                ) : null}
-                {showingFlow ? null : (
-                  touch && newTab ? (
-                    <IconButton label="Open in a new window" onClick={() => openWithComments(newTab)}>
-                      <ExternalIcon />
-                    </IconButton>
-                  ) : (
-                    <IconButton label="Open in a new window" href={newTab} external>
-                      <ExternalIcon />
-                    </IconButton>
-                  )
-                )}
                 <span className="hidden lg:block">
                   <IconButton
                     label={fullscreen ? "Exit full screen (F)" : "Full screen (F)"}
@@ -588,6 +578,14 @@ export function PrototypeFrame({
                     <ExpandIcon />
                   </IconButton>
                 </span>
+                {share ? (
+                  <ShareMenu
+                    {...share}
+                    stage={stage}
+                    newTab={newTab}
+                    onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined}
+                  />
+                ) : null}
               </div>
             ) : null}
           </>
@@ -596,7 +594,7 @@ export function PrototypeFrame({
 
       <div
         ref={stage}
-        className={`flex min-h-0 flex-1 overflow-auto px-4 pb-4 [scrollbar-width:thin] sm:pb-10 ${showingFlow ? "invisible" : ""}`}>
+        className={`flex min-h-0 flex-1 overflow-auto px-4 [scrollbar-width:thin] sm:pb-10 ${bottom ? "pb-16" : "pb-4"} ${showingFlow ? "invisible" : ""}`}>
         {/* Clipped, not hidden: below 100% the frame's full-size layout box sticks out of this one, and a hidden box can still be scrolled by the prototype (a modal taking focus), which slid the whole phone sideways in Safari. A clipped box can't be scrolled at all. */}
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
@@ -639,7 +637,9 @@ export function PrototypeFrame({
         </div>
       </div>
 
-      {mode === "view" && url && !showingFlow && !fullscreen ? <PhoneQr stage={stage} /> : null}
+      {bottom && mode === "view" && url && !showingFlow ? (
+        <div className="absolute inset-x-0 bottom-4 z-[var(--z-raised)] flex justify-center sm:hidden">{bottom}</div>
+      ) : null}
 
       {(showingFlow || (canvasKey && warmKey === canvasKey)) && canvas && addressed ? (
         <div inert={!showingFlow} className={`absolute inset-0 ${showingFlow ? "" : "pointer-events-none invisible"}`}>
@@ -648,7 +648,6 @@ export function PrototypeFrame({
             key={canvas.setups ? "variants" : "flow"}
             flow={canvas.flow}
             setups={canvas.setups}
-            fullPage={!flow && !canvas.setups}
             base={addressed.split("?")[0]}
             device={device}
             // Closed, it isn't looking for pins.
@@ -690,6 +689,7 @@ export function PrototypeFrame({
         )}
       </div>
     </div>
+
 
     {/* On a phone the list is a sheet over the prototype. */}
     <MotionSheet open={narrow && listOpen} onClose={() => setListOpen(false)} label="Comments">

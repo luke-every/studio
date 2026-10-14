@@ -17,7 +17,7 @@ export default function HomePage() {
   const feed = latestPrototypes(prototypes.length, prototypes);
 
   return (
-    <div className="w-full px-5 pb-8 pt-4 sm:px-8 sm:pb-10">
+    <div className="w-full px-5 pb-8 pt-2 sm:px-8 sm:pb-10">
       {feed.length === 0 ? (
         <p className="py-10 text-sm text-foreground-muted">
           Nothing here yet. Push a prototype and it will show up first.

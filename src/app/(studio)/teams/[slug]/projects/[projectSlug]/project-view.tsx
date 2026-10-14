@@ -27,7 +27,7 @@ export function ProjectView() {
   const contents = prototypesInProject(project.slug, prototypes, opened);
 
   return (
-    <div className="w-full px-5 pb-8 pt-4 sm:px-8 sm:pb-10">
+    <div className="w-full px-5 pb-8 pt-2 sm:px-8 sm:pb-10">
       <Link
         href={`/teams/${team.slug}`}
         className="text-xs text-foreground-subtle transition-colors duration-[var(--dur-fast)] hover:text-foreground"

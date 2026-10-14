@@ -410,3 +410,11 @@ export function AlertIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function ShareIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 10V2.25M5 5l3-3 3 3M3.25 8.5v4a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-4" />
+    </Frame>
+  );
+}

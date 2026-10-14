@@ -20,6 +20,8 @@ export function MotionPopover({
   trigger,
   children,
   align = "end",
+  above = false,
+  rootClassName = "relative",
   className,
 }: {
   open: boolean;
@@ -28,6 +30,10 @@ export function MotionPopover({
   trigger: ReactNode;
   children: ReactNode;
   align?: Align;
+  /** Opens upward, for a trigger at the bottom of the screen. */
+  above?: boolean;
+  /** How the anchor is positioned. `static` lets the layer hang from the nearest positioned ancestor instead of the trigger. */
+  rootClassName?: string;
   className?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -49,16 +55,16 @@ export function MotionPopover({
   }, [open, onClose]);
 
   return (
-    <div ref={container} className="relative">
+    <div ref={container} className={rootClassName}>
       {trigger}
 
       {open ? (
         <div
           style={{
-            transformOrigin: align === "end" ? "top right" : align === "center" ? "top center" : "top left",
+            transformOrigin: `${above ? "bottom" : "top"} ${align === "end" ? "right" : align === "center" ? "center" : "left"}`,
             zIndex: "var(--z-popover)",
           }}
-          className={`popover-in absolute top-[calc(100%+0.5rem)] ${align === "end" ? "right-0" : align === "center" ? "left-1/2 -translate-x-1/2" : "left-0"} overflow-hidden rounded-[var(--r-lg)] border border-border bg-surface-elevated p-1 shadow-[var(--elev-floating)] ${className ?? ""}`}
+          className={`popover-in absolute ${above ? "bottom-[calc(100%+0.5rem)]" : "top-[calc(100%+0.5rem)]"} ${align === "end" ? "right-0" : align === "center" ? "left-1/2 -translate-x-1/2" : "left-0"} overflow-hidden rounded-[var(--r-popover)] border border-border bg-surface-elevated p-2 shadow-[var(--elev-floating)] ${className ?? ""}`}
         >
           {children}
         </div>

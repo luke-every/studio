@@ -138,6 +138,8 @@
   --r-tag: 0.75rem;
   /* Buttons, dropdown triggers and toggles on a prototype's page. */
   --r-control: 1rem;
+  /* Dropdowns and menus (MotionPopover). */
+  --r-popover: 1.5rem;
   /* Never under 16px: on a narrow screen the corners shrink with it instead of
    * swallowing a tile, and from tablet width up they are the full size. */
   --r-tile: clamp(1rem, 3vw, 1.5rem);

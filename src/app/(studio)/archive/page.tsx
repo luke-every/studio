@@ -10,7 +10,7 @@ export default function ArchivePage() {
   const archived = prototypes.filter((prototype) => prototype.archived).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   return (
-    <div className="w-full px-5 pb-8 pt-4 sm:px-8 sm:pb-10">
+    <div className="w-full px-5 pb-8 pt-2 sm:px-8 sm:pb-10">
       {archived.length === 0 ? (
         <p className="py-10 text-sm text-foreground-muted">Nothing archived.</p>
       ) : (

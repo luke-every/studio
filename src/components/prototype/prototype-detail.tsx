@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { ViewMenu } from "@/components/prototype/view-menu";
-import { ControlsPanel, VariantPicker } from "@/components/prototype/controls-panel";
+import { ControlsPanel, VariantPicker, VariantsDropdown } from "@/components/prototype/controls-panel";
 import { useVersionVariants } from "@/components/prototype/use-version-variants";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
-import { PrototypeLinks } from "@/components/prototype/prototype-links";
+import { ColumnHandle, RevealTab } from "@/components/prototype/column-handle";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
@@ -15,6 +15,7 @@ import { applyControls, defaultValues, variantControl, type ControlValues } from
 import type { Flow } from "@/lib/flow";
 import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { DEFAULT_DEVICE } from "@/lib/phone";
 import { useDevice, useFit, useZoom } from "@/lib/use-device";
 import { AvatarStack } from "@/components/shell/user-avatar";
@@ -156,6 +157,11 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const showingFlow = flowOpen && !!address;
   // Commenting quickly (C) leaves it be; the comment button brings the list, which takes its room.
   const side = (mode === "view" || (mode === "comment" && !listing)) && !showingFlow;
+  // The column can be dragged out of the way (and tapped back at the left edge); `drag` is how far it is being pulled while it is.
+  const [hidden, setHidden] = useState(false);
+  const [drag, setDrag] = useState(0);
+  const wide = useMediaQuery("(min-width: 64rem)");
+  const columnOpen = side && !(hidden && wide);
   // Full screen: the nav and the side column go, the prototype fills the window, and the column slides back in while the pointer is at the left edge.
   // The canvas is always looked at this way, whatever the choice was: closing it puts things back as they were.
   const [focusChoice, setFocus] = useState(false);
@@ -168,22 +174,56 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     return () => document.documentElement.removeAttribute("data-fullscreen");
   }, [focus]);
 
+  const githubUrl = repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}` : undefined;
+
+  const versionMenu = (
+    <VersionMenu
+      versions={prototype.versions}
+      selectedId={selected.id}
+      currentId={prototype.current.id}
+      onSelect={choose}
+      onRename={rename}
+      saving={isSaving("version")}
+    />
+  );
+
+  // The variants and the controls the prototype offers: a block beside it on a wide screen, a dropdown at its foot on a phone.
+  const picker = variantControl(offered);
+  const variantsLabel = variants.length
+    ? (variants.find((item) => item.id === variant)?.label ?? "Baseline")
+    : picker
+      ? (picker.options.find((option) => option.value === values[picker.id])?.label ?? picker.options[0].label)
+      : "Options";
+  const options =
+    offered || variants.length ? (
+      <>
+        {variants.length ? <VariantPicker variants={variants} value={variant} onChange={chooseVariant} /> : null}
+        {offered ? (
+          <ControlsPanel controls={offered} values={values} onChange={(id, value) => setPicked({ id: selected.id, values: { ...mine, [id]: value } })} />
+        ) : null}
+      </>
+    ) : null;
+
   // Two columns that always fit the window; whatever is bigger scrolls inside its own column.
   return (
     <div
-      className={`flex w-full flex-col gap-6 py-4 sm:px-8 lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:flex-row lg:items-stretch ${
+      className={`flex w-full flex-col gap-6 pb-6 pt-2 sm:px-8 lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:flex-row lg:items-stretch ${
         focus ? "lg:h-dvh lg:p-0" : "lg:h-[calc(100dvh-var(--nav-height))]"
       }`}
     >
       {focus ? (
         <div aria-hidden onPointerEnter={() => setPeek(true)} className="fixed inset-y-0 left-0 z-[var(--z-focus-mode)] w-3 max-lg:hidden" />
       ) : null}
+      {side && !focus && !hidden ? <ColumnHandle offset={drag} onDrag={setDrag} onHide={() => setHidden(true)} /> : null}
+      {side && !focus && hidden && wide ? <RevealTab onShow={() => setHidden(false)} /> : null}
       {/* Closing up rather than unmounting, so it slides away as the panel opens beside the canvas. */}
       <aside
-        inert={focus ? away : !side}
+        inert={focus ? away : !columnOpen}
+        // While the column is being pulled, the room it leaves goes to the prototype as it goes.
+        style={drag ? { width: `max(0px, calc(var(--detail-side-width) + ${drag}px))`, transition: "none" } : undefined}
         onPointerLeave={() => setPeek(false)}
-        className={`stagger-in [--i:1] lg:[--i:0] order-2 min-w-0 px-5 sm:px-0 lg:relative lg:order-1 lg:flex lg:shrink-0 lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
-          side && !focus
+        className={`stagger-in [--i:0] sm:[--i:1] lg:[--i:0] order-1 min-w-0 px-5 sm:order-2 sm:px-0 lg:relative lg:order-1 lg:flex lg:shrink-0 lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+          columnOpen && !focus
             ? "lg:w-[var(--detail-side-width)] lg:overflow-hidden"
             : focus
               ? // Closed up like any other mode, but its panel stays drawn so it can come back over the prototype.
@@ -193,17 +233,21 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       >
       {/* It travels left and fades as the column closes, at the same pace as the panel arrives. */}
       <div
-        className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:rounded-[var(--r-tile)] lg:bg-tile lg:p-6 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
-          (focus ? !away : side) ? "" : "lg:-translate-x-full lg:opacity-0"
+        style={drag ? { translate: `${drag}px 0`, transition: "none" } : undefined}
+        className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:rounded-[var(--r-tile)] lg:bg-tile lg:p-8 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+          (focus ? !away : columnOpen) ? "" : "lg:-translate-x-full lg:opacity-0"
         }`}
       >
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2.5">
             <div className="flex items-start gap-2">
-              <h1 className="min-w-0 flex-1 text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
-                {prototype.name}
-              </h1>
-              <PrototypeMenu prototype={prototype} version={selected.version} />
+              <h1 className="min-w-0 flex-1 text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">{prototype.name}</h1>
+              <PrototypeMenu
+                prototype={prototype}
+                version={selected.version}
+                githubUrl={githubUrl}
+                onEdit={selected.url && !showingFlow ? () => (setListing(false), setMode("edit")) : undefined}
+              />
             </div>
             <p className="flex items-center gap-1.5 text-ui text-foreground-subtle">
               <AvatarStack people={people} className="size-5" overlap="-ml-1.5" ring="ring-tile" />
@@ -220,30 +264,19 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           </p>
         </div>
 
-        {/* The variants, when there are some, in a framed block that fills what is left. */}
-        <div className="min-h-0 flex-1">
-          {offered || variants.length ? (
+        {/* The variants, when there are some, in a framed block that fills what is left. On a phone they are a dropdown under the prototype instead. */}
+        <div className="min-h-0 flex-1 max-sm:hidden">
+          {options ? (
             <div className="flex max-h-full flex-col gap-6 overflow-y-auto rounded-[var(--r-control)] border border-border p-4 [scrollbar-width:thin]">
-              {variants.length ? <VariantPicker variants={variants} value={variant} onChange={chooseVariant} /> : null}
-              {offered ? (
-                <ControlsPanel
-                  controls={offered}
-                  values={values}
-                  onChange={(id, value) => setPicked({ id: selected.id, values: { ...mine, [id]: value } })}
-                />
-              ) : null}
+              {options}
             </div>
           ) : null}
         </div>
 
-        <PrototypeLinks
-          prototype={prototype}
-          githubUrl={repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}` : undefined}
-        />
       </div>
       </aside>
 
-      <div className="stagger-in [--i:0] lg:[--i:1] order-1 min-w-0 flex-1 lg:order-2 lg:min-h-0">
+      <div className="stagger-in [--i:1] sm:[--i:0] lg:[--i:1] order-2 min-w-0 flex-1 sm:order-1 lg:order-2 lg:min-h-0">
         <PrototypeFrame
           url={address}
           device={device}
@@ -278,16 +311,9 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
             setPeek(false);
           }}
           title={`${prototype.name} ${selected.version}`}
-          leading={
-            <VersionMenu
-              versions={prototype.versions}
-              selectedId={selected.id}
-              currentId={prototype.current.id}
-              onSelect={choose}
-              onRename={rename}
-              saving={isSaving("version")}
-            />
-          }
+          leading={versionMenu}
+          share={{ slug: prototype.slug, versionKey: selected.key, version: selected.version }}
+          bottom={options ? <VariantsDropdown label={variantsLabel}>{options}</VariantsDropdown> : undefined}
         />
       </div>
     </div>
