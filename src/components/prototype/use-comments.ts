@@ -67,17 +67,17 @@ const track = <T,>(save: Promise<T>) => {
   return save.finally(() => void inflight--);
 };
 
-const POLL_MS = 5000;
+const POLL_MS = 20_000;
 
 /**
  * The comments on one version. Read when it is opened, again whenever the
- * window is come back to, and every few seconds while it is in view, which is
+ * window is come back to, and every twenty seconds while it is in view, which is
  * how somebody else's comments and likes show up without a refresh. (The
  * store is a repository, so there is nothing to push from: asking is the
  * boring way, and it stops while the tab is hidden.) A list grows, and
  * comments get resolved or deleted.
  */
-export function useComments(slug: string | undefined, version: string | undefined, by: string, variant?: string) {
+export function useComments(slug: string | undefined, version: string | undefined, by: string, variant?: string, active = true) {
   const { profileOf } = useUser();
   const avatar = by ? profileOf(by).avatar : undefined;
   const target = slug && version ? { slug, version } : undefined;
@@ -100,6 +100,12 @@ export function useComments(slug: string | undefined, version: string | undefine
       });
     };
     read();
+    // Read once whatever happens (the count on the bar needs it); kept fresh only while the comments are in play.
+    if (!active) {
+      return () => {
+        current = false;
+      };
+    }
     const timer = window.setInterval(read, POLL_MS);
     window.addEventListener("focus", read);
     document.addEventListener("visibilitychange", read);
@@ -109,7 +115,7 @@ export function useComments(slug: string | undefined, version: string | undefine
       window.removeEventListener("focus", read);
       document.removeEventListener("visibilitychange", read);
     };
-  }, [slug, version, key]);
+  }, [slug, version, key, active]);
 
   const replace = (next: Comment) =>
     setLoaded((now) => (now && now.key === key ? { key, list: now.list.map((item) => (item.id === next.id ? next : item)) } : now));

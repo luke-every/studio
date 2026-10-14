@@ -6,11 +6,15 @@
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
   event.waitUntil(
+    Promise.all([
+    // Open pages refresh the bell now rather than at their next poll.
+    self.clients.matchAll({ type: "window" }).then((windows) => windows.forEach((client) => client.postMessage({ refresh: true }))),
     self.registration.showNotification(data.title || "New comment", {
       body: data.body,
       icon: data.icon ? new URL(data.icon, self.location.origin).href : undefined,
       data: { url: data.url || "/" },
     }),
+    ]),
   );
 });
 

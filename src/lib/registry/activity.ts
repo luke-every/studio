@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Activity } from "@/lib/activity";
 
-import { readStoreFile, writeStoreFile } from "./store";
+import { readStoreFileShared, updateStoreFile } from "./store";
 
 /**
  * What the bell in the nav lists: the latest comments and replies across the
@@ -13,11 +13,13 @@ const PATH = "activity.json";
 const KEEP = 30;
 
 export async function readActivity(): Promise<Activity[]> {
-  const text = await readStoreFile(PATH);
+  const text = await readStoreFileShared(PATH);
   return text ? (JSON.parse(text) as Activity[]) : [];
 }
 
-export async function recordActivity(entry: Activity) {
-  const next = [entry, ...(await readActivity()).filter((item) => item.id !== entry.id)].slice(0, KEEP);
-  await writeStoreFile(PATH, `${JSON.stringify(next, null, 2)}\n`, "Note a comment");
-}
+export const recordActivity = (entry: Activity) =>
+  updateStoreFile(PATH, (text) => {
+    const current = text ? (JSON.parse(text) as Activity[]) : [];
+    const next = [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, KEEP);
+    return { content: JSON.stringify(next), message: "Note a comment" };
+  });

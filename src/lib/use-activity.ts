@@ -62,8 +62,11 @@ export function useActivity() {
     const visible = () => document.visibilityState === "visible" && void load();
     document.addEventListener("visibilitychange", visible);
     const timer = window.setInterval(visible, REFRESH_MS);
+    const onPush = (event: MessageEvent) => event.data?.refresh && void load();
+    navigator.serviceWorker?.addEventListener("message", onPush);
     return () => {
       current = false;
+      navigator.serviceWorker?.removeEventListener("message", onPush);
       document.removeEventListener("visibilitychange", visible);
       window.clearInterval(timer);
     };
