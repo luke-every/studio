@@ -214,6 +214,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               </span>
             </p>
           </div>
+          {prototype.archived ? <p className="text-ui text-foreground-subtle">Archived. It is out of the feeds until it is unarchived.</p> : null}
           <p className="text-base leading-[var(--leading-relaxed)] text-foreground-muted">
             {prototype.description || "A short description of what this prototype is and the question it is asking will go here."}
           </p>

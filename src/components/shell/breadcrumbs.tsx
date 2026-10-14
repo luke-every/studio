@@ -27,7 +27,9 @@ export function Breadcrumbs() {
     if (found) trail.push({ label: found.name, href: `/teams/${teamSlug}/projects/${found.slug}` });
   };
 
-  if (section === "teams" && slug) {
+  if (section === "archive") {
+    trail.push({ label: "Archive" });
+  } else if (section === "teams" && slug) {
     team(slug);
     if (projectSlug) project(slug, projectSlug);
   } else if (section === "prototypes" && slug) {

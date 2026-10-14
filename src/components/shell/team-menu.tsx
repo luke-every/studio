@@ -61,7 +61,7 @@ export function TeamMenu() {
       open={open}
       onClose={() => setOpen(false)}
       align="start"
-      className="w-48"
+      className="w-56"
       trigger={
         <IconButton onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open}>
           {current?.name ?? "Home"}
@@ -83,6 +83,14 @@ export function TeamMenu() {
             {entry.selected ? <CheckIcon className="text-foreground" /> : null}
           </Link>
         ))}
+        <Link
+          href="/archive"
+          role="menuitem"
+          onClick={() => setOpen(false)}
+          className={`${item} mt-1 border-t border-border text-foreground-subtle`}
+        >
+          Archive
+        </Link>
       </div>
     </MotionPopover>
     </div>

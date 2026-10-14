@@ -13,14 +13,14 @@ import type { Prototype } from "@/lib/registry/types";
 import { LinksDialog } from "./prototype-links";
 import { RemixDialog } from "./remix-dialog";
 
-type Dialog = "rename" | "move" | "links" | "remix" | "delete";
+type Dialog = "rename" | "move" | "links" | "remix" | "archive";
 
 const item =
   "flex w-full items-center rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-nav hover:bg-surface-hover";
 
-/** The ellipsis beside a prototype's title: remix the version on screen, rename it, move it, edit its links, delete it. */
+/** The ellipsis beside a prototype's title: remix the version on screen, rename it, move it, edit its links, archive it. */
 export function PrototypeMenu({ prototype, version }: { prototype: Prototype; version: string }) {
-  const { isSaving } = useStudio();
+  const { isSaving, updatePrototype } = useStudio();
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
 
@@ -51,21 +51,37 @@ export function PrototypeMenu({ prototype, version }: { prototype: Prototype; ve
         }
       >
         <div role="menu" className="flex flex-col">
-          <button type="button" role="menuitem" onClick={() => choose("remix")} className={`${item} text-foreground`}>
-            Remix
-          </button>
-          <button type="button" role="menuitem" onClick={() => choose("rename")} className={`${item} text-foreground`}>
-            Rename
-          </button>
-          <button type="button" role="menuitem" onClick={() => choose("move")} className={`${item} text-foreground`}>
-            Move to…
-          </button>
-          <button type="button" role="menuitem" onClick={() => choose("links")} className={`${item} text-foreground`}>
-            Edit links
-          </button>
-          <button type="button" role="menuitem" onClick={() => choose("delete")} className={`${item} text-destructive`}>
-            Delete
-          </button>
+          {prototype.archived ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                updatePrototype({ slug: prototype.slug, archived: false }, ["prototype"], "Restored");
+              }}
+              className={`${item} text-foreground`}
+            >
+              Unarchive
+            </button>
+          ) : (
+            <>
+              <button type="button" role="menuitem" onClick={() => choose("remix")} className={`${item} text-foreground`}>
+                Remix
+              </button>
+              <button type="button" role="menuitem" onClick={() => choose("rename")} className={`${item} text-foreground`}>
+                Rename
+              </button>
+              <button type="button" role="menuitem" onClick={() => choose("move")} className={`${item} text-foreground`}>
+                Move to…
+              </button>
+              <button type="button" role="menuitem" onClick={() => choose("links")} className={`${item} text-foreground`}>
+                Edit links
+              </button>
+              <button type="button" role="menuitem" onClick={() => choose("archive")} className={`${item} text-destructive`}>
+                Archive
+              </button>
+            </>
+          )}
         </div>
       </MotionPopover>
 
@@ -73,7 +89,7 @@ export function PrototypeMenu({ prototype, version }: { prototype: Prototype; ve
       {dialog === "rename" ? <RenameDialog prototype={prototype} onClose={close} /> : null}
       {dialog === "move" ? <MoveDialog prototype={prototype} onClose={close} /> : null}
       {dialog === "links" ? <LinksDialog prototype={prototype} kinds={["figma", "notion"]} onClose={close} /> : null}
-      {dialog === "delete" ? <DeleteDialog prototype={prototype} onClose={close} /> : null}
+      {dialog === "archive" ? <ArchiveDialog prototype={prototype} onClose={close} /> : null}
     </>
   );
 }
@@ -154,21 +170,21 @@ function MoveDialog({ prototype, onClose }: { prototype: Prototype; onClose: () 
   );
 }
 
-function DeleteDialog({ prototype, onClose }: { prototype: Prototype; onClose: () => void }) {
+function ArchiveDialog({ prototype, onClose }: { prototype: Prototype; onClose: () => void }) {
   const router = useRouter();
   const { updatePrototype } = useStudio();
 
   return (
     <DialogForm
-      title={`Delete “${prototype.name}”?`}
-      description="It disappears from the studio for everyone. Its versions and files stay safe in the content repository, and pushing to it again brings it back."
-      submitLabel="Delete"
+      title={`Archive “${prototype.name}”?`}
+      description="It moves out of sight for everyone. Its versions and files stay safe, and you can bring it back any time from Archive in the Home menu."
+      submitLabel="Archive"
       destructive
       onClose={onClose}
       onSubmit={() => {
         // Straight home: there is nothing left here to wait for.
         router.push("/");
-        updatePrototype({ slug: prototype.slug, archived: true }, ["prototype"], "Deleted");
+        updatePrototype({ slug: prototype.slug, archived: true }, ["prototype"], "Archived");
       }}
     />
   );

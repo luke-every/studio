@@ -14,8 +14,7 @@ export function PrototypeView() {
   const { prototypes } = useStudio();
 
   const prototype = prototypes.find((candidate) => candidate.slug === params.slug);
-  // A deleted prototype is hidden, not gone, but nobody should land on it.
-  if (!prototype || prototype.archived) notFound();
+  if (!prototype) notFound();
 
   return <PrototypeDetail prototype={prototype} />;
 }
