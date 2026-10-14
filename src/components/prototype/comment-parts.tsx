@@ -20,6 +20,7 @@ import { ConfirmPopover } from "@/components/ui/confirm-popover";
 import { Stamp } from "@/components/ui/stamp";
 import type { Anchor, Comment } from "@/lib/comments";
 import { selectorFor } from "@/lib/edit-dom";
+import { menuItem } from "@/components/ui/menu-item";
 
 /** The pieces of commenting that the prototype frame and the flow canvas share. */
 
@@ -570,8 +571,7 @@ export function CommentMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const item =
-    "flex w-full items-center rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-nav hover:bg-surface-hover";
+  const item = menuItem;
 
   return (
     // Whatever holds the comment (a row that opens it) must not hear presses meant for the menu.

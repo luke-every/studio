@@ -9,9 +9,9 @@ import { useUser } from "@/lib/use-user";
 import { UnreadBadge } from "./notifications-menu";
 import { FirstSteps } from "./first-steps";
 import { BellIcon, MenuIcon, SearchIcon } from "./nav-icons";
+import { menuItem } from "@/components/ui/menu-item";
 
-const item =
-  "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-2 text-left text-nav text-foreground hover:bg-surface-hover";
+const item = `${menuItem} text-foreground`;
 
 /**
  * On a phone there isn't room for search, notifications and the user as three

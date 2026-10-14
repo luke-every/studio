@@ -11,6 +11,7 @@ import type { Comment } from "@/lib/comments";
 
 import { CommentMenu, ResolveToggle, WhileWorking } from "./comment-parts";
 import { PanelEmpty } from "./panel-empty";
+import { menuItem } from "@/components/ui/menu-item";
 
 type Show = "open" | "resolved" | "all";
 
@@ -106,7 +107,7 @@ export function CommentsPanel({
                     setShow(option.id);
                     setFilterOpen(false);
                   }}
-                  className="flex w-full items-center justify-between rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-nav text-foreground hover:bg-surface-hover"
+                  className={`${menuItem} justify-between text-foreground`}
                 >
                   {option.label}
                   {show === option.id ? <CheckIcon className="size-3.5" /> : null}

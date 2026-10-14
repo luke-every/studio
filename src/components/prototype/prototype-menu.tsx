@@ -11,11 +11,11 @@ import { useStudio } from "@/lib/data/studio-store";
 import type { Prototype } from "@/lib/registry/types";
 
 import { RemixDialog } from "./remix-dialog";
+import { menuItem } from "@/components/ui/menu-item";
 
 type Dialog = "rename" | "move" | "remix" | "archive";
 
-const item =
-  "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-nav hover:bg-surface-hover";
+const item = menuItem;
 
 /** The ellipsis beside a prototype's title: remix the version on screen, rename it, move it, open its files on GitHub, archive it. Edit and Remix, the two ways of making something from it, sit together. */
 export function PrototypeMenu({ prototype, version, githubUrl, onEdit }: { prototype: Prototype; version: string; githubUrl?: string; onEdit?: () => void }) {

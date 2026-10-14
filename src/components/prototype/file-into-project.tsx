@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
 import { useStudio } from "@/lib/data/studio-store";
+import { menuItem } from "@/components/ui/menu-item";
 
 /**
  * Filing a prototype into a project.
@@ -75,7 +76,7 @@ export function FileIntoProject({
               role="menuitemradio"
               aria-checked={project.slug === currentProjectSlug}
               onClick={choose(project.slug)}
-              className="flex w-full items-center justify-between gap-2 rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-sm text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+              className={`${menuItem} justify-between text-foreground`}
             >
               <span className="truncate">{project.name}</span>
               {project.slug === currentProjectSlug ? (
@@ -90,7 +91,7 @@ export function FileIntoProject({
             type="button"
             role="menuitem"
             onClick={choose(null)}
-            className="mt-0.5 w-full rounded-[var(--r-sm)] border-t border-divider px-2.5 py-1.5 text-left text-sm text-foreground-subtle hover:bg-surface-hover hover:text-foreground"
+            className={`${menuItem} text-foreground-muted hover:text-foreground`}
           >
             Remove from project
           </button>

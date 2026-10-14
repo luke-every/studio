@@ -426,3 +426,19 @@ export function CloseIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function GearIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 5.75a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5ZM8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05" />
+    </Frame>
+  );
+}
+
+export function LogOutIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M6.5 2.75h-2a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1h2M10 5.25 12.75 8 10 10.75M12.5 8h-6" />
+    </Frame>
+  );
+}

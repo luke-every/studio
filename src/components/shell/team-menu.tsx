@@ -11,7 +11,7 @@ import { useHoverOpen } from "@/lib/use-hover-open";
 import { CheckIcon, ChevronDownIcon } from "./nav-icons";
 
 const item =
-  "flex w-full items-center justify-between gap-3 rounded-[var(--r-sm)] px-2.5 py-2 text-left text-nav hover:bg-surface-hover";
+  "flex w-full items-center justify-between gap-3 rounded-[var(--r-control)] px-2.5 py-2 text-left text-nav hover:bg-surface-hover";
 
 /** Home and the teams, and which of them you are in. */
 function useEntries() {

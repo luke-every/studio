@@ -10,11 +10,11 @@ import { useStudio } from "@/lib/data/studio-store";
 import { shareLink } from "@/lib/registry/actions";
 
 import { QrSkeleton } from "./qr-skeleton";
+import { menuItem } from "@/components/ui/menu-item";
 
 const PhoneQr = dynamic(() => import("./phone-qr").then((m) => m.PhoneQr), { ssr: false });
 
-const item =
-  "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-nav text-foreground hover:bg-surface-hover";
+const item = `${menuItem} text-foreground`;
 
 /**
  * Everything for getting this version in front of somebody else: copy a link

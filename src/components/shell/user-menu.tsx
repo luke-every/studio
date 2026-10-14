@@ -6,11 +6,11 @@ import { useHoverOpen } from "@/lib/use-hover-open";
 import { useUser } from "@/lib/use-user";
 
 import { FirstSteps } from "./first-steps";
-import { PencilIcon, ShuffleIcon } from "./nav-icons";
+import { GearIcon, LogOutIcon, PencilIcon, ShuffleIcon } from "./nav-icons";
 import { UserAvatar } from "./user-avatar";
+import { menuItem } from "@/components/ui/menu-item";
 
-const item =
-  "flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-2.5 py-1.5 text-left text-sm text-foreground hover:bg-surface-hover";
+const item = `${menuItem} text-foreground`;
 
 /** The person at the top right: who you are, how to get set up, and a way to switch or leave. */
 export function UserMenu({ onSwitch, onSetup, onSettings, onEditProfile }: { onSwitch: () => void; onSetup: () => void; onSettings: () => void; onEditProfile: () => void }) {
@@ -49,29 +49,31 @@ export function UserMenu({ onSwitch, onSetup, onSettings, onEditProfile }: { onS
             <p className="truncate text-md font-medium text-foreground">{name || "Guest"}</p>
             {name ? null : <p className="text-xs text-foreground-muted">Browsing as a guest</p>}
           </div>
+          <div className="flex items-center">
           {name ? (
+              <IconButton
+                label="Edit profile"
+                variant="ghost"
+                onClick={() => {
+                  setOpen(false);
+                  onEditProfile();
+                }}
+              >
+                <PencilIcon />
+              </IconButton>
+            ) : null}
             <IconButton
-              label="Edit profile"
+              label="Switch user"
               variant="ghost"
+              tooltipAlign="end"
               onClick={() => {
                 setOpen(false);
-                onEditProfile();
+                onSwitch();
               }}
             >
-              <PencilIcon />
+              <ShuffleIcon />
             </IconButton>
-          ) : null}
-          <IconButton
-            label="Switch user"
-            variant="ghost"
-            tooltipAlign="end"
-            onClick={() => {
-              setOpen(false);
-              onSwitch();
-            }}
-          >
-            <ShuffleIcon />
-          </IconButton>
+          </div>
         </div>
 
         <FirstSteps
@@ -82,7 +84,7 @@ export function UserMenu({ onSwitch, onSetup, onSettings, onEditProfile }: { onS
           }}
         />
 
-        <div className="flex flex-col border-t border-divider py-1">
+        <div className="flex flex-col border-t border-divider pt-1">
           <button
             type="button"
             role="menuitem"
@@ -92,11 +94,9 @@ export function UserMenu({ onSwitch, onSetup, onSettings, onEditProfile }: { onS
             }}
             className={item}
           >
+            <GearIcon />
             Settings
           </button>
-        </div>
-
-        <div className="flex flex-col border-t border-divider pt-1">
           <button
             type="button"
             role="menuitem"
@@ -104,8 +104,9 @@ export function UserMenu({ onSwitch, onSetup, onSettings, onEditProfile }: { onS
               setOpen(false);
               leave();
             }}
-            className={item}
+            className={`${menuItem} text-destructive`}
           >
+            <LogOutIcon />
             Log out
           </button>
         </div>

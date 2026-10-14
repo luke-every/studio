@@ -177,7 +177,6 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     <VersionMenu
       versions={prototype.versions}
       selectedId={selected.id}
-      currentId={prototype.current.id}
       onSelect={choose}
     />
   );

@@ -27,7 +27,7 @@ export function NotificationList({ feed, onNavigate }: { feed: ActivityFeed; onN
               onNavigate();
               window.location.assign(event.currentTarget.href);
             }}
-            className="flex items-start gap-3 rounded-[var(--r-sm)] px-2.5 py-2 hover:bg-surface-hover"
+            className="flex items-start gap-3 rounded-[var(--r-control)] px-2.5 py-2 hover:bg-surface-hover"
           >
             <UserAvatar name={item.author} className="size-8" />
             <div className="min-w-0 flex-1">
