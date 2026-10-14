@@ -19,9 +19,12 @@ function sign(slug: string, version: string, expires: number) {
   return createHmac("sha256", secret).update(`review:${slug}:${version}:${expires}`).digest("base64url");
 }
 
+/** A share link's comment token has no end: it lasts as long as the studio password does. */
+const FOREVER = 4102444800; // 2100-01-01
+
 /** `version` is the folder form, as in the address: v0-2. */
-export function mintReviewToken(slug: string, version: string) {
-  const expires = Math.floor(Date.now() / 1000) + LIFETIME_SECONDS;
+export function mintReviewToken(slug: string, version: string, { forever = false } = {}) {
+  const expires = forever ? FOREVER : Math.floor(Date.now() / 1000) + LIFETIME_SECONDS;
   return `${expires}.${sign(slug, version, expires)}`;
 }
 

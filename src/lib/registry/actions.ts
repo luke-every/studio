@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { isUnlocked } from "@/lib/gate";
 import { mintReviewToken } from "@/lib/review";
+import { mintShareToken } from "@/lib/share";
 
 import { EDIT_IMAGE_DIR, editsSchema, type Edit } from "@/lib/edits";
 
@@ -151,6 +152,11 @@ export async function addComment(input: Parameters<typeof comments.addComment>[0
 /** A review link's token for a version, for the QR code: a phone that scans it can leave comments. `version` is the folder form (v0-2). */
 export async function reviewToken(slug: string, version: string) {
   return attempt(async () => mintReviewToken(slug, version), []);
+}
+
+/** A link to one version that opens without the password, for sharing outside the studio. `key` is the version it is stored under (v2.0). */
+export async function shareLink(slug: string, key: string) {
+  return attempt(async () => `/s/${mintShareToken(slug, key)}`, []);
 }
 
 export async function likeComment(input: Parameters<typeof comments.setLiked>[0]) {

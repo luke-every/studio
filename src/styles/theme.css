@@ -110,6 +110,10 @@
     --border: var(--alpha-paper-10);
     --border-strong: var(--alpha-paper-16);
     --divider: var(--alpha-paper-06);
+    --qr-bg: var(--surface-elevated);
+    --qr-fg: var(--paper-100);
+    --qr-skeleton: var(--ink-500);
+    --qr-skeleton-shine: var(--ink-400);
 
     --accent: var(--paper-100);
     --accent-hover: var(--paper-50);
@@ -155,6 +159,10 @@
   --border: var(--alpha-paper-10);
   --border-strong: var(--alpha-paper-16);
   --divider: var(--alpha-paper-06);
+  --qr-bg: var(--surface-elevated);
+  --qr-fg: var(--paper-100);
+  --qr-skeleton: var(--ink-500);
+  --qr-skeleton-shine: var(--ink-400);
 
   --accent: var(--paper-100);
   --accent-hover: var(--paper-50);

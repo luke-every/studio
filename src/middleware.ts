@@ -56,6 +56,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/avatars/") ||
     pathname.startsWith("/skill/") ||
     pathname.startsWith("/remix/") ||
+    // A share link carries its own signature: one version, for somebody without the password.
+    pathname.startsWith("/s/") ||
     pathname === "/favicon.ico";
 
   if (exempt) return NextResponse.next();
