@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { guessContentType } from "@/lib/registry/content-type";
 import { checkReviewToken } from "@/lib/review";
-import { fetchPrototypeFile } from "@/lib/registry/github";
+import { fetchPrototypeFile, prototypeVersionExists } from "@/lib/registry/github";
 import { getPrototype } from "@/lib/registry";
 
 /**
@@ -38,19 +38,26 @@ export async function GET(
   const relativePath = path.join("/") || "index.html";
   const range = request.headers.get("range");
 
-  const upstream =
-    (await fetchPrototypeFile(slug, version, path, range)) ?? (await fromRegistry(slug, version, relativePath, range));
+  let upstream = await fetchPrototypeFile(slug, version, path, range);
+  // A miss only needs the registry for a version from before the move to
+  // GitHub, and a version GitHub holds an index.html for isn't one. Other
+  // files of a version are the common miss, so that is checked first.
+  if (!upstream && (relativePath === "index.html" || !(await prototypeVersionExists(slug, version)))) {
+    upstream = await fromRegistry(slug, version, relativePath, range);
+  }
   if (!upstream) {
-    return new NextResponse("Not found.", { status: 404 });
+    // Briefly cached, so a link to something that isn't there doesn't cost
+    // GitHub calls every time; short, so a version just pushed shows up.
+    return new NextResponse("Not found.", { status: 404, headers: { "cache-control": "public, max-age=60" } });
   }
 
   const headers = new Headers({
     "content-type": relativePath === "index.html" ? "text/html; charset=utf-8" : guessContentType(relativePath),
     // A version's files never change, so a whole file is cached hard and
-    // forever. A byte range never is: Safari opens a video by asking for its
-    // first two bytes, and a cache that kept that answer would hand the
-    // same two bytes to every request after it.
-    "cache-control": upstream.status === 206 ? "no-store" : "public, max-age=31536000, immutable",
+    // forever. A byte range is kept only by the browser that asked, briefly:
+    // Safari opens a video by asking for its first two bytes, and a shared
+    // cache that kept that answer would hand the same two bytes to everyone.
+    "cache-control": upstream.status === 206 ? "private, max-age=3600" : "public, max-age=31536000, immutable",
     "accept-ranges": "bytes",
     // Nothing here should end up in a search index.
     "x-robots-tag": "noindex",

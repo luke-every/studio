@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { linkProblem, type LinkKind } from "@/lib/links";
 
-import { isStoreConfigured, readRegistryDocument, writeRegistryDocument, type RegistryDocument } from "./store";
-import { commitPrototypeVersion, fetchPrototypeFile, verifyPrototypeVersion, versionPrefix } from "./github";
+import { isStoreConfigured, readRegistryDocument, updateRegistryDocument, type RegistryDocument } from "./store";
+import { commitPrototypeVersion, fetchPrototypeFile, prototypeVersionExists, verifyPrototypeVersion, versionPrefix } from "./github";
 import { applierScript, describeEdits, mergeEdits, variantIdPattern, type Edit, type EditsFile, type EditVariant } from "@/lib/edits";
 import { compareVersions, readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
@@ -54,22 +54,39 @@ export function named(name: string | undefined, fallback = "Someone") {
   return { login: slugify(trimmed, "person"), name: trimmed };
 }
 
-async function load(): Promise<RegistryDocument> {
+function requireStore() {
   if (!isStoreConfigured()) {
     throw new StoreError(
       "No content repository is connected, so nothing can be saved. Set STUDIO_GITHUB_TOKEN and STUDIO_CONTENT_REPO in Vercel.",
     );
   }
-  // First write into a fresh store starts from the seed, so the teams that
-  // ship with the studio exist without anybody running a migration.
+}
+
+// First write into a fresh store starts from the seed, so the teams that
+// ship with the studio exist without anybody running a migration.
+async function load(): Promise<RegistryDocument> {
+  requireStore();
   return (await readRegistryDocument()) ?? readSeed();
 }
 
-async function save(document: RegistryDocument) {
-  await writeRegistryDocument(document);
+/**
+ * Change the registry. `change` runs on the document as the store holds it
+ * and, if somebody else saved first, runs again on the fresh copy (see
+ * `updateStoreFile`), so it must be re-runnable and touch nothing outside
+ * the document. Commits to the content repository belong before this.
+ */
+async function mutate<T>(change: (document: RegistryDocument) => T): Promise<T> {
+  requireStore();
+  let result!: T;
+  await updateRegistryDocument(async (current) => {
+    const document = current ?? (await readSeed());
+    result = change(document);
+    return document;
+  });
   // The pages are prerendered, so they hold the old registry until they are
   // told to regenerate. They read the document fresh when they do.
   revalidatePath("/", "layout");
+  return result;
 }
 
 /**
@@ -89,27 +106,27 @@ export async function createTeam(input: {
   /** Optional: nobody signs in, and a team is not work anybody claims. */
   by?: string;
 }) {
-  const document = await load();
-  const slug = slugify(input.name, "team");
+  return mutate((document) => {
+    const slug = slugify(input.name, "team");
 
-  if (document.teams.some((team) => team.slug === slug)) {
-    throw new StoreError(`There is already a team called "${input.name}".`);
-  }
+    if (document.teams.some((team) => team.slug === slug)) {
+      throw new StoreError(`There is already a team called "${input.name}".`);
+    }
 
-  const person = named(input.by, "Prototype Studio");
-  document.teams.push({
-    slug,
-    name: input.name.trim(),
-    remit: input.remit.trim(),
-    description: input.description.trim(),
-    lead: person,
-    members: [person],
-    created: { by: person, at: today() },
-    archived: false,
+    const person = named(input.by, "Prototype Studio");
+    document.teams.push({
+      slug,
+      name: input.name.trim(),
+      remit: input.remit.trim(),
+      description: input.description.trim(),
+      lead: person,
+      members: [person],
+      created: { by: person, at: today() },
+      archived: false,
   });
 
-  await save(document);
   return slug;
+  });
 }
 
 export async function createProject(input: {
@@ -117,39 +134,38 @@ export async function createProject(input: {
   name: string;
   by?: string;
 }) {
-  const document = await load();
-  const slug = slugify(input.name, "project");
+  return mutate((document) => {
+    const slug = slugify(input.name, "project");
 
-  if (!document.teams.some((team) => team.slug === input.teamSlug)) {
-    throw new StoreError(`No team called "${input.teamSlug}".`);
-  }
-  if (document.projects.some((project) => project.slug === slug)) {
-    throw new StoreError(`There is already a project called "${input.name}".`);
-  }
+    if (!document.teams.some((team) => team.slug === input.teamSlug)) {
+      throw new StoreError(`No team called "${input.teamSlug}".`);
+    }
+    if (document.projects.some((project) => project.slug === slug)) {
+      throw new StoreError(`There is already a project called "${input.name}".`);
+    }
 
-  document.projects.push({
-    slug,
-    teamSlug: input.teamSlug,
-    name: input.name.trim(),
-    created: { by: named(input.by, "Prototype Studio"), at: today() },
+    document.projects.push({
+      slug,
+      teamSlug: input.teamSlug,
+      name: input.name.trim(),
+      created: { by: named(input.by, "Prototype Studio"), at: today() },
   });
 
-  await save(document);
   return slug;
+  });
 }
 
 export async function filePrototype(input: {
   prototypeSlug: string;
   projectSlug: string | null;
 }) {
-  const document = await load();
-  const prototype = document.prototypes.find((item) => item.slug === input.prototypeSlug);
-  if (!prototype) throw new StoreError(`No prototype called "${input.prototypeSlug}".`);
+  return mutate((document) => {
+    const prototype = document.prototypes.find((item) => item.slug === input.prototypeSlug);
+    if (!prototype) throw new StoreError(`No prototype called "${input.prototypeSlug}".`);
 
-  prototype.projectSlug = input.projectSlug;
-  prototypeSchema.parse(prototype);
-
-  await save(document);
+    prototype.projectSlug = input.projectSlug;
+    prototypeSchema.parse(prototype);
+  });
 }
 
 /** "v0.10" follows "v0.9", which a string sort would get backwards. */
@@ -231,7 +247,7 @@ function plan(
 }
 
 /** Write the version record, and the prototype too if it's the first one. */
-async function record(document: RegistryDocument, input: VersionNotes, url: string) {
+function record(document: RegistryDocument, input: VersionNotes, url: string) {
   const { slug, version, existing, isLatest } = plan(document, input);
   const person = named(input.by);
   const versionId = `${slug}-${version}`;
@@ -287,7 +303,6 @@ async function record(document: RegistryDocument, input: VersionNotes, url: stri
     document.prototypes.push(prototype);
   }
 
-  await save(document);
   return { slug, version, url };
 }
 
@@ -316,15 +331,15 @@ export async function saveVersion(
     assets?: { path: string; content: ArrayBuffer }[];
   },
 ) {
-  const document = await load();
-  const { slug, version } = plan(document, input);
+  const { slug, version } = plan(await load(), input);
 
   const { entryUrl } = await commitPrototypeVersion(slug, version, [
     { path: "index.html", content: input.html },
     ...(input.assets ?? []),
   ]);
 
-  return record(document, input, entryUrl);
+  // Pinned to the number the files went in under, even if the registry moved meanwhile.
+  return mutate((document) => record(document, { ...input, slug, version }, entryUrl));
 }
 
 /**
@@ -399,17 +414,19 @@ export async function saveEditedVersion(input: {
     base.version,
   );
 
-  return record(
-    document,
-    {
-      name: prototype.name,
-      slug,
-      version,
-      title: added ? `Variant: ${added.label}` : "Visual edits",
-      changes: added ? `Added the variant “${added.label}”. ${describeEdits(input.edits)}`.trim() : describeEdits(input.edits),
-      by: input.by,
-    },
-    entryUrl,
+  return mutate((fresh) =>
+    record(
+      fresh,
+      {
+        name: prototype.name,
+        slug,
+        version,
+        title: added ? `Variant: ${added.label}` : "Visual edits",
+        changes: added ? `Added the variant “${added.label}”. ${describeEdits(input.edits)}`.trim() : describeEdits(input.edits),
+        by: input.by,
+      },
+      entryUrl,
+    ),
   );
 }
 
@@ -427,7 +444,15 @@ export async function reserveVersion(input: {
   small?: boolean;
 }) {
   const document = await load();
-  const { slug, version } = plan(document, input);
+  let planned = plan(document, input);
+  // A push that committed its files but never got recorded leaves a folder
+  // the registry doesn't know about; a number chosen for the user skips past
+  // it, or every retry would be refused as "already in the content repository".
+  for (let skipped = 0; !input.version && skipped < 20 && (await prototypeVersionExists(planned.slug, planned.version)); skipped++) {
+    document.versions.push({ prototypeSlug: planned.slug, version: planned.version } as VersionRecord);
+    planned = plan(document, input);
+  }
+  const { slug, version } = planned;
   return { slug, version, prefix: versionPrefix(slug, version) };
 }
 
@@ -438,14 +463,13 @@ export async function reserveVersion(input: {
  * refuses rather than recording files under the wrong number.
  */
 export async function recordPushedVersion(input: VersionNotes & { version: string; commit: string }) {
-  const document = await load();
   // The number was reserved before the upload. If someone else has taken it
   // since, this refuses rather than recording files under a number that now
   // means something else.
-  const { slug, version } = plan(document, input);
+  const { slug, version } = plan(await load(), input);
 
   const { entryUrl } = await verifyPrototypeVersion(slug, version, input.commit);
-  return record(document, input, entryUrl);
+  return mutate((document) => record(document, { ...input, slug, version }, entryUrl));
 }
 
 /**
@@ -464,44 +488,44 @@ export async function updatePrototype(input: {
   notionUrl?: string;
   archived?: boolean;
 }) {
-  const document = await load();
-  const prototype = document.prototypes.find((item) => item.slug === input.slug);
-  if (!prototype) throw new StoreError(`No prototype called "${input.slug}".`);
+  return mutate((document) => {
+    const prototype = document.prototypes.find((item) => item.slug === input.slug);
+    if (!prototype) throw new StoreError(`No prototype called "${input.slug}".`);
 
-  if (input.name !== undefined) {
-    if (!input.name.trim()) throw new StoreError("A prototype needs a name.");
-    prototype.name = input.name.trim();
-  }
-
-  if (input.teamSlug !== undefined || input.projectSlug !== undefined) {
-    const teamSlug = input.teamSlug ?? prototype.teamSlug;
-    if (!document.teams.some((team) => team.slug === teamSlug)) {
-      throw new StoreError(`No team called "${teamSlug}".`);
+    if (input.name !== undefined) {
+      if (!input.name.trim()) throw new StoreError("A prototype needs a name.");
+      prototype.name = input.name.trim();
     }
-    // Moving to another team without choosing a project leaves it unfiled.
-    const projectSlug =
-      input.projectSlug !== undefined
-        ? input.projectSlug
-        : teamSlug === prototype.teamSlug
-          ? prototype.projectSlug
-          : null;
-    if (projectSlug && !document.projects.some((p) => p.slug === projectSlug && p.teamSlug === teamSlug)) {
-      throw new StoreError("That project isn't in that team.");
+
+    if (input.teamSlug !== undefined || input.projectSlug !== undefined) {
+      const teamSlug = input.teamSlug ?? prototype.teamSlug;
+      if (!document.teams.some((team) => team.slug === teamSlug)) {
+        throw new StoreError(`No team called "${teamSlug}".`);
+      }
+      // Moving to another team without choosing a project leaves it unfiled.
+      const projectSlug =
+        input.projectSlug !== undefined
+          ? input.projectSlug
+          : teamSlug === prototype.teamSlug
+            ? prototype.projectSlug
+            : null;
+      if (projectSlug && !document.projects.some((p) => p.slug === projectSlug && p.teamSlug === teamSlug)) {
+        throw new StoreError("That project isn't in that team.");
+      }
+      prototype.teamSlug = teamSlug;
+      prototype.projectSlug = projectSlug;
     }
-    prototype.teamSlug = teamSlug;
-    prototype.projectSlug = projectSlug;
-  }
 
-  if (input.figmaUrl !== undefined) {
-    prototype.figmaUrl = input.figmaUrl.trim() ? cleanLink("figma", input.figmaUrl) : undefined;
-  }
-  if (input.notionUrl !== undefined) {
-    prototype.notionUrl = input.notionUrl.trim() ? cleanLink("notion", input.notionUrl) : undefined;
-  }
-  if (input.archived !== undefined) prototype.archived = input.archived;
+    if (input.figmaUrl !== undefined) {
+      prototype.figmaUrl = input.figmaUrl.trim() ? cleanLink("figma", input.figmaUrl) : undefined;
+    }
+    if (input.notionUrl !== undefined) {
+      prototype.notionUrl = input.notionUrl.trim() ? cleanLink("notion", input.notionUrl) : undefined;
+    }
+    if (input.archived !== undefined) prototype.archived = input.archived;
 
-  prototypeSchema.parse(prototype);
-  await save(document);
+    prototypeSchema.parse(prototype);
+  });
 }
 
 /**
@@ -510,24 +534,24 @@ export async function updatePrototype(input: {
  * working.
  */
 export async function renameVersion(input: { slug: string; versionId: string; label: string }) {
-  const document = await load();
-  const target = document.versions.find(
-    (version) => version.id === input.versionId && version.prototypeSlug === input.slug,
-  );
-  if (!target) throw new StoreError("No such version.");
+  return mutate((document) => {
+    const target = document.versions.find(
+      (version) => version.id === input.versionId && version.prototypeSlug === input.slug,
+    );
+    if (!target) throw new StoreError("No such version.");
 
-  const label = input.label.trim();
-  if (!VERSION_PATTERN.test(label)) {
-    throw new StoreError(`"${label}" isn't a version number. They look like v0.8.`);
-  }
+    const label = input.label.trim();
+    if (!VERSION_PATTERN.test(label)) {
+      throw new StoreError(`"${label}" isn't a version number. They look like v0.8.`);
+    }
 
-  const taken = document.versions.some(
-    (other) => other !== target && other.prototypeSlug === input.slug && (other.label ?? other.version) === label,
-  );
-  if (taken) throw new StoreError(`${input.slug} already has a version called ${label}.`);
+    const taken = document.versions.some(
+      (other) => other !== target && other.prototypeSlug === input.slug && (other.label ?? other.version) === label,
+    );
+    if (taken) throw new StoreError(`${input.slug} already has a version called ${label}.`);
 
-  // Back to the number it was saved as is the same as no rename.
-  target.label = label === target.version ? undefined : label;
-  versionSchema.parse(target);
-  await save(document);
+    // Back to the number it was saved as is the same as no rename.
+    target.label = label === target.version ? undefined : label;
+    versionSchema.parse(target);
+  });
 }

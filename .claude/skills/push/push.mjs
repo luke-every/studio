@@ -236,7 +236,9 @@ const known = new Set();
   const head = await github(`/git/ref/heads/${branch}`);
   const headCommit = await github(`/git/commits/${head.object.sha}`);
   const listing = await github(`/git/trees/${headCommit.tree.sha}?recursive=1`);
+  // A truncated listing leaves `known` incomplete; anything missing from it is simply uploaded.
   for (const entry of listing.tree) if (entry.type === "blob") known.add(entry.sha);
+  if (listing.truncated) console.error("The repository listing was cut short, so some unchanged files may be uploaded again.");
 }
 
 const tree = [];

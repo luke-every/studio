@@ -127,6 +127,21 @@ export async function fetchPrototypeFile(
   return response.ok ? response : null;
 }
 
+async function entryExists(cfg: Config, prefix: string) {
+  const found = await fetch(`${API}/repos/${cfg.owner}/${cfg.name}/contents/${prefix}/index.html?ref=${cfg.branch}`, {
+    headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github+json" },
+    cache: "no-store",
+  });
+  return found.ok;
+}
+
+/** Whether the content repository already holds files for this version, recorded in the registry or not. */
+export async function prototypeVersionExists(slug: string, version: string) {
+  const cfg = config();
+  if (!cfg || !/^[a-z0-9-]+$/.test(slug) || !/^v\d+[.-]\d+(?:[.-]\d+)?$/.test(version)) return false;
+  return entryExists(cfg, versionPrefix(slug, version));
+}
+
 /**
  * Confirm a commit /push made really holds this version, before the
  * registry points at it. The registry never records a version whose files
@@ -167,8 +182,9 @@ async function api(path: string, cfg: Config, init: RequestInit = {}) {
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(
-      `GitHub ${init.method ?? "GET"} ${path} failed (${response.status}): ${body.slice(0, 300)}`,
+    throw Object.assign(
+      new Error(`GitHub ${init.method ?? "GET"} ${path} failed (${response.status}): ${body.slice(0, 300)}`),
+      { status: response.status },
     );
   }
   return response.json();
@@ -193,29 +209,53 @@ export async function readRepoFile(path: string): Promise<string | null> {
   return response.text();
 }
 
+/** A write lost a race: the file changed after it was read. */
+export class RepoConflict extends Error {}
+
 /**
- * Create or replace one file with one commit. Replacing needs the sha of the
- * file being replaced; if somebody else's write landed in between, GitHub
- * refuses with a conflict, which surfaces as an error rather than a silent
- * overwrite.
+ * A file and the sha it had when read, for a write that has to build on
+ * exactly that. Null when it isn't there yet. The contents API only inlines
+ * files up to 1MB; past that the text is fetched raw.
  */
-export async function writeRepoFile(path: string, content: string, message: string) {
+export async function readRepoFileWithSha(path: string): Promise<{ text: string; sha: string } | null> {
   const cfg = requireConfig();
   const url = `/repos/${cfg.owner}/${cfg.name}/contents/${path}`;
-
-  const current = await fetch(`${API}${url}?ref=${cfg.branch}`, {
+  const response = await fetch(`${API}${url}?ref=${cfg.branch}`, {
     headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github+json" },
     cache: "no-store",
   });
-  if (!current.ok && current.status !== 404) {
-    throw new Error(`Could not read ${path} (${current.status}).`);
-  }
-  const sha = current.ok ? ((await current.json()).sha as string) : undefined;
-
-  await api(url, cfg, {
-    method: "PUT",
-    body: JSON.stringify({ message, content: toBase64(content), branch: cfg.branch, sha }),
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Could not read ${path} (${response.status}).`);
+  const file = (await response.json()) as { sha: string; content: string; encoding: string };
+  if (file.encoding === "base64") return { text: Buffer.from(file.content, "base64").toString("utf8"), sha: file.sha };
+  const raw = await fetch(`${API}${url}?ref=${file.sha}`, {
+    headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github.raw+json" },
+    cache: "no-store",
   });
+  if (!raw.ok) throw new Error(`Could not read ${path} (${raw.status}).`);
+  return { text: await raw.text(), sha: file.sha };
+}
+
+/**
+ * Create or replace one file with one commit. `sha` is the sha of the copy
+ * this change was made from (none for a new file): if somebody else's write
+ * landed since, GitHub refuses and this throws RepoConflict rather than
+ * overwriting it.
+ */
+export async function writeRepoFile(path: string, content: string, message: string, sha?: string) {
+  const cfg = requireConfig();
+  try {
+    await api(`/repos/${cfg.owner}/${cfg.name}/contents/${path}`, cfg, {
+      method: "PUT",
+      body: JSON.stringify({ message, content: toBase64(content), branch: cfg.branch, sha }),
+    });
+  } catch (error) {
+    const status = (error as { status?: number }).status;
+    if (status === 409 || status === 422) {
+      throw new RepoConflict("Somebody saved at the same moment. Try again.", { cause: error });
+    }
+    throw error;
+  }
 }
 
 function toBase64(content: ArrayBuffer | string): string {
@@ -247,11 +287,7 @@ export async function commitPrototypeVersion(
   }
   const prefix = versionPrefix(slug, version);
 
-  const existing = await fetch(
-    `${API}/repos/${cfg.owner}/${cfg.name}/contents/${prefix}/index.html?ref=${cfg.branch}`,
-    { headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github+json" } },
-  );
-  if (existing.ok) {
+  if (await entryExists(cfg, prefix)) {
     throw new Error(`${version} of ${slug} already exists. Versions are never replaced.`);
   }
 

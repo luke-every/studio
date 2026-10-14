@@ -1,9 +1,10 @@
 import "server-only";
 
+import { revalidateTag, unstable_cache } from "next/cache";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { isContentRepoConfigured, readRepoFile, writeRepoFile } from "./github";
+import { isContentRepoConfigured, readRepoFile, readRepoFileWithSha, RepoConflict, writeRepoFile } from "./github";
 import type { PrototypeRecord, ProjectRecord, TeamRecord, VersionRecord } from "./schema";
 
 /**
@@ -55,15 +56,17 @@ export async function readRegistryDocument(): Promise<RegistryDocument | null> {
   return text === null ? null : (JSON.parse(text) as RegistryDocument);
 }
 
-export async function writeRegistryDocument(document: RegistryDocument) {
-  const text = `${JSON.stringify(document, null, 2)}\n`;
-  if (localFileMode()) {
-    await mkdir(dirname(LOCAL_PATH), { recursive: true });
-    await writeFile(LOCAL_PATH, text);
-    return;
-  }
-  await writeRepoFile(REGISTRY_PATH, text, "Update the registry");
-}
+/**
+ * Change the registry. See `updateStoreFile`; `current` is null until the
+ * first write.
+ */
+export const updateRegistryDocument = (
+  fn: (current: RegistryDocument | null) => RegistryDocument | Promise<RegistryDocument>,
+) =>
+  updateStoreFile(REGISTRY_PATH, async (text) => ({
+    content: JSON.stringify(await fn(text === null ? null : (JSON.parse(text) as RegistryDocument))),
+    message: "Update the registry",
+  }));
 
 /**
  * Any other file in the store, by path: comments live beside the registry,
@@ -74,12 +77,48 @@ export async function readStoreFile(path: string): Promise<string | null> {
   return readRepoFile(path);
 }
 
-export async function writeStoreFile(path: string, text: string, message: string) {
+const tagOf = (path: string) => `store:${path}`;
+
+/**
+ * `readStoreFile` for the polled files (comments, the bell's feed), shared
+ * across every tab for a few seconds so N people watching cost one GitHub
+ * call per window, not N per poll. A write to the file expires it at once
+ * (`updateStoreFile`). Never use it to read for a write: that needs the fresh sha.
+ */
+export const readStoreFileShared = (path: string) =>
+  localFileMode()
+    ? readStoreFile(path)
+    : unstable_cache(() => readRepoFile(path), [tagOf(path)], { tags: [tagOf(path)], revalidate: 10 })();
+
+/**
+ * Read-modify-write a store file without losing anybody else's change.
+ * `fn` gets the file's text (null if it isn't there) and returns what to
+ * write. The write names the version it was made from; if another write
+ * landed first, the file is read again and `fn` runs again on the fresh
+ * copy, a few times before giving up. So `fn` must be re-runnable and free of
+ * side effects: anything that talks to the outside world belongs after this.
+ */
+export async function updateStoreFile(
+  path: string,
+  fn: (text: string | null) => { content: string; message: string } | Promise<{ content: string; message: string }>,
+) {
   if (localFileMode()) {
     const file = join(process.cwd(), ".local", path);
+    const { content } = await fn(await readFile(file, "utf8").catch(() => null));
     await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, text);
+    await writeFile(file, content);
+    revalidateTag(tagOf(path), { expire: 0 });
     return;
   }
-  await writeRepoFile(path, text, message);
+  for (let attempt = 1; ; attempt++) {
+    const current = await readRepoFileWithSha(path);
+    const { content, message } = await fn(current?.text ?? null);
+    try {
+      await writeRepoFile(path, content, message, current?.sha);
+      revalidateTag(tagOf(path), { expire: 0 });
+      return;
+    } catch (error) {
+      if (!(error instanceof RepoConflict) || attempt >= 4) throw error;
+    }
+  }
 }

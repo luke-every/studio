@@ -10,7 +10,7 @@ import type { Comment } from "@/lib/comments";
 
 import { recordActivity } from "./activity";
 import { getPrototype } from "./index";
-import { readStoreFile, writeStoreFile } from "./store";
+import { readStoreFile, updateStoreFile } from "./store";
 
 /**
  * Push notifications: a phone's comment reaching the people who asked to hear.
@@ -38,12 +38,13 @@ function keys() {
 /** What a browser needs to subscribe to this studio. */
 export const pushPublicKey = () => keys().publicKey;
 
-async function load(): Promise<Device[]> {
-  const text = await readStoreFile(PATH);
-  return text ? (JSON.parse(text) as Device[]) : [];
-}
+const parse = (text: string | null) => (text ? (JSON.parse(text) as Device[]) : []);
 
-const save = (devices: Device[], message: string) => writeStoreFile(PATH, `${JSON.stringify(devices, null, 2)}\n`, message);
+const load = async () => parse(await readStoreFile(PATH));
+
+/** Change the device list from whatever it holds now, so two devices turning notifications on don't undo each other. */
+const update = (message: string, change: (devices: Device[]) => Device[]) =>
+  updateStoreFile(PATH, (text) => ({ content: JSON.stringify(change(parse(text))), message }));
 
 function validSubscription(value: unknown): value is PushSubscription {
   const sub = value as PushSubscription;
@@ -57,14 +58,15 @@ function validSubscription(value: unknown): value is PushSubscription {
 
 export async function addDevice(subscription: unknown, name: string) {
   if (!validSubscription(subscription)) throw new Error("That device can't be notified.");
-  const devices = (await load()).filter((device) => device.subscription.endpoint !== subscription.endpoint);
-  await save([...devices, { subscription, name: name.trim().slice(0, 40) }], "Add a device for notifications");
+  await update("Add a device for notifications", (devices) => [
+    ...devices.filter((device) => device.subscription.endpoint !== subscription.endpoint),
+    { subscription, name: name.trim().slice(0, 40) },
+  ]);
 }
 
 export async function removeDevice(endpoint: string) {
-  const devices = await load();
-  if (devices.some((device) => device.subscription.endpoint === endpoint)) {
-    await save(devices.filter((device) => device.subscription.endpoint !== endpoint), "Remove a device from notifications");
+  if ((await load()).some((device) => device.subscription.endpoint === endpoint)) {
+    await update("Remove a device from notifications", (devices) => devices.filter((device) => device.subscription.endpoint !== endpoint));
   }
 }
 
@@ -128,7 +130,7 @@ async function announce(input: { activity: Activity; title: string; icon: string
         }),
       ),
     );
-    if (gone.length) await save(devices.filter((device) => !gone.includes(device.subscription.endpoint)), "Drop devices that stopped listening");
+    if (gone.length) await update("Drop devices that stopped listening", (current) => current.filter((device) => !gone.includes(device.subscription.endpoint)));
   } catch (error) {
     console.error("announcing failed", error);
   }
