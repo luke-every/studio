@@ -9,8 +9,7 @@ import { Button, controlOn, IconButton } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
 import type { Comment } from "@/lib/comments";
 
-import { LikeButton } from "./comment-like";
-import { CommentActions, WhileWorking } from "./comment-parts";
+import { CommentMenu, ResolveToggle, WhileWorking } from "./comment-parts";
 import { PanelEmpty } from "./panel-empty";
 
 type Show = "open" | "resolved" | "all";
@@ -37,7 +36,6 @@ export function CommentsPanel({
   error,
   onSelect,
   onResolve,
-  onLike,
   onDelete,
   onCopy,
   setupLabel,
@@ -48,7 +46,6 @@ export function CommentsPanel({
   error: string | null;
   onSelect: (comment: Comment) => void;
   onResolve: (comment: Comment, resolved: boolean) => void;
-  onLike: (comment: Comment, liked: boolean) => void;
   onDelete: (comment: Comment) => void;
   /** Copies these, as a prompt for Claude Code. */
   onCopy: (comments: Comment[]) => void;
@@ -79,7 +76,7 @@ export function CommentsPanel({
     });
 
   return (
-    <div className="flex min-h-full flex-col gap-4 p-4">
+    <div className="flex min-h-full flex-col gap-4 p-4 sm:p-6 sm:pt-8">
       <div className="flex items-center justify-between gap-3">
         <p className="text-base font-medium text-foreground">Comments</p>
         <div className="flex items-center gap-2">
@@ -174,40 +171,33 @@ export function CommentsPanel({
                         choose();
                       }
                     }}
-                    className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 px-2 py-3 text-left"
+                    className="group/row flex min-w-0 flex-1 cursor-pointer flex-col gap-1 px-2 py-3 text-left"
                   >
-                    <CommentActions
-                      comment={comment}
-                      onResolve={onResolve}
-                      onDelete={onDelete}
-                      onCopy={(one) => onCopy([one])}
-                      bleed="-mx-2 px-2"
-                    />
-                    <p className="flex items-center justify-between gap-3 text-xs text-foreground-subtle">
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <UserAvatar name={comment.author.name} className="size-5" />
-                        <span className="truncate text-foreground-muted">{comment.author.name}</span>
-                      </span>
-                      <span className="shrink-0">
+                    <div className="flex items-center gap-2 pb-1 text-ui text-foreground-subtle">
+                      <UserAvatar name={comment.author.name} className="size-5" />
+                      <span className="min-w-0 truncate text-foreground-muted">{comment.author.name}</span>
+                      <span className="shrink-0 text-sm">
                         <Stamp iso={comment.at} relative />
                       </span>
-                    </p>
+                      {/* Far right, and only while the row is hovered (or on a touch screen, which cannot hover). */}
+                      <span className="ml-auto flex shrink-0 items-center gap-1 opacity-0 transition-opacity duration-[var(--dur-fast)] focus-within:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
+                        <ResolveToggle resolved={!!comment.resolvedAt} onToggle={() => onResolve(comment, !comment.resolvedAt)} />
+                        <CommentMenu comment={comment} onDelete={onDelete} onCopy={(one) => onCopy([one])} />
+                      </span>
+                    </div>
                     {setupLabel?.(comment.variant) ? (
-                      <p className="truncate text-xs text-foreground-subtle">{setupLabel(comment.variant)}</p>
+                      <p className="truncate text-ui text-foreground-subtle">{setupLabel(comment.variant)}</p>
                     ) : null}
                     <p
                       className={`whitespace-pre-wrap py-2 text-base leading-[var(--leading-relaxed)] ${comment.resolvedAt ? "text-foreground-subtle" : "text-foreground"}`}
                     >
                       {comment.text}
                     </p>
-                    <div className="flex items-center justify-between gap-3">
-                      <LikeButton comment={comment} onLike={onLike} />
-                      {replies[comment.id]?.length ? (
-                        <p className="text-ui font-medium text-foreground-muted">
-                          {replies[comment.id].length} {replies[comment.id].length === 1 ? "reply" : "replies"}
-                        </p>
-                      ) : null}
-                    </div>
+                    {replies[comment.id]?.length ? (
+                      <p className="text-ui font-medium text-foreground-muted">
+                        {replies[comment.id].length} {replies[comment.id].length === 1 ? "reply" : "replies"}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 </WhileWorking>
@@ -219,11 +209,11 @@ export function CommentsPanel({
         <PanelEmpty icon={<CommentIcon />}>
           {comments.length
             ? `Nothing ${show === "open" ? "open" : "resolved"}.`
-            : "Tip: press C to quickly leave a comment."}
+            : "Tip: press C to leave a comment."}
         </PanelEmpty>
       )}
 
-      <div className="sticky bottom-0 z-[var(--z-raised)] -mx-4 -mb-4 mt-auto bg-tile p-4">
+      <div className="sticky bottom-0 z-[var(--z-raised)] -mx-4 -mb-4 mt-auto bg-tile p-4 sm:-mx-6 sm:-mb-6 sm:p-6">
         <Button onClick={() => onCopy(toCopy)} disabled={!toCopy.length} className="w-full">
           {toCopy.length
             ? `Copy ${toCopy.length} ${toCopy.length === 1 ? "comment" : "comments"} to Claude Code`

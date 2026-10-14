@@ -155,7 +155,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const flow = usePrototypeFlow(address?.split("?")[0]);
   const [flowOpen, setFlowOpen] = useState(false);
   const showingFlow = flowOpen && !!address;
-  // Commenting quickly (C) leaves it be; the comment button brings the list, which takes its room.
+  // Commenting with the list (the comment button, or C) brings the list, which takes the column's room.
   const side = (mode === "view" || (mode === "comment" && !listing)) && !showingFlow;
   // The column can be dragged out of the way (and tapped back at the left edge); `drag` is how far it is being pulled while it is.
   const [hidden, setHidden] = useState(false);

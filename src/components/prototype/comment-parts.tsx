@@ -12,15 +12,10 @@ import {
 import { createPortal } from "react-dom";
 
 import { MotionPopover } from "@/components/motion";
-import {
-  CheckIcon,
-  EllipsisIcon,
-  ReplyIcon,
-  SendIcon,
-} from "@/components/shell/nav-icons";
+import { CheckIcon, CloseIcon, EllipsisIcon, ReplyIcon, SendIcon } from "@/components/shell/nav-icons";
 import { UserAvatar } from "@/components/shell/user-avatar";
 import { useUser } from "@/lib/use-user";
-import { IconButton } from "@/components/ui/button";
+import { controlOn, IconButton } from "@/components/ui/button";
 import { ConfirmPopover } from "@/components/ui/confirm-popover";
 import { Stamp } from "@/components/ui/stamp";
 import type { Anchor, Comment } from "@/lib/comments";
@@ -148,6 +143,8 @@ export function anchorAt(doc: Document, x: number, y: number): Anchor {
 /** The pin is 2rem square; an opened pin or card is 16rem wide. Both are drawn from the pin's point. */
 const PIN = 32;
 const WIDTH = 256;
+/** A card that has room to breathe: the open comment. */
+const ROOMY_WIDTH = 320;
 const EDGE = 8;
 
 type Tip = { left: number; top: number };
@@ -158,9 +155,9 @@ type Tip = { left: number; top: number };
  * rule for both, so a card opens exactly where the pin did. Each side that
  * can't be used is left out, so the box stays fixed to the corner it grows from.
  */
-function cornerOf(tip: Tip, height: number) {
+function cornerOf(tip: Tip, height: number, width = WIDTH) {
   const root = document.documentElement;
-  const left = tip.left + WIDTH > root.clientWidth - EDGE;
+  const left = tip.left + width > root.clientWidth - EDGE;
   const down = tip.top - height < EDGE;
   return {
     left,
@@ -351,9 +348,12 @@ export function Card({
   children,
   onOutside,
   busy,
+  roomy = false,
 }: {
   at: Tip;
   children: ReactNode;
+  /** Wider and more open, with softer corners: how an open comment is laid out. */
+  roomy?: boolean;
   /** Being worked on (a delete or resolve in flight): it breathes and can't be pressed. */
   busy?: boolean;
   /** Pressing anywhere else, in the studio or in the prototype, calls this. */ onOutside?: () => void;
@@ -391,13 +391,13 @@ export function Card({
       window.removeEventListener("blur", left);
     };
   }, []);
-  const corner = cornerOf(at, height);
+  const corner = cornerOf(at, height, roomy ? ROOMY_WIDTH : WIDTH);
 
   return createPortal(
     <div
       ref={box}
       style={corner.style}
-      className={`fixed flex w-64 flex-col gap-2 rounded-2xl ${corner.square} border border-border bg-surface p-3 shadow-floating ${busy ? "pulse-soft pointer-events-none" : ""}`}
+      className={`fixed flex flex-col ${roomy ? "w-80 gap-4 rounded-3xl p-4" : "w-64 gap-2 rounded-2xl p-3"} ${corner.square} border border-border bg-surface shadow-floating ${busy ? "pulse-soft pointer-events-none" : ""}`}
       aria-busy={busy || undefined}
     >
       {children}
@@ -415,9 +415,12 @@ export function Card({
 export function ResolveToggle({
   resolved,
   onToggle,
+  ghost = false,
 }: {
   resolved: boolean;
   onToggle: () => void;
+  /** No frame until it is hovered, for a row of them in a card's header. */
+  ghost?: boolean;
 }) {
   const [asking, setAsking] = useState(false);
 
@@ -431,22 +434,18 @@ export function ResolveToggle({
         confirmLabel="Resolve"
         onConfirm={onToggle}
         trigger={
-          <button
-            type="button"
-            aria-label={resolved ? "Reopen" : "Resolve"}
-            title={resolved ? "Reopen" : "Resolve"}
+          <IconButton
+            size="sm"
+            variant={ghost ? "ghost" : "secondary"}
+            label={resolved ? "Reopen" : "Resolve"}
             aria-pressed={resolved}
             aria-haspopup={resolved ? undefined : "dialog"}
             aria-expanded={resolved ? undefined : asking}
             onClick={() => (resolved ? onToggle() : setAsking((now) => !now))}
-            className={`grid size-5 shrink-0 place-items-center rounded-[var(--r-full)] transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
-              resolved
-                ? "bg-accent text-accent-foreground"
-                : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
-            }`}
+            className={resolved ? controlOn : ""}
           >
-            <CheckIcon className="size-3.5" />
-          </button>
+            <CheckIcon />
+          </IconButton>
         }
       />
     </div>
@@ -470,6 +469,7 @@ export function Replies({
   /** Escape in the box, besides closing it. */
   onEscape?: () => void;
 }) {
+  const { name: me } = useUser();
   const [writing, setWriting] = useState(startWriting);
   const [text, setText] = useState("");
   const [posting, setPosting] = useState(false);
@@ -489,29 +489,26 @@ export function Replies({
     // Clicking in here is for replying, not for choosing the comment it sits under.
     <div
       onClick={(event) => event.stopPropagation()}
-      className="flex flex-col gap-2"
+      className="flex flex-col gap-4"
     >
       {replies.map((reply) => (
-        <div
-          key={reply.id}
-          className="flex flex-col gap-0.5 border-t border-divider pt-2"
-        >
-          <p className="flex items-center justify-between gap-3 text-xs text-foreground-subtle">
-            <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
-              <UserAvatar name={reply.author.name} className="size-5" />
-              <span className="truncate">{reply.author.name}</span>
-            </span>
-            <span className="shrink-0">
-              <Stamp iso={reply.at} relative />
-            </span>
-          </p>
-          <p className="whitespace-pre-wrap text-sm leading-[var(--leading-relaxed)] text-foreground-muted">
-            {reply.text}
-          </p>
+        <div key={reply.id} className="flex gap-3">
+          <UserAvatar name={reply.author.name} className="size-10" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="flex items-baseline gap-2 text-ui">
+              <span className="min-w-0 truncate font-medium text-foreground">{reply.author.name}</span>
+              <span className="shrink-0 text-foreground-subtle">
+                <Stamp iso={reply.at} relative />
+              </span>
+            </p>
+            <p className="whitespace-pre-wrap text-base leading-[var(--leading-relaxed)] text-foreground">{reply.text}</p>
+          </div>
         </div>
       ))}
       {writing ? (
-        <div className="relative">
+        <div className="flex items-center gap-3">
+          <UserAvatar name={me} className="size-10" />
+          <div className="relative min-w-0 flex-1">
           <textarea
             autoFocus
             value={text}
@@ -528,11 +525,11 @@ export function Replies({
                 post();
               }
             }}
-            rows={2}
+            rows={1}
             maxLength={2000}
             placeholder="Reply"
             aria-label="Reply"
-            className="w-full resize-none rounded-[var(--r-md)] bg-surface-inset p-2 pr-10 text-sm text-foreground outline-none placeholder:text-foreground-subtle focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+            className="block min-h-12 w-full resize-none rounded-[var(--r-xl)] bg-surface-inset py-3.5 pl-4 pr-12 text-base text-foreground outline-none placeholder:text-foreground-subtle focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           />
           <button
             type="button"
@@ -540,10 +537,11 @@ export function Replies({
             title="Send reply"
             disabled={!text.trim() || posting}
             onClick={() => void post()}
-            className="absolute bottom-1.5 right-1.5 grid size-7 place-items-center rounded-[var(--r-full)] bg-accent text-accent-foreground transition-opacity duration-[var(--dur-fast)] hover:bg-accent-hover disabled:opacity-30 disabled:hover:bg-accent"
+            className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-[var(--r-full)] bg-accent text-accent-foreground transition-opacity duration-[var(--dur-fast)] hover:bg-accent-hover disabled:opacity-30 disabled:hover:bg-accent"
           >
             <SendIcon />
           </button>
+          </div>
         </div>
       ) : null}
       <div className="flex gap-2 empty:hidden">
@@ -558,48 +556,17 @@ export function Replies({
   );
 }
 
-/** The top row of a comment: what it is, and on the right resolving it and taking it away. */
-export function CommentActions({
-  comment,
-  onResolve,
-  onDelete,
-  onCopy,
-  bleed,
-}: {
-  comment: Comment;
-  onResolve: (comment: Comment, resolved: boolean) => void;
-  onDelete: (comment: Comment) => void;
-  onCopy: (comment: Comment) => void;
-  /** Pulls the divider out to the edges of whatever holds it: the opposite of that container's side padding. */
-  bleed: string;
-}) {
-  return (
-    <div
-      className={`flex items-center justify-between gap-3 border-b border-divider pb-2 ${bleed}`}
-    >
-      <span className="text-xs font-medium text-foreground-subtle">
-        Comment
-      </span>
-      <div className="flex items-center gap-1">
-        <ResolveToggle
-          resolved={!!comment.resolvedAt}
-          onToggle={() => onResolve(comment, !comment.resolvedAt)}
-        />
-        <CommentMenu comment={comment} onDelete={onDelete} onCopy={onCopy} />
-      </div>
-    </div>
-  );
-}
-
 /** The ellipsis beside a comment: copy it for Claude Code, or delete it (after being asked, right under the ellipsis). */
-function CommentMenu({
+export function CommentMenu({
   comment,
   onDelete,
   onCopy,
+  ghost = false,
 }: {
   comment: Comment;
   onDelete: (comment: Comment) => void;
   onCopy: (comment: Comment) => void;
+  ghost?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -622,17 +589,9 @@ function CommentMenu({
             onClose={() => setOpen(false)}
             className="w-52"
             trigger={
-              <button
-                type="button"
-                aria-label="More"
-                title="More"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                onClick={() => setOpen((value) => !value)}
-                className="grid size-5 shrink-0 place-items-center rounded-[var(--r-full)] text-foreground-muted transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover hover:text-foreground"
-              >
-                <EllipsisIcon className="size-3.5" />
-              </button>
+              <IconButton size="sm" variant={ghost ? "ghost" : "secondary"} label="More" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+                <EllipsisIcon />
+              </IconButton>
             }
           >
             <div role="menu" className="flex flex-col">
@@ -701,33 +660,34 @@ export function CommentCard({
   const working = useWorking(comment.id);
 
   return (
-    <Card at={at} onOutside={onClose} busy={working}>
-      <CommentActions
-        comment={comment}
-        onResolve={onResolve}
-        onDelete={onDelete}
-        onCopy={onCopy}
-        bleed="-mx-3 px-3"
-      />
-      <div className="flex items-center justify-between gap-3">
-        <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
-          <UserAvatar name={comment.author.name} className="size-5" />
-          <span className="truncate">{comment.author.name}</span>
-        </p>
-        <span className="shrink-0 text-xs text-foreground-subtle">
-          <Stamp iso={comment.at} relative />
-        </span>
+    <Card at={at} onOutside={onClose} busy={working} roomy>
+      {/* The way Figma lays one out: a header with what can be done to the thread, then who said what, then a box to answer in. */}
+      <div className="-mx-4 -mt-1 flex items-center justify-between gap-3 border-b border-divider px-4 pb-3">
+        <span className="text-ui font-medium text-foreground">Comment</span>
+        <div className="flex items-center">
+          <CommentMenu ghost comment={comment} onDelete={onDelete} onCopy={onCopy} />
+          <ResolveToggle ghost resolved={!!comment.resolvedAt} onToggle={() => onResolve(comment, !comment.resolvedAt)} />
+          <IconButton size="sm" variant="ghost" label="Close" tooltipAlign="end" onClick={onClose}>
+            <CloseIcon />
+          </IconButton>
+        </div>
       </div>
-      <p className="whitespace-pre-wrap py-2 text-base leading-[var(--leading-relaxed)] text-foreground">
-        {comment.text}
-      </p>
-      <LikeButton comment={comment} onLike={onLike} />
-      <Replies
-        replies={replies}
-        onReply={(text) => onReply(comment, text)}
-        startWriting
-        onEscape={onClose}
-      />
+      <div className="flex gap-3">
+        <UserAvatar name={comment.author.name} className="size-10" />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="flex items-baseline gap-2 text-ui">
+            <span className="min-w-0 truncate font-medium text-foreground">{comment.author.name}</span>
+            <span className="shrink-0 text-foreground-subtle">
+              <Stamp iso={comment.at} relative />
+            </span>
+          </p>
+          <p className="whitespace-pre-wrap text-base leading-[var(--leading-relaxed)] text-foreground">{comment.text}</p>
+          <div className="pt-1">
+            <LikeButton comment={comment} onLike={onLike} />
+          </div>
+        </div>
+      </div>
+      <Replies replies={replies} onReply={(text) => onReply(comment, text)} startWriting onEscape={onClose} />
     </Card>
   );
 }

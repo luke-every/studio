@@ -131,7 +131,7 @@ export function PrototypeFrame({
   /** Looking, editing or in dev mode. The last two replace the bar and bring a panel of their own. */
   mode: "view" | "dev" | "edit" | "comment";
   onMode: (mode: "view" | "dev" | "edit" | "comment") => void;
-  /** Commenting with the list of comments beside the prototype, which the page makes room for. The comment button asks for it; C starts commenting without it, to leave one quickly. */
+  /** Commenting with the list of comments beside the prototype, which the page makes room for. The comment button and C both ask for it. */
   listing: boolean;
   onListing: (listing: boolean) => void;
   /** Full screen: the studio steps back so the prototype can fill the window. */
@@ -290,7 +290,12 @@ export function PrototypeFrame({
     if (commentsOf && url && !dev) {
       if (event.key.toLowerCase() === "c" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
-        changeMode(commenting ? "view" : "comment");
+        if (commenting) changeMode("view");
+        else {
+          // The same as the comment button: commenting, with the list beside the prototype.
+          changeMode("comment");
+          setListing(true);
+        }
         return;
       }
       if (event.key === "Escape" && commenting) {
@@ -674,14 +679,14 @@ export function PrototypeFrame({
     >
       {/* It travels in from the right and fades in as the space opens for it, at the same pace as the left column goes. */}
       <div
-        className={`absolute inset-y-0 right-0 w-[var(--dev-panel-width)] overflow-y-auto rounded-[var(--r-tile)] bg-tile transition-[translate,opacity] duration-[var(--dur-standard)] ease-[var(--curve-standard)] [scrollbar-width:thin] ${
+        className={`absolute inset-y-0 right-0 w-[var(--dev-panel-width)] overflow-y-auto rounded-[var(--r-tile)] ${fullscreen ? "lg:rounded-none" : ""} bg-tile transition-[translate,opacity] duration-[var(--dur-standard)] ease-[var(--curve-standard)] [scrollbar-width:thin] ${
           panelOpen ? "" : "translate-x-full opacity-0"
         }`}
       >
         {panelKind === "edit" && edit ? (
           <EditPanel element={target?.isConnected ? target : null} session={session} />
         ) : panelKind === "comments" ? (
-          <CommentsPanel comments={everything} setupLabel={commentsOf?.setupLabel} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={goTo} onResolve={resolveComment} onLike={likeComment} onDelete={deleteComment} onCopy={copyForClaude} />
+          <CommentsPanel comments={everything} setupLabel={commentsOf?.setupLabel} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={goTo} onResolve={resolveComment} onDelete={deleteComment} onCopy={copyForClaude} />
         ) : (
           <div className="p-4">
             <DevPanel picked={here.picked} motion={here.motion} />
@@ -705,7 +710,7 @@ export function PrototypeFrame({
             setListOpen(false);
           }}
           onResolve={resolveComment}
-          onLike={likeComment}
+         
           onDelete={deleteComment}
           onCopy={copyForClaude}
         />

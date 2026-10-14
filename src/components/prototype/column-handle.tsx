@@ -4,11 +4,14 @@ import { useRef, useState } from "react";
 
 /** How far the column has to be dragged left before letting go hides it. */
 const HIDE_DRAG = 80;
+/** Less than this between pressing and letting go is a click, not a drag. */
+const CLICK_SLOP = 4;
 
 /**
  * The grip between the content column and the prototype. Drag it left and the
- * column follows; let go past a short distance and it slides off for good.
- * Arrow left does the same from the keyboard. Wide screens only, where the
+ * column follows; let go past a short distance and it slides off for good. A
+ * click does the same without the drag. Arrow left (or Enter) does it from the
+ * keyboard. Wide screens only, where the
  * column sits beside the prototype.
  */
 export function ColumnHandle({ offset, onDrag, onHide }: { offset: number; onDrag: (offset: number) => void; onHide: () => void }) {
@@ -18,7 +21,8 @@ export function ColumnHandle({ offset, onDrag, onHide }: { offset: number; onDra
   const move = (x: number) => onDrag(Math.min(0, x - start.current));
   const release = (x: number) => {
     setDragging(false);
-    if (x - start.current <= -HIDE_DRAG) onHide();
+    const moved = x - start.current;
+    if (Math.abs(moved) < CLICK_SLOP || moved <= -HIDE_DRAG) onHide();
     onDrag(0);
   };
 
@@ -26,7 +30,7 @@ export function ColumnHandle({ offset, onDrag, onHide }: { offset: number; onDra
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Drag left to hide the details. Left arrow hides them too."
+      aria-label="Hide the details. Click, or drag left."
       tabIndex={0}
       data-dragging={dragging || undefined}
       onPointerDown={(event) => {
@@ -41,7 +45,7 @@ export function ColumnHandle({ offset, onDrag, onHide }: { offset: number; onDra
         onDrag(0);
       }}
       onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") {
+        if (event.key === "ArrowLeft" || event.key === "Enter") {
           event.preventDefault();
           onHide();
         }

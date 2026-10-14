@@ -28,10 +28,17 @@ type Look = keyof typeof look;
  * icon, a label, or both inside, so a row of them reads as one set.
  */
 const controlBase =
-  "inline-flex h-9 min-w-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--r-control)] px-3 text-ui font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] disabled:opacity-40";
+  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ui font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] disabled:opacity-40";
+
+/** The two sizes of control: the one on a prototype's page, and a mini one for inside a list or a card. */
+const controlSize = {
+  md: "h-9 min-w-10 rounded-[var(--r-control)] px-3",
+  // Corners scale down with it, so a mini one stays a rounded rectangle and doesn't turn into a circle.
+  sm: "h-7 min-w-8 rounded-[var(--r-xl)] px-2",
+} as const;
 
 /** For a control that is not a button, such as a version with nothing to choose. */
-export const barControl = `${controlBase} border border-border bg-surface text-foreground`;
+export const barControl = `${controlBase} ${controlSize.md} border border-border bg-surface text-foreground`;
 
 /** What a control looks like while it is switched on. */
 export const controlOn = "!border-transparent !bg-accent !text-accent-foreground hover:!bg-accent-hover";
@@ -89,6 +96,7 @@ export function Button({ variant = "secondary", href, external, icon, loading, c
 export function IconButton({
   label,
   variant = "secondary",
+  size = "md",
   href,
   external,
   tooltipAlign = "center",
@@ -103,6 +111,8 @@ export function IconButton({
   /** Working on it: the content breathes. */
   loading?: boolean;
   variant?: Extract<Look, "primary" | "secondary" | "ghost">;
+  /** `sm` is the mini one, for a control inside a list row or a card. */
+  size?: keyof typeof controlSize;
   href?: string;
   external?: boolean;
   tooltipAlign?: "start" | "center" | "end";
@@ -113,7 +123,7 @@ export function IconButton({
   children: ReactNode;
   className?: string;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children" | "aria-label">) {
-  const classes = `${controlBase} ${look[variant]} ${className ?? ""}`;
+  const classes = `${controlBase} ${controlSize[size]} ${look[variant]} ${className ?? ""}`;
   const tip = label && tooltip ? (
     <span
       role="tooltip"

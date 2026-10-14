@@ -418,3 +418,11 @@ export function ShareIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="m4 4 8 8M12 4l-8 8" />
+    </Frame>
+  );
+}
