@@ -165,7 +165,9 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // Full screen: the nav and the side column go, the prototype fills the window, and the column slides back in while the pointer is at the left edge.
   // The canvas is always looked at this way, whatever the choice was: closing it puts things back as they were.
   const [focusChoice, setFocus] = useState(false);
-  const focus = focusChoice || showingFlow;
+  // Command-period, as in Figma: everything but the prototype goes, and comes back the same way.
+  const [bare, setBare] = useState(false);
+  const focus = focusChoice || showingFlow || bare;
   const [peek, setPeek] = useState(false);
   const away = focus && !peek;
   // The nav is the shell's, so it is told through the document: it slides up out of the way while the page below grows into its place.
@@ -211,7 +213,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
         focus ? "lg:h-dvh lg:p-0" : "lg:h-[calc(100dvh-var(--nav-height))]"
       }`}
     >
-      {focus ? (
+      {focus && !bare ? (
         <div aria-hidden onPointerEnter={() => setPeek(true)} className="fixed inset-y-0 left-0 z-[var(--z-focus-mode)] w-3 max-lg:hidden" />
       ) : null}
       {side && !focus && !hidden ? <ColumnHandle offset={drag} onDrag={setDrag} onHide={() => setHidden(true)} /> : null}
@@ -304,6 +306,11 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           listing={listing}
           onListing={setListing}
           fullscreen={focus}
+          bare={bare}
+          onBare={(next) => {
+            setBare(next);
+            setPeek(false);
+          }}
           onFullscreen={(next) => {
             // On the canvas it is full screen already, and a choice made there would only show once it is closed.
             if (showingFlow) return;

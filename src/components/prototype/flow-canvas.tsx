@@ -108,9 +108,12 @@ export function FlowCanvas({
   // Until somebody pans or zooms, the canvas keeps what it shows fitted and centred as the room changes.
   const touched = useRef(false);
   const [byHand, setByHand] = useState(false);
+  // A zoom that is a single step (a double-click, plus or minus) glides to where it is going; anything done by hand follows the hand.
+  const [easing, setEasing] = useState(false);
   const touch = (value: boolean) => {
     touched.current = value;
     setByHand(value);
+    setEasing(false);
   };
 
   // Comments: each screen is its own live page, so a comment is looked for in every one of them.
@@ -223,8 +226,9 @@ export function FlowCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asked]);
 
-  const zoomAt = (px: number, py: number, factor: number) => {
+  const zoomAt = (px: number, py: number, factor: number, animate = false) => {
     touch(true);
+    setEasing(animate);
     setView((now) => {
       const scale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, now.scale * factor));
       const k = scale / now.scale;
@@ -355,7 +359,7 @@ export function FlowCanvas({
         // A screen opens on a double-click, and while placing a comment a click is a comment.
         if (placing || (event.target as Element).closest("button") || !box.current) return;
         const rect = box.current.getBoundingClientRect();
-        zoomAt(event.clientX - rect.left, event.clientY - rect.top, DOUBLE_CLICK_ZOOM);
+        zoomAt(event.clientX - rect.left, event.clientY - rect.top, DOUBLE_CLICK_ZOOM, true);
       }}
       onPointerUp={() => {
         // Letting go of a drag isn't a click on anything.
@@ -366,11 +370,15 @@ export function FlowCanvas({
         backgroundImage: "radial-gradient(var(--border) 1px, transparent 1px)",
         backgroundSize: `${24 * view.scale}px ${24 * view.scale}px`,
         backgroundPosition: `${view.x}px ${view.y}px`,
-        transition: gliding ? `background-position var(--dur-deliberate) var(--curve-standard), background-size var(--dur-deliberate) var(--curve-standard)` : undefined,
+        transition: gliding || easing ? `background-position var(--dur-deliberate) var(--curve-standard), background-size var(--dur-deliberate) var(--curve-standard)` : undefined,
       }}
       className="absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] active:cursor-grabbing"
     >
-      <div className="absolute left-0 top-0 origin-top-left" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, visibility: size ? undefined : "hidden", transition: gliding ? "transform var(--dur-deliberate) var(--curve-standard)" : undefined }}>
+      <div
+        className="absolute left-0 top-0 origin-top-left"
+        onTransitionEnd={(event) => event.target === event.currentTarget && setEasing(false)}
+        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, visibility: size ? undefined : "hidden", transition: gliding || easing ? "transform var(--dur-deliberate) var(--curve-standard)" : undefined }}
+      >
         {size ? flow.screens.map((screen, index) => {
           const spot = at(screen.id);
           return (
@@ -538,11 +546,11 @@ export function FlowCanvas({
       ) : null}
 
       <div className="absolute bottom-4 left-4 flex items-center gap-2">
-        <IconButton label="Zoom out" onClick={() => size && zoomAt(size.width / 2, size.height / 2, 1 / 1.25)}>
+        <IconButton label="Zoom out" onClick={() => size && zoomAt(size.width / 2, size.height / 2, 1 / 1.25, true)}>
           <span className="text-md leading-none">−</span>
         </IconButton>
         <span className="min-w-12 text-center text-ui font-medium text-foreground-muted">{Math.round(view.scale * 100)}%</span>
-        <IconButton label="Zoom in" onClick={() => size && zoomAt(size.width / 2, size.height / 2, 1.25)}>
+        <IconButton label="Zoom in" onClick={() => size && zoomAt(size.width / 2, size.height / 2, 1.25, true)}>
           <span className="text-md leading-none">+</span>
         </IconButton>
         <IconButton

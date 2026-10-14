@@ -86,6 +86,8 @@ export function PrototypeFrame({
   onListing: setListing,
   fullscreen,
   onFullscreen,
+  bare = false,
+  onBare,
 }: {
   url?: string;
   title: string;
@@ -137,6 +139,9 @@ export function PrototypeFrame({
   /** Full screen: the studio steps back so the prototype can fill the window. */
   fullscreen: boolean;
   onFullscreen: (on: boolean) => void;
+  /** Only the prototype is on screen: no toolbar, panels, pins or handles. Command-period turns it on and off. */
+  bare?: boolean;
+  onBare?: (on: boolean) => void;
 }) {
   // The flow: the screens of the prototype and how they connect, drawn as a canvas.
   // Opening a screen from it shows the prototype on that screen; both belong to one address.
@@ -257,7 +262,7 @@ export function PrototypeFrame({
   };
   const commentsUi: CommentsUi | null =
     commentsOf && !dev
-      ? { list: comments, visible: showPins || commenting, placing: commenting && !interacting, focus, onFocus: askFor, onLocate: locate, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
+      ? { list: comments, visible: !bare && (showPins || commenting), placing: commenting && !interacting, focus, onFocus: askFor, onLocate: locate, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
       : null;
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
@@ -287,6 +292,17 @@ export function PrototypeFrame({
   const hotkey = (event: KeyboardEvent) => {
     // A dialog is asking something: its keys are its own.
     if (leaving) return;
+    if (onBare && url && mode === "view") {
+      if (event.key === "." && (event.metaKey || event.ctrlKey) && !event.altKey) {
+        event.preventDefault();
+        onBare(!bare);
+        return;
+      }
+      if (event.key === "Escape" && bare) {
+        onBare(false);
+        return;
+      }
+    }
     if (commentsOf && url && !dev) {
       if (event.key.toLowerCase() === "c" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
@@ -480,7 +496,7 @@ export function PrototypeFrame({
       onClick={(event) => dev && !(event.target as Element).closest("button, a") && deselect()}
       className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${fullscreen ? "lg:rounded-none" : ""}`}
     >
-      <div key={dev || commenting ? "mode" : "view"} className="bar-in grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:relative sm:z-[var(--z-raised)] sm:px-8 sm:py-8">
+      <div key={dev || commenting ? "mode" : "view"} style={bare ? { display: "none" } : undefined} className="bar-in grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:relative sm:z-[var(--z-raised)] sm:px-8 sm:py-8">
         {dev || commenting ? (
           // Editing, dev or comment mode is the only thing going on: a way out, how clicks behave, and (editing) undo, redo and Save.
           <>
@@ -534,10 +550,14 @@ export function PrototypeFrame({
                   ]}
                 />
               ) : null}
-              {url && addressed && !showingFlow ? (
-                <IconButton label="Canvas" onClick={() => onFlowOpen(true)} className="max-sm:hidden">
-                  <FlowIcon />
-                </IconButton>
+              {url && addressed ? (
+                showingFlow ? (
+                  <IconButton onClick={() => onFlowOpen(false)}>Close canvas</IconButton>
+                ) : (
+                  <IconButton label="Canvas" onClick={() => onFlowOpen(true)} className="max-sm:hidden">
+                    <FlowIcon />
+                  </IconButton>
+                )
               ) : null}
             </div>
             {/* Picking a phone makes no sense on a phone. */}
@@ -558,7 +578,6 @@ export function PrototypeFrame({
             </div>
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
-                {showingFlow ? <IconButton onClick={() => onFlowOpen(false)}>Back to prototype</IconButton> : null}
                 {commentsOf ? (
                   <>
                     {comments.length ? (
@@ -572,7 +591,7 @@ export function PrototypeFrame({
                     </IconButton>
                   </>
                 ) : null}
-                <span className="hidden lg:block">
+                <span className={`hidden ${showingFlow ? "" : "lg:block"}`}>
                   <IconButton
                     label={fullscreen ? "Exit full screen (F)" : "Full screen (F)"}
                     tooltipAlign="end"
@@ -599,13 +618,13 @@ export function PrototypeFrame({
 
       <div
         ref={stage}
-        className={`flex min-h-0 flex-1 overflow-auto px-4 [scrollbar-width:thin] sm:pb-10 ${bottom ? "pb-16" : "pb-4"} ${showingFlow ? "invisible" : ""}`}>
+        className={`flex min-h-0 flex-1 overflow-auto px-4 [scrollbar-width:thin] sm:pb-10 ${bare ? "pt-10" : ""} ${bottom ? "pb-16" : "pb-4"} ${showingFlow ? "invisible" : ""}`}>
         {/* Clipped, not hidden: below 100% the frame's full-size layout box sticks out of this one, and a hidden box can still be scrolled by the prototype (a modal taking focus), which slid the whole phone sideways in Safari. A clipped box can't be scrolled at all. */}
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
           className={`relative m-auto shrink-0 ${scale ? "" : "h-full"} ${sizing ? SIZING : ""}`}
         >
-        {onDevice && !narrow && !showingFlow ? (
+        {onDevice && !narrow && !showingFlow && !bare ? (
           <>
             <ResizeHandle side="left" onWidth={pickWidth} onStep={stepDevice} />
             <ResizeHandle side="right" onWidth={pickWidth} onStep={stepDevice} />
