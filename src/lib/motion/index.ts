@@ -1,4 +1,4 @@
-export { duration, easing, layerEnter, layerExit, spring, travel } from "./tokens";
+export { duration, easing, layerEnter, layerExit, spring, travel, welcomeHold } from "./tokens";
 export type { DurationToken, EasingToken, SpringToken, TravelToken } from "./tokens";
 export { motionRegister, exitRegister, stagger } from "./vocabulary";
 export type { MotionRegister } from "./vocabulary";

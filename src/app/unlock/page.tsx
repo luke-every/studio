@@ -1,14 +1,15 @@
 import { redirect } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
-import { isUnlocked, unlock } from "@/lib/gate";
+import { Welcome } from "@/components/welcome/welcome";
+import { isUnlocked } from "@/lib/gate";
 
 /**
- * The door.
+ * The door, and the welcome that follows it.
  *
  * One shared word for the whole team. Not a login: there is no account, no
  * email, no sign-out — you say the word once on a device and the studio
- * opens from then on.
+ * opens from then on. Saying it, choosing who you are and arriving in the
+ * studio is one continuous screen (see `Welcome`).
  */
 /** Where to go once in: the page they asked for, if it is a page of this studio. */
 function destination(next: unknown) {
@@ -16,44 +17,9 @@ function destination(next: unknown) {
 }
 
 export default async function UnlockPage({ searchParams }: PageProps<"/unlock">) {
-  const { wrong, next } = await searchParams;
+  const { next } = await searchParams;
   const to = destination(next);
   if (await isUnlocked()) redirect(to);
 
-  async function open(formData: FormData) {
-    "use server";
-    const opened = await unlock(String(formData.get("password") ?? ""));
-    const target = destination(formData.get("next"));
-    redirect(opened ? target : `/unlock?wrong=1&next=${encodeURIComponent(target)}`);
-  }
-
-  return (
-    <div className="grid min-h-dvh place-items-center px-5">
-      <div className="w-full max-w-[22rem]">
-        <p className="text-center text-md font-medium tracking-[var(--tracking-tight)] text-foreground">Test Kitchen</p>
-
-        <form action={open} className="mt-8 flex flex-col gap-3">
-          <input type="hidden" name="next" value={to} />
-          <input
-            name="password"
-            type="password"
-            autoFocus
-            autoComplete="off"
-            placeholder="Password"
-            aria-label="Password"
-            className="w-full rounded-[var(--r-sm)] border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:border-border-strong focus:outline-none"
-          />
-          <Button type="submit" variant="primary">
-            Continue
-          </Button>
-        </form>
-
-        {wrong ? (
-          <p role="alert" className="mt-3 text-center text-xs text-foreground-muted">
-            Wrong password.
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
+  return <Welcome next={to} />;
 }

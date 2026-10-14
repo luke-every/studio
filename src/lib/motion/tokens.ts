@@ -19,6 +19,9 @@ export const duration = {
 export const layerEnter = 0.4;
 export const layerExit = 0.2;
 
+/** How long a chosen face stays selected before the welcome leaves, in seconds. Mirrors `--welcome-hold`. */
+export const welcomeHold = 0.5;
+
 /** Cubic-bézier control points, matching --curve-* in motion.css. */
 export const easing = {
   standard: [0.32, 0.72, 0, 1],

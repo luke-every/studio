@@ -240,7 +240,7 @@ export function ProfileModal({
 }
 
 /** Somebody new: a face and colour picked at random to start from. */
-export function NewUserModal({ open, onClose, onCreated, successor }: { open: boolean; onClose: () => void; onCreated: () => void; successor?: boolean }) {
+export function NewUserModal({ open, onClose, onCreated, successor, standalone }: { open: boolean; onClose: () => void; onCreated: () => void; successor?: boolean; /** Opened over a page, not taking over from the picker. */ standalone?: boolean }) {
   const { add } = useUser();
   return (
     <ProfileModal
@@ -250,8 +250,8 @@ export function NewUserModal({ open, onClose, onCreated, successor }: { open: bo
       submitLabel="Add"
       initial={() => randomProfile()}
       focusName
-      // It only ever opens from the picker, which is closing as it does.
-      continuing
+      // From the picker, which is closing as it opens; standalone, it brings its own backdrop.
+      continuing={!standalone}
       successor={successor}
       onSubmit={(profile) => {
         const problem = add(profile);

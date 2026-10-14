@@ -58,6 +58,16 @@
   --fade-curve: var(--curve-entrance);
   /* feed-enter: each tile arrives this much after the one before it. */
   --feed-stagger: 70ms;
+  /* welcome: the door and the choosing of who is here. Each line arrives this
+   * much after the one before it, from a touch large and out of focus; the
+   * whole screen leaves shrinking and blurring. `--welcome-hold` is how long
+   * a chosen face stays selected before it leaves. Mirrored for JS as
+   * `welcomeHold` in tokens.ts. */
+  --welcome-stagger: 110ms;
+  --welcome-blur: 14px;
+  --welcome-in-scale: 1.08;
+  --welcome-out-scale: 0.92;
+  --welcome-hold: 500ms;
 }
 
 /* Reduced motion collapses distance and shortens duration, but never removes
@@ -77,6 +87,9 @@
     --motion-travel-md: 0px;
     --motion-travel-lg: 0px;
     --motion-pop-scale: 1;
+    --welcome-blur: 0px;
+    --welcome-in-scale: 1;
+    --welcome-out-scale: 1;
   }
 }
 
@@ -293,6 +306,39 @@
 @utility stagger-in {
   animation: feed-enter var(--dur-deliberate) var(--curve-entrance) backwards;
   animation-delay: calc(var(--i, 0) * var(--feed-stagger));
+}
+
+/* ---------------------------------------------------------------------------
+ * welcome-in / welcome-out — the door, and the choosing of who is here. A
+ * change of mode (outside the studio, then in), so `immersive` in and
+ * `deliberate` out. Set `--i` on each line for its place in the order.
+ * In: out of focus and a touch large, settling to sharp. Out: the whole
+ * screen shrinks, blurs and fades. Animated while MOTION_ENABLED is off,
+ * like the others here; reduced motion keeps the fade and drops the rest.
+ * ------------------------------------------------------------------------- */
+@keyframes welcome-in {
+  from {
+    opacity: 0;
+    transform: scale(var(--welcome-in-scale));
+    filter: blur(var(--welcome-blur));
+  }
+}
+
+@keyframes welcome-out {
+  to {
+    opacity: 0;
+    transform: scale(var(--welcome-out-scale));
+    filter: blur(var(--welcome-blur));
+  }
+}
+
+@utility welcome-in {
+  animation: welcome-in var(--dur-immersive) var(--curve-entrance) backwards;
+  animation-delay: calc(var(--i, 0) * var(--welcome-stagger));
+}
+
+@utility welcome-out {
+  animation: welcome-out var(--dur-deliberate) var(--curve-exit) both;
 }
 
 /* ---------------------------------------------------------------------------
