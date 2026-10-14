@@ -24,8 +24,8 @@ export default function HomePage() {
         </p>
       ) : (
         <FeedGrid>
-          {feed.map((prototype) => (
-            <FeedTile key={prototype.slug} prototype={prototype} />
+          {feed.map((prototype, index) => (
+            <FeedTile key={prototype.slug} prototype={prototype} priority={index < 3} />
           ))}
         </FeedGrid>
       )}

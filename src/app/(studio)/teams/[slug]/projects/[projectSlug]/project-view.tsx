@@ -55,8 +55,8 @@ export function ProjectView() {
       <div className="mt-8 border-t border-divider pt-7">
         {contents.length > 0 ? (
           <FeedGrid>
-            {contents.map((prototype) => (
-              <FeedTile key={prototype.slug} prototype={prototype} />
+            {contents.map((prototype, index) => (
+              <FeedTile key={prototype.slug} prototype={prototype} priority={index < 3} />
             ))}
           </FeedGrid>
         ) : (

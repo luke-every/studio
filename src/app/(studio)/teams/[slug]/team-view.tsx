@@ -39,8 +39,8 @@ export function TeamView() {
         </div>
         {contents.length > 0 ? (
           <FeedGrid>
-            {contents.map((prototype) => (
-              <FeedTile key={prototype.slug} prototype={prototype} />
+            {contents.map((prototype, index) => (
+              <FeedTile key={prototype.slug} prototype={prototype} priority={index < 3} />
             ))}
           </FeedGrid>
         ) : (

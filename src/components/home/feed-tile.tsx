@@ -15,7 +15,7 @@ import { TilePicture } from "./tile-picture";
  * prototype itself, running but untouchable, until that picture exists.
  * Everything opens the prototype.
  */
-export function FeedTile({ prototype }: { prototype: Prototype }) {
+export function FeedTile({ prototype, priority = false }: { prototype: Prototype; priority?: boolean }) {
   const href = `/prototypes/${prototype.slug}`;
 
   return (
@@ -33,7 +33,7 @@ export function FeedTile({ prototype }: { prototype: Prototype }) {
           className="relative aspect-[9/19.5] w-[min(100%,var(--tile-device-width))] overflow-hidden rounded-[var(--r-device)] transition-transform duration-[var(--lift-duration)] ease-[var(--lift-curve)] group-hover/tile:scale-[1.03]"
         >
           {prototype.current.url ? (
-            <TilePicture url={prototype.current.url} title={`${prototype.name} ${prototype.current.version}`} />
+            <TilePicture priority={priority} url={prototype.current.url} title={`${prototype.name} ${prototype.current.version}`} />
           ) : (
             <div className="absolute inset-0 bg-surface pulse-soft" />
           )}

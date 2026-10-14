@@ -15,7 +15,7 @@ import { LivePreview } from "./live-preview";
  * and older versions may not have one. Until it exists the request fails and
  * the tile falls back to the running prototype.
  */
-export function TilePicture({ url, title }: { url: string; title: string }) {
+export function TilePicture({ url, title, priority = false }: { url: string; title: string; priority?: boolean }) {
   const image = useRef<HTMLImageElement>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing">(
     "loading",
@@ -41,7 +41,8 @@ export function TilePicture({ url, title }: { url: string; title: string }) {
         ref={image}
         src={`${url}/studio-preview.jpg`}
         alt=""
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : undefined}
         decoding="async"
         draggable={false}
         onLoad={() => setState("ready")}

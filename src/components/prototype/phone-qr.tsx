@@ -52,9 +52,12 @@ export function PhoneQr({ stage }: { stage: RefObject<HTMLElement | null> }) {
   const [shown, setShown] = useState<string[]>([]);
   const tokens = useRef(new Map<string, string>());
   const latest = useRef("");
+  const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const read = () => {
+      // Nothing to update while the tab is hidden or the code is (display: none on a phone).
+      if (document.hidden || !box.current?.offsetParent) return;
       try {
         const now = stage.current?.querySelector("iframe")?.contentWindow?.location.href;
         // Until a frame has loaded, keep what was there.
@@ -69,11 +72,15 @@ export function PhoneQr({ stage }: { stage: RefObject<HTMLElement | null> }) {
     };
     read();
     const timer = setInterval(read, POLL_MS);
-    return () => clearInterval(timer);
+    document.addEventListener("visibilitychange", read);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", read);
+    };
   }, [stage]);
 
   return (
-    <div className="absolute bottom-10 right-10 z-[var(--z-raised)] hidden rounded-[var(--r-control)] border border-border bg-[var(--qr-bg)] p-2 sm:block">
+    <div ref={box} className="absolute bottom-10 right-10 z-[var(--z-raised)] hidden rounded-[var(--r-control)] border border-border bg-[var(--qr-bg)] p-2 sm:block">
       <div className="relative size-20 text-[var(--qr-fg)]">
         {shown.length ? null : <div
             aria-hidden

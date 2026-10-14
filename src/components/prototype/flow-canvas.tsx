@@ -181,6 +181,8 @@ export function FlowCanvas({
     let last = "";
     // Where things are inside a screen only changes when the screen does, so this needn't run every frame, which with a dozen screens would be a lot of reading.
     const tick = () => {
+      // Nothing moves that anyone can see while the tab is hidden.
+      if (document.hidden) return;
       const next: typeof found = [];
       for (const screen of flow.screens) {
         const doc = frames.current.get(screen.id)?.contentDocument;
@@ -205,7 +207,11 @@ export function FlowCanvas({
     };
     tick();
     const timer = window.setInterval(tick, 250);
-    return () => window.clearInterval(timer);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, [visible, list, draft, flow, setups]);
 
   // Asked for a comment: zoom to the screen it is on, filling the clear part of the canvas.

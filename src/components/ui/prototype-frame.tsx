@@ -1,18 +1,12 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { DevPanel } from "@/components/prototype/dev-panel";
-import { EditBar } from "@/components/prototype/edit-bar";
-import { CommentLayer } from "@/components/prototype/comment-layer";
 import type { CommentsUi } from "@/components/prototype/comment-parts";
 import { locateScreen } from "@/components/prototype/locate-screen";
 import { reviewPrompt, type Anchor, type Comment } from "@/lib/comments";
 import { useStudio } from "@/lib/data/studio-store";
-import { CommentsPanel } from "@/components/prototype/comments-panel";
-import { PhoneQr, withToken } from "@/components/prototype/phone-qr";
-import { EditPanel } from "@/components/prototype/edit-panel";
-import { FlowCanvas } from "@/components/prototype/flow-canvas";
 import { useEditSession } from "@/components/prototype/use-edit-session";
 import { useComments, useShowComments } from "@/components/prototype/use-comments";
 import { MotionSheet } from "@/components/motion";
@@ -30,6 +24,20 @@ import { editInPlace } from "@/lib/edit-dom";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
 import { applyEmbed } from "@/lib/embed";
 import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
+
+// Loaded when their mode is opened, not with the page. Until then (or while the chunk arrives) they render nothing.
+const DevPanel = dynamic(() => import("@/components/prototype/dev-panel").then((m) => m.DevPanel), { ssr: false });
+const EditBar = dynamic(() => import("@/components/prototype/edit-bar").then((m) => m.EditBar), { ssr: false });
+const EditPanel = dynamic(() => import("@/components/prototype/edit-panel").then((m) => m.EditPanel), { ssr: false });
+const FlowCanvas = dynamic(() => import("@/components/prototype/flow-canvas").then((m) => m.FlowCanvas), { ssr: false });
+const PhoneQr = dynamic(() => import("@/components/prototype/phone-qr").then((m) => m.PhoneQr), { ssr: false });
+// The comments code is fetched once the page has painted, so it is ready without being asked for and never holds the prototype up.
+const CommentsPanel = dynamic(() => import("@/components/prototype/comments-panel").then((m) => m.CommentsPanel), { ssr: false });
+const CommentLayer = dynamic(() => import("@/components/prototype/comment-layer").then((m) => m.CommentLayer), { ssr: false });
+const preloadComments = () => {
+  void import("@/components/prototype/comment-layer");
+  void import("@/components/prototype/comments-panel");
+};
 
 /** How long a closed canvas stays loaded in case it is opened again. */
 const CANVAS_WARM_MS = 2 * 60 * 1000;
@@ -158,8 +166,16 @@ export function PrototypeFrame({
   // Comment mode, like editing, takes the page over: the next click on the prototype leaves a comment there, and the panel lists them all.
   // On a phone the list is a sheet instead, opened from the bar.
   const user = useUser();
-  const { comments, everything, replies, error: commentsError, add: postComment, place: placeComment, reply: replyToComment, resolve: resolveComment, like: likeComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, commentsOf?.variant);
+  useEffect(() => {
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(preloadComments, { timeout: 3000 });
+      return () => cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(preloadComments, 1000);
+    return () => window.clearTimeout(id);
+  }, []);
   const [showPins, setShowPins] = useShowComments();
+  const { comments, everything, replies, error: commentsError, add: postComment, place: placeComment, reply: replyToComment, resolve: resolveComment, like: likeComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, commentsOf?.variant, showPins || mode === "comment");
   const { notify } = useStudio();
   // Asked before leaving edit mode with changes that would be lost.
   const [leaving, setLeaving] = useState(false);
@@ -368,7 +384,7 @@ export function PrototypeFrame({
     // Opened now, while the tap still counts as a gesture, and pointed at the address once its token has arrived.
     const opened = window.open("", "_blank");
     const address = new URL(href, window.location.href).href;
-    void withToken(address, new Map()).then(
+    void import("@/components/prototype/phone-qr").then(({ withToken }) => withToken(address, new Map())).then(
       (tokened) => (opened ? (opened.location.href = tokened) : window.open(tokened, "_blank")),
       () => (opened ? (opened.location.href = address) : undefined),
     );
