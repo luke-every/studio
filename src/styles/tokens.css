@@ -189,7 +189,10 @@
   --z-modal: 50;
   --z-popover: 60;
   --z-command: 70;
-  --z-toast: 80;
+  --z-toast: 1000;
+
+  /* Where a toast rests, from the top of the viewport. */
+  --toast-top: 2rem;
 }
 
 /* Breakpoints live here as documentation and for JS parity; Tailwind's own

@@ -53,7 +53,7 @@ type StudioContextValue = {
   /** Which saves are in flight, by the keys they were started with. */
   isSaving: (key: string) => boolean;
   /** Say something short at the top of the screen. */
-  notify: (message: string) => void;
+  notify: (message: string, error?: boolean) => void;
   markOpened: (prototypeSlug: string) => void;
   opened: OpenTimes;
   saving: boolean;
@@ -89,6 +89,7 @@ export function StudioProvider({
   }, [snapshot]);
   const toast = useToast();
   const [toastText, setToastText] = useState("");
+  const [toastError, setToastError] = useState(false);
   const [opened, setOpened] = useState<OpenTimes>({});
 
   // A save is live for everyone as soon as it lands, so all that is left is
@@ -140,8 +141,9 @@ export function StudioProvider({
   );
 
   const notify = useCallback(
-    (message: string) => {
+    (message: string, error = false) => {
       setToastText(message);
+      setToastError(error);
       toast.show();
     },
     [toast],
@@ -219,7 +221,7 @@ export function StudioProvider({
   return (
     <StudioContext.Provider value={value}>
       {children}
-      <Toast state={toast.state} onDone={toast.done}>
+      <Toast state={toast.state} onDone={toast.done} error={toastError}>
         {toastText}
       </Toast>
     </StudioContext.Provider>

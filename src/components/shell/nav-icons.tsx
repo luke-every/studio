@@ -386,3 +386,27 @@ export function ReplyIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function ArchiveIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2.5 3.5h11v2.5h-11zM3.5 6v6.25a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V6M6.5 8.75h3" />
+    </Frame>
+  );
+}
+
+export function CopyIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M5.75 5.75h6.5a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-6.5a1 1 0 0 1-1-1v-6.5a1 1 0 0 1 1-1ZM3.25 10.25v-6.5a1 1 0 0 1 1-1h6.5" />
+    </Frame>
+  );
+}
+
+export function AlertIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM8 5v3.5M8 10.75v.01" />
+    </Frame>
+  );
+}

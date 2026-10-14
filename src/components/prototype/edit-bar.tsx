@@ -69,7 +69,7 @@ export function EditBar({
     const result = await saveEdits(form);
     if (!result.ok) {
       setSaving(false);
-      notify(result.error);
+      notify(result.error, true);
       return;
     }
     try {

@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  AlertIcon,
+  ArchiveIcon,
+  CheckIcon,
+  CopyIcon,
+  PencilIcon,
+  SendIcon,
+  UndoIcon,
+} from "@/components/shell/nav-icons";
+
 /** How long a toast stays before it lifts away. */
 const TOAST_MS = 2000;
 
@@ -24,13 +34,30 @@ export function useToast() {
   return { state, show, done: () => setState(null) };
 }
 
+/** The icon that matches what the message says; a tick for anything that just saved. */
+const ICONS: [RegExp, typeof CheckIcon][] = [
+  [/^archived/i, ArchiveIcon],
+  [/^restored/i, UndoIcon],
+  [/^renamed/i, PencilIcon],
+  [/^moved/i, SendIcon],
+  [/^copied/i, CopyIcon],
+];
+
+function toastIcon(message: string, error: boolean) {
+  if (error) return <AlertIcon />;
+  const Match = ICONS.find(([pattern]) => pattern.test(message))?.[1] ?? CheckIcon;
+  return <Match />;
+}
+
 export function Toast({
   state,
   onDone,
+  error = false,
   children,
 }: {
   state: "in" | "out" | null;
   onDone: () => void;
+  error?: boolean;
   children: string;
 }) {
   if (!state) return null;
@@ -40,16 +67,17 @@ export function Toast({
       role="status"
       className="pointer-events-none fixed inset-x-0 flex justify-center"
       style={{
-        top: "calc(var(--nav-height) + var(--space-md))",
+        top: "var(--toast-top)",
         zIndex: "var(--z-toast)",
       }}
     >
       <p
         onAnimationEnd={state === "out" ? onDone : undefined}
-        className={`rounded-[var(--r-full)] bg-accent px-4 py-2 text-sm text-accent-foreground shadow-floating ${
+        className={`flex items-center gap-2 rounded-[var(--r-full)] bg-accent px-4 py-2 text-sm text-accent-foreground shadow-floating ${
           state === "in" ? "toast-in" : "toast-out"
         }`}
       >
+        {toastIcon(children, error)}
         {children}
       </p>
     </div>
