@@ -39,11 +39,10 @@ type View = { x: number; y: number; scale: number };
 
 /**
  * The flow of a prototype as a canvas: every screen, live, with an arrow for
- * each tap that leads to another. Everything is in one row, which runs on past
- * the edge rather than being squeezed to fit; the canvas opens as tall as the
- * room and the rest is a pan away. The variants of a prototype are drawn the
- * same way but as whole pages, as tall as each page is, rather than as a
- * phone's worth of each. Drag to pan, pinch or ⌘-scroll to zoom,
+ * each tap that leads to another. Every screen is a whole page, as tall as it
+ * turns out to be rather than a phone's worth, so nothing is cut off; the flow
+ * runs on past the edge rather than being squeezed to fit, and the rest is a
+ * pan away. Drag to pan, pinch or ⌘-scroll to zoom,
  * click a screen to select it and double-click to open it; double-click the
  * canvas itself to zoom in there.
  *
@@ -68,7 +67,6 @@ export function FlowCanvas({
   comments,
   setups,
   wireframe = false,
-  fullPage: wholePage = false,
 }: {
   flow: Flow;
   /** The prototype's address, without any screen's parameters. */
@@ -80,13 +78,9 @@ export function FlowCanvas({
   setups?: Record<string, string>;
   /** The same wireframe look the prototype is shown in. */
   wireframe?: boolean;
-  /** Each screen as tall as the whole page turns out to be, not a device's height. Always so for variants. */
-  fullPage?: boolean;
 }) {
   const node = { width: device.width * SCREEN_SCALE, height: device.height * SCREEN_SCALE };
   const cell = { width: node.width + GAP.x, height: node.height + GAP.y + LABEL_HEIGHT };
-  // Variants are whole pages: each as tall as it turns out to be once it has loaded.
-  const fullPage = !!setups || wholePage;
   // Nothing is shown while the pages load: a quiet loader, then every screen arrives together, left to right, at the size it will stay.
   const [readyIds, setReadyIds] = useState<ReadonlySet<string>>(new Set());
   const [gaveUp, setGaveUp] = useState(false);
@@ -96,16 +90,11 @@ export function FlowCanvas({
     const timer = window.setTimeout(() => setGaveUp(true), GIVE_UP_MS);
     return () => window.clearTimeout(timer);
   }, []);
+  // Every screen is a whole page: as tall as it turns out to be once it has loaded, so none is cut off.
   const [pageHeights, setPageHeights] = useState<Record<string, number>>({});
-  const pageHeight = (id: string) => (fullPage ? (pageHeights[id] ?? device.height) : device.height);
+  const pageHeight = (id: string) => pageHeights[id] ?? device.height;
   const heightOf = (id: string) => pageHeight(id) * SCREEN_SCALE;
-  const { placed, width, height } = fullPage
-    ? {
-        placed: new Map(flow.screens.map((screen, index) => [screen.id, { x: index * cell.width, y: 0 }])),
-        width: flow.screens.length * cell.width,
-        height: Math.max(...flow.screens.map((screen) => heightOf(screen.id))) + GAP.y + LABEL_HEIGHT,
-      }
-    : layoutFlow(flow, cell);
+  const { placed, width, height } = layoutFlow(flow, cell, Infinity, (id) => heightOf(id) + GAP.y + LABEL_HEIGHT);
   // The screens sit below their names.
   const at = (id: string) => {
     const spot = placed.get(id)!;
@@ -288,21 +277,22 @@ export function FlowCanvas({
     if (!placed.has(edge.from) || !placed.has(edge.to)) return [];
     const from = at(edge.from);
     const to = at(edge.to);
-    const sameRow = Math.abs(to.y - from.y) < node.height / 2;
+    const tallFrom = heightOf(edge.from);
+    const tallTo = heightOf(edge.to);
     let path: string;
     let mid: { x: number; y: number };
     let room: number;
-    if (sameRow && to.x > from.x) {
-      // On along the row: out of the right edge, into the left.
-      const a = toScreen(from.x + node.width, from.y + node.height / 2);
-      const b = toScreen(to.x, to.y + node.height / 2);
+    if (to.x > from.x) {
+      // On to a later column: out of the right edge, into the left.
+      const a = toScreen(from.x + node.width, from.y + tallFrom / 2);
+      const b = toScreen(to.x, to.y + tallTo / 2);
       const reach = Math.max(24, Math.abs(b.x - a.x) / 2);
       path = `M${a.x},${a.y} C${a.x + reach},${a.y} ${b.x - reach},${b.y} ${b.x},${b.y}`;
       mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       room = Math.abs(b.x - a.x);
     } else if (to.y > from.y) {
-      // Down to the next row: out of the bottom, into the top.
-      const a = toScreen(from.x + node.width / 2, from.y + node.height);
+      // Down the column: out of the bottom, into the top.
+      const a = toScreen(from.x + node.width / 2, from.y + tallFrom);
       const b = toScreen(to.x + node.width / 2, to.y);
       const reach = Math.max(30, Math.abs(b.y - a.y) / 2);
       path = `M${a.x},${a.y} C${a.x},${a.y + reach} ${b.x},${b.y - reach} ${b.x},${b.y}`;
@@ -310,8 +300,8 @@ export function FlowCanvas({
       room = Math.abs(b.y - a.y);
     } else {
       // Back to something earlier: round underneath.
-      const a = toScreen(from.x + node.width / 2, from.y + node.height);
-      const b = toScreen(to.x + node.width / 2, to.y + node.height);
+      const a = toScreen(from.x + node.width / 2, from.y + tallFrom);
+      const b = toScreen(to.x + node.width / 2, to.y + tallTo);
       const reach = 60 + 30 * view.scale;
       path = `M${a.x},${a.y} C${a.x},${a.y + reach} ${b.x},${b.y + reach} ${b.x},${b.y}`;
       mid = { x: (a.x + b.x) / 2, y: Math.max(a.y, b.y) + reach * 0.75 };
@@ -409,7 +399,7 @@ export function FlowCanvas({
               } as React.CSSProperties}
               className={`absolute block overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface text-left ${revealed ? "stagger-in" : "pointer-events-none"}`}
             >
-              <ScreenFrame onReady={() => setReadyIds((now) => (now.has(screen.id) ? now : new Set(now).add(screen.id)))} pageHeight={pageHeight(screen.id)} onMeasured={fullPage ? (found) => setPageHeights((now) => ((now[screen.id] ?? 0) >= found ? now : { ...now, [screen.id]: found })) : undefined} wireframe={wireframe} register={(element) => (element ? frames.current.set(screen.id, element) : frames.current.delete(screen.id))} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}preview`} device={device} />
+              <ScreenFrame onReady={() => setReadyIds((now) => (now.has(screen.id) ? now : new Set(now).add(screen.id)))} pageHeight={pageHeight(screen.id)} onMeasured={(found) => setPageHeights((now) => ((now[screen.id] ?? 0) >= found ? now : { ...now, [screen.id]: found }))} wireframe={wireframe} register={(element) => (element ? frames.current.set(screen.id, element) : frames.current.delete(screen.id))} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}preview`} device={device} />
             </button>
           );
         }) : null}
