@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import type { Anchor, Comment } from "@/lib/comments";
 import { useUser } from "@/lib/use-user";
-import { addComment, deleteComment, likeComment, listComments, resolveComment, setCommentScreen } from "@/lib/registry/actions";
+import { addComment, addSharedComment, deleteComment, likeComment, likeSharedComment, listComments, listSharedComments, resolveComment, setCommentScreen } from "@/lib/registry/actions";
+
+import { useSharedComments } from "./shared-comments";
 
 const SHOW_KEY = "proto.show-comments";
 const showListeners = new Set<() => void>();
@@ -79,6 +81,7 @@ const POLL_MS = 20_000;
  */
 export function useComments(slug: string | undefined, version: string | undefined, by: string, variant?: string, active = true) {
   const { profileOf } = useUser();
+  const sharedAs = useSharedComments();
   const avatar = by ? profileOf(by).avatar : undefined;
   const target = slug && version ? { slug, version } : undefined;
   const key = target ? `${slug}/${version}` : "";
@@ -91,7 +94,7 @@ export function useComments(slug: string | undefined, version: string | undefine
     const read = () => {
       if (document.visibilityState === "hidden") return;
       const before = started;
-      void listComments(slug, version).then((result) => {
+      void (sharedAs ? listSharedComments(sharedAs.token) : listComments(slug, version)).then((result) => {
         // One that overlapped a save of ours would put back what the save has just changed; the next one will be right.
         if (!current || inflight || started !== before) return;
         if (result.ok) {
@@ -115,7 +118,7 @@ export function useComments(slug: string | undefined, version: string | undefine
       window.removeEventListener("focus", read);
       document.removeEventListener("visibilitychange", read);
     };
-  }, [slug, version, key, active]);
+  }, [slug, version, key, active, sharedAs]);
 
   const replace = (next: Comment) =>
     setLoaded((now) => (now && now.key === key ? { key, list: now.list.map((item) => (item.id === next.id ? next : item)) } : now));
@@ -135,7 +138,7 @@ export function useComments(slug: string | undefined, version: string | undefine
       return { key, list: [...list, pending] };
     });
     setWorking(pendingId, true);
-    const result = await track(addComment({ ...target, text, anchor, variant: setupOf, by, avatar })).finally(() => setWorking(pendingId, false));
+    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: setupOf, by, avatar }) : addComment({ ...target, text, anchor, variant: setupOf, by, avatar })).finally(() => setWorking(pendingId, false));
     if (!result.ok) {
       setLoaded((now) => (now && now.key === key ? { key, list: now.list.filter((item) => item.id !== pendingId) } : now));
       setError(result.error);
@@ -153,14 +156,14 @@ export function useComments(slug: string | undefined, version: string | undefine
 
   /** Notes which flow screen a comment is on, so going to it next time needs no looking. */
   const place = async (comment: Comment, flowScreen: string) => {
-    if (!target || comment.anchor.flowScreen === flowScreen) return;
+    if (!target || sharedAs || comment.anchor.flowScreen === flowScreen) return;
     const result = await track(setCommentScreen({ ...target, id: comment.id, flowScreen }));
     if (result.ok) replace(result.value);
   };
 
   const reply = async (parent: Comment, text: string) => {
     if (!target) return false;
-    const result = await track(addComment({ ...target, text, parentId: parent.id, by, avatar }));
+    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, parentId: parent.id, by, avatar }) : addComment({ ...target, text, parentId: parent.id, by, avatar }));
     if (!result.ok) {
       setError(result.error);
       return false;
@@ -175,7 +178,7 @@ export function useComments(slug: string | undefined, version: string | undefine
     if (!target || !by) return;
     const others = (comment.likes ?? []).filter((name) => name !== by);
     replace({ ...comment, likes: liked ? [...others, by] : others });
-    const result = await track(likeComment({ ...target, id: comment.id, by, liked, avatar }));
+    const result = await track(sharedAs ? likeSharedComment(sharedAs.token, { id: comment.id, by, liked, avatar }) : likeComment({ ...target, id: comment.id, by, liked, avatar }));
     if (result.ok) replace(result.value);
     else {
       replace(comment);
@@ -185,7 +188,7 @@ export function useComments(slug: string | undefined, version: string | undefine
 
   /** Resolving or reopening shows at once, and is put back if it couldn't be saved. */
   const resolve = async (comment: Comment, resolved: boolean) => {
-    if (!target) return;
+    if (!target || sharedAs) return;
     replace({ ...comment, resolvedAt: resolved ? new Date().toISOString() : undefined });
     const result = await track(resolveComment({ ...target, id: comment.id, resolved }));
     if (result.ok) replace(result.value);
@@ -196,7 +199,7 @@ export function useComments(slug: string | undefined, version: string | undefine
   };
 
   const remove = async (comment: Comment) => {
-    if (!target) return;
+    if (!target || sharedAs) return;
     setWorking(comment.id, true);
     const result = await track(deleteComment({ ...target, id: comment.id })).finally(() => setWorking(comment.id, false));
     if (!result.ok) {

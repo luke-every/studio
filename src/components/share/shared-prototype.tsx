@@ -2,6 +2,17 @@
 
 import { useState, type ReactNode } from "react";
 
+import { SharedCommentsContext } from "@/components/prototype/shared-comments";
+import { ColumnHandle, RevealTab } from "@/components/prototype/column-handle";
+import { ViewMenu } from "@/components/prototype/view-menu";
+import { NewUserModal } from "@/components/shell/profile-modal";
+import { PrototypeFrame } from "@/components/ui/prototype-frame";
+import { StudioProvider } from "@/lib/data/studio-store";
+import { useDevice, useFit, useZoom } from "@/lib/use-device";
+import { useUser } from "@/lib/use-user";
+
+import { ShareQr } from "./share-qr";
+
 import { MotionProvider, useOverlayBehaviour } from "@/lib/motion";
 import { MotionScrim } from "@/components/motion";
 import { ControlsPanel, VariantPicker } from "@/components/prototype/controls-panel";
@@ -9,11 +20,9 @@ import { useVersionVariants } from "@/components/prototype/use-version-variants"
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { AvatarStack } from "@/components/shell/user-avatar";
 import { barControl, IconButton } from "@/components/ui/button";
-import { ScaledScreen } from "@/components/ui/scaled-screen";
 import { Stamp } from "@/components/ui/stamp";
 import { applyControls, defaultValues, type ControlValues } from "@/lib/controls";
 import { VARIANT_PARAM } from "@/lib/edits";
-import { DEFAULT_DEVICE } from "@/lib/phone";
 import type { Person } from "@/lib/registry/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 
@@ -24,10 +33,17 @@ import { useMediaQuery } from "@/lib/use-media-query";
  * Opened on a phone, it is the prototype itself filling the screen, with the
  * rest behind an About button.
  */
+/** Nothing of the registry goes to somebody with only a share link: the studio's context is there, and empty. */
+const NOTHING = { repoUrl: null, people: [], teams: [], projects: [], prototypes: [] };
+
 export function SharedPrototype(props: Parameters<typeof Shared>[0]) {
   return (
     <MotionProvider>
-      <Shared {...props} />
+      <StudioProvider snapshot={NOTHING}>
+        <SharedCommentsContext.Provider value={{ token: props.token }}>
+          <Shared {...props} />
+        </SharedCommentsContext.Provider>
+      </StudioProvider>
     </MotionProvider>
   );
 }
@@ -39,6 +55,8 @@ function Shared({
   updatedAt,
   version,
   review,
+  slug,
+  versionKey,
 }: {
   name: string;
   description: string;
@@ -47,6 +65,11 @@ function Shared({
   version: { label: string; url: string };
   /** Added to the prototype's address, which is what lets a press and hold leave a comment. */
   review: string;
+  /** The share link's token, which is what lets comments be read and written here. */
+  token: string;
+  slug: string;
+  /** The version as it is stored (v2.0), which comments are filed under. */
+  versionKey: string;
 }) {
   const offered = usePrototypeControls(version.url);
   const variants = useVersionVariants(version.url);
@@ -59,7 +82,31 @@ function Shared({
   const address = `${chosenAddress}${chosenAddress.includes("?") ? "&" : "?"}review=${encodeURIComponent(review)}`;
 
   const phone = useMediaQuery("(max-width: 639px)");
+  const wide = useMediaQuery("(min-width: 64rem)");
   const [about, setAbout] = useState(false);
+
+  // Comments are the studio's own; nothing else of its toolbar comes with them.
+  const user = useUser();
+  // Which phone it is shown on and how big: the one control of the toolbar kept besides comments.
+  const [device, chooseDevice] = useDevice();
+  const [zoom, chooseZoom] = useZoom();
+  const [fit, chooseFit] = useFit();
+  const [mode, setMode] = useState<"view" | "dev" | "edit" | "comment">("view");
+  const [listing, setListing] = useState(false);
+  const [naming, setNaming] = useState(false);
+  // The column can be dragged or clicked out of the way, and full screen takes it too.
+  const [hidden, setHidden] = useState(false);
+  const [drag, setDrag] = useState(0);
+  const [full, setFull] = useState(false);
+  const columnOpen = !((hidden || full) && wide);
+  // Somebody has to say who they are before commenting, once, on this browser.
+  const changeMode = (next: "view" | "dev" | "edit" | "comment") => {
+    if (next === "comment" && !user.name) {
+      setNaming(true);
+      return;
+    }
+    setMode(next);
+  };
 
   const info = (
     <>
@@ -106,20 +153,64 @@ function Shared({
   }
 
   return (
-    <div className="flex w-full flex-col gap-6 py-4 sm:px-8 lg:h-dvh lg:flex-row lg:gap-4 lg:p-4">
-      <aside className="stagger-in flex min-w-0 flex-col gap-6 px-5 sm:px-0 lg:w-[var(--detail-side-width)] lg:shrink-0 lg:overflow-y-auto lg:rounded-[var(--r-tile)] lg:bg-tile lg:p-8">
-        {info}
+    <div className={`flex w-full flex-col gap-6 overflow-x-clip py-4 sm:px-8 lg:h-dvh lg:flex-row lg:gap-4 ${full ? "lg:p-0" : "lg:p-4"}`}>
+      {columnOpen && !full ? <ColumnHandle offset={drag} onDrag={setDrag} onHide={() => setHidden(true)} edge="1rem" vertical="inset-y-4" /> : null}
+      {hidden && !full && wide ? <RevealTab onShow={() => setHidden(false)} /> : null}
+      <aside
+        inert={!columnOpen}
+        style={drag ? { width: `max(0px, calc(var(--detail-side-width) + ${drag}px))`, transition: "none" } : undefined}
+        className={`stagger-in min-w-0 px-5 sm:px-0 lg:flex lg:shrink-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+          columnOpen ? "lg:w-[var(--detail-side-width)] lg:overflow-hidden" : "invisible lg:-mr-4 lg:w-0 lg:overflow-hidden"
+        }`}
+      >
+        {/* It travels left and fades as the column closes, at the same pace as the room opens for the prototype. */}
+        <div
+          style={drag ? { translate: `${drag}px 0`, transition: "none" } : undefined}
+          className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:overflow-y-auto lg:rounded-[var(--r-tile)] lg:bg-tile lg:p-8 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${columnOpen ? "" : "lg:-translate-x-full lg:opacity-0"}`}
+        >
+          {info}
+        </div>
       </aside>
 
-      <main className="stagger-in [--i:1] flex h-[var(--frame-height)] min-w-0 flex-1 flex-col bg-tile sm:rounded-[var(--r-tile)] lg:h-auto">
-        <div className="flex min-h-16 items-center justify-between gap-4 px-4 sm:px-8 sm:py-8">
-          <div className={barControl}>{version.label}</div>
-          <p className="text-ui text-foreground-subtle max-sm:hidden">Press and hold on the prototype to leave a comment</p>
-        </div>
-        <div className="min-h-0 flex-1 px-4 pb-4 sm:pb-10">
-          <ScaledScreen src={address} device={DEFAULT_DEVICE} title={`${name} ${version.label}`} />
-        </div>
-      </main>
+      <div className="stagger-in [--i:1] min-w-0 flex-1 lg:min-h-0">
+        <PrototypeFrame
+          url={chosenAddress}
+          title={`${name} ${version.label}`}
+          leading={<div className={barControl}>{version.label}</div>}
+          center={({ scale }) => (
+            <ViewMenu device={device} zoom={zoom} fit={fit} fitted={scale} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
+          )}
+          device={device}
+          onDevice={chooseDevice}
+          zoom={zoom}
+          fit={fit}
+          comments={{ slug, version: versionKey, variant: chosenAddress.split("?")[1] || undefined }}
+          flow={null}
+          flowOpen={false}
+          onFlowOpen={() => {}}
+          mode={mode}
+          onMode={changeMode}
+          listing={listing}
+          onListing={setListing}
+          fullscreen={full}
+          onFullscreen={setFull}
+          minimal
+          corner={<ShareQr />}
+        />
+      </div>
+
+      <NewUserModal
+        open={naming}
+        standalone
+        title="Who's commenting?"
+        submitLabel="Continue"
+        onClose={() => setNaming(false)}
+        onCreated={() => {
+          setNaming(false);
+          setMode("comment");
+          setListing(true);
+        }}
+      />
     </div>
   );
 }

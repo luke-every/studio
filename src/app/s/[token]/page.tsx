@@ -37,6 +37,9 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
       people={collaborators(prototype)}
       updatedAt={prototype.updatedAt}
       version={{ label: version.version, url: version.url! }}
+      slug={prototype.slug}
+      versionKey={version.key}
+      token={(await params).token}
       // What lets somebody with the link leave a comment on this version, and nothing else.
       review={mintReviewToken(prototype.slug, versionSegment(version.key), { forever: true })}
     />

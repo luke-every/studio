@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { isUnlocked } from "@/lib/gate";
 import { mintReviewToken } from "@/lib/review";
-import { mintShareToken } from "@/lib/share";
+import { mintShareToken, readShareToken } from "@/lib/share";
 
 import { EDIT_IMAGE_DIR, editsSchema, type Edit } from "@/lib/edits";
 
@@ -157,6 +157,34 @@ export async function reviewToken(slug: string, version: string) {
 /** A link to one version that opens without the password, for sharing outside the studio. `key` is the version it is stored under (v2.0). */
 export async function shareLink(slug: string, key: string) {
   return attempt(async () => `/s/${mintShareToken(slug, key)}`, []);
+}
+
+/**
+ * What somebody with a share link may do to the comments on that one version:
+ * read them, add one, reply, like. The token names the prototype and the
+ * version, so none of these can reach anything else, and none needs the door.
+ * Resolving and deleting stay with the studio.
+ */
+async function shared<T>(token: string, work: (at: { slug: string; version: string }) => Promise<T>): Promise<WriteResult<{ value: T }>> {
+  const named = readShareToken(token);
+  if (!named) return { ok: false, error: "This share link isn't valid." };
+  try {
+    return { ok: true, value: await work({ slug: named.slug, version: named.key }) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Something failed." };
+  }
+}
+
+export async function listSharedComments(token: string) {
+  return shared(token, (at) => comments.readComments(at.slug, at.version));
+}
+
+export async function addSharedComment(token: string, input: Omit<Parameters<typeof comments.addComment>[0], "slug" | "version">) {
+  return shared(token, (at) => comments.addComment({ ...input, ...at }));
+}
+
+export async function likeSharedComment(token: string, input: Omit<Parameters<typeof comments.setLiked>[0], "slug" | "version">) {
+  return shared(token, (at) => comments.setLiked({ ...input, ...at }));
 }
 
 export async function likeComment(input: Parameters<typeof comments.setLiked>[0]) {

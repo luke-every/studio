@@ -10,6 +10,7 @@ import { Stamp } from "@/components/ui/stamp";
 import type { Comment } from "@/lib/comments";
 
 import { CommentMenu, ResolveToggle, WhileWorking } from "./comment-parts";
+import { useSharedComments } from "./shared-comments";
 import { PanelEmpty } from "./panel-empty";
 import { menuItem } from "@/components/ui/menu-item";
 
@@ -53,6 +54,7 @@ export function CommentsPanel({
   /** Which setup a comment was left on, in words; null when the prototype has only the one. */
   setupLabel?: (setup?: string) => string | null;
 }) {
+  const readOnly = !!useSharedComments();
   const [show, setShow] = useState<Show>("open");
   const [filterOpen, setFilterOpen] = useState(false);
   const [selecting, setSelecting] = useState(false);
@@ -115,6 +117,7 @@ export function CommentsPanel({
               ))}
             </div>
           </MotionPopover>
+          {readOnly ? null : (
           <IconButton
             aria-pressed={selecting}
             disabled={!selecting && !shown.length}
@@ -123,6 +126,7 @@ export function CommentsPanel({
           >
             {selecting ? "Done" : "Select"}
           </IconButton>
+          )}
         </div>
       </div>
 
@@ -181,10 +185,12 @@ export function CommentsPanel({
                         <Stamp iso={comment.at} relative />
                       </span>
                       {/* Far right, and only while the row is hovered (or on a touch screen, which cannot hover). */}
+                      {readOnly ? null : (
                       <span className="ml-auto flex shrink-0 items-center gap-1 opacity-0 transition-opacity duration-[var(--dur-fast)] focus-within:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
                         <ResolveToggle resolved={!!comment.resolvedAt} onToggle={() => onResolve(comment, !comment.resolvedAt)} />
                         <CommentMenu comment={comment} onDelete={onDelete} onCopy={(one) => onCopy([one])} />
                       </span>
+                      )}
                     </div>
                     {setupLabel?.(comment.variant) ? (
                       <p className="truncate text-ui text-foreground-subtle">{setupLabel(comment.variant)}</p>
@@ -214,6 +220,7 @@ export function CommentsPanel({
         </PanelEmpty>
       )}
 
+      {readOnly ? null : (
       <div className="sticky bottom-0 z-[var(--z-raised)] -mx-4 -mb-4 mt-auto bg-tile p-4 sm:-mx-6 sm:-mb-6 sm:p-6">
         <Button onClick={() => onCopy(toCopy)} disabled={!toCopy.length} className="w-full">
           {toCopy.length
@@ -221,6 +228,7 @@ export function CommentsPanel({
             : "Copy to Claude Code"}
         </Button>
       </div>
+      )}
     </div>
   );
 }

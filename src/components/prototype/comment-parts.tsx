@@ -1,6 +1,7 @@
 "use client";
 
 import { LikeButton } from "./comment-like";
+import { useSharedComments } from "./shared-comments";
 import { useWorking } from "./use-comments";
 import {
   useEffect,
@@ -658,6 +659,8 @@ export function CommentCard({
   onCopy: (comment: Comment) => void;
 }) {
   const working = useWorking(comment.id);
+  // Somebody with a share link can read and answer, not resolve or delete.
+  const readOnly = !!useSharedComments();
 
   return (
     <Card at={at} onOutside={onClose} busy={working} roomy>
@@ -665,8 +668,12 @@ export function CommentCard({
       <div className="-mx-4 -mt-1 flex items-center justify-between gap-3 border-b border-divider px-4 pb-3">
         <span className="text-ui font-medium text-foreground">Comment</span>
         <div className="flex items-center">
-          <CommentMenu ghost comment={comment} onDelete={onDelete} onCopy={onCopy} />
-          <ResolveToggle ghost resolved={!!comment.resolvedAt} onToggle={() => onResolve(comment, !comment.resolvedAt)} />
+          {readOnly ? null : (
+            <>
+              <CommentMenu ghost comment={comment} onDelete={onDelete} onCopy={onCopy} />
+              <ResolveToggle ghost resolved={!!comment.resolvedAt} onToggle={() => onResolve(comment, !comment.resolvedAt)} />
+            </>
+          )}
           <IconButton size="sm" variant="ghost" label="Close" tooltipAlign="end" onClick={onClose}>
             <CloseIcon />
           </IconButton>

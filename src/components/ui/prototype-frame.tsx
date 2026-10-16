@@ -67,6 +67,7 @@ export function PrototypeFrame({
   title,
   leading,
   share,
+  corner,
   bottom,
   center,
   device,
@@ -88,14 +89,17 @@ export function PrototypeFrame({
   onFullscreen,
   bare = false,
   onBare,
+  minimal = false,
 }: {
   url?: string;
   title: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
+  /** Something small in the bottom right corner of the prototype's tile (a share page's QR code). */
+  corner?: ReactNode;
   /** Which version the Share menu in the corner links to. */
   share?: { slug: string; versionKey: string; version: string };
-  /** On a phone only: a control at the foot of the prototype, in the middle. */
+  /** On a phone only: a control in the middle of the first row of the bar. */
   bottom?: ReactNode;
   /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at. */
   center?: (info: { scale: number | null }) => ReactNode;
@@ -142,6 +146,8 @@ export function PrototypeFrame({
   /** Only the prototype is on screen: no toolbar, panels, pins or handles. Command-period turns it on and off. */
   bare?: boolean;
   onBare?: (on: boolean) => void;
+  /** A share page: the version, the viewport, the comment buttons and full screen on the bar, and no look toggle, canvas, restart or share. */
+  minimal?: boolean;
 }) {
   // The flow: the screens of the prototype and how they connect, drawn as a canvas.
   // Opening a screen from it shows the prototype on that screen; both belong to one address.
@@ -331,7 +337,7 @@ export function PrototypeFrame({
         onFullscreen(!fullscreen);
         return;
       }
-      if (event.key.toLowerCase() === "r" && url && !showingFlow) {
+      if (event.key.toLowerCase() === "r" && url && !showingFlow && !minimal) {
         // Starts the prototype over at the address on screen, so the version, variant and settings stay as they are.
         event.preventDefault();
         setRestarts((count) => count + 1);
@@ -488,15 +494,41 @@ export function PrototypeFrame({
     if (next) onDevice?.(next);
   };
 
+  // The look toggle and the comment buttons: in the bar on a wider screen, under the prototype on a phone.
+  const lookControl = url ? (
+    <Toggle
+      label="Look"
+      value={look}
+      onChange={setLook}
+      options={[
+        { id: "design", label: "Design", icon: <SparkleIcon /> },
+        { id: "wireframe", label: "Wireframe", icon: <WireframeIcon /> },
+      ]}
+    />
+  ) : null;
+  const pinButtons = commentsOf ? (
+    <>
+      {comments.length ? (
+        <IconButton label={showPins ? "Hide comments" : "Show comments"} onClick={() => setShowPins(!showPins)}>
+          {showPins ? <EyeIcon /> : <EyeOffIcon />}
+        </IconButton>
+      ) : null}
+      <IconButton label="Comment (C)" onClick={() => { changeMode("comment"); setListing(true); }}>
+        <CommentIcon />
+        {openCount ? openCount : null}
+      </IconButton>
+    </>
+  ) : null;
+
   // A set height, the window's on a wide screen: a bigger phone scrolls inside the tile instead of stretching the page.
   return (
     <div className="flex h-[var(--frame-height)] w-full gap-4 lg:h-full">
     <div
       // Clicking the tile around the phone lets go of what was picked, unless it was a button that was pressed. A click inside the prototype never reaches here.
       onClick={(event) => dev && !(event.target as Element).closest("button, a") && deselect()}
-      className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${fullscreen ? "lg:rounded-none" : ""}`}
+      className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none max-sm:px-6 max-sm:pb-14 max-sm:pt-8 ${fullscreen ? "lg:rounded-none" : ""}`}
     >
-      <div key={dev || commenting ? "mode" : "view"} style={bare ? { display: "none" } : undefined} className="bar-in grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:relative sm:z-[var(--z-raised)] sm:px-8 sm:py-8">
+      <div key={dev || commenting ? "mode" : "view"} style={bare ? { display: "none" } : undefined} className="bar-in relative z-[var(--z-raised)] grid min-h-16 items-center gap-3 max-sm:mb-2 max-sm:grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] sm:px-8 sm:py-8">
         {dev || commenting ? (
           // Editing, dev or comment mode is the only thing going on: a way out, how clicks behave, and (editing) undo, redo and Save.
           <>
@@ -537,20 +569,10 @@ export function PrototypeFrame({
         ) : (
           <>
             {/* On the left, the version and how it is looked at; in the middle, the phone it is shown on; on the right, what to do with it. */}
-            <div className="flex min-w-0 items-center gap-2 justify-self-start">
-              {leading}
-              {url ? (
-                <Toggle
-                  label="Look"
-                  value={look}
-                  onChange={setLook}
-                  options={[
-                    { id: "design", label: "Design", icon: <SparkleIcon /> },
-                    { id: "wireframe", label: "Wireframe", icon: <WireframeIcon /> },
-                  ]}
-                />
-              ) : null}
-              {url && addressed ? (
+            <div className="flex min-w-0 items-center gap-2 justify-self-start max-sm:contents">
+              <div className="max-sm:[grid-area:1/1]">{leading}</div>
+              {lookControl && !minimal ? <div className="max-sm:hidden">{lookControl}</div> : null}
+              {url && addressed && !minimal ? (
                 showingFlow ? (
                   <IconButton onClick={() => onFlowOpen(false)}>Close canvas</IconButton>
                 ) : (
@@ -576,21 +598,11 @@ export function PrototypeFrame({
                 center?.({ scale })
               )}
             </div>
+            {/* On a phone, the variants sit in the middle of the first row, where a wider screen has the phone picker. */}
+            {bottom ? <div className="justify-self-center sm:hidden max-sm:[grid-area:1/2]">{bottom}</div> : null}
             {url ? (
-              <div className="flex items-center gap-2 [grid-column:3] justify-self-end">
-                {commentsOf ? (
-                  <>
-                    {comments.length ? (
-                      <IconButton label={showPins ? "Hide comments" : "Show comments"} onClick={() => setShowPins(!showPins)}>
-                        {showPins ? <EyeIcon /> : <EyeOffIcon />}
-                      </IconButton>
-                    ) : null}
-                    <IconButton label="Comment (C)" onClick={() => { changeMode("comment"); setListing(true); }}>
-                      <CommentIcon />
-                      {openCount ? openCount : null}
-                    </IconButton>
-                  </>
-                ) : null}
+              <div className="flex items-center gap-2 [grid-column:3] justify-self-end max-sm:contents">
+                {pinButtons ? <div className="flex items-center gap-2 max-sm:hidden">{pinButtons}</div> : null}
                 <span className={`hidden ${showingFlow ? "" : "lg:block"}`}>
                   <IconButton
                     label={fullscreen ? "Exit full screen (F)" : "Full screen (F)"}
@@ -603,12 +615,14 @@ export function PrototypeFrame({
                   </IconButton>
                 </span>
                 {share ? (
-                  <ShareMenu
-                    {...share}
-                    stage={stage}
-                    newTab={newTab}
-                    onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined}
-                  />
+                  <div className="max-sm:justify-self-end max-sm:[grid-area:1/3]">
+                    <ShareMenu
+                      {...share}
+                      stage={stage}
+                      newTab={newTab}
+                      onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined}
+                    />
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -618,7 +632,7 @@ export function PrototypeFrame({
 
       <div
         ref={stage}
-        className={`flex min-h-0 flex-1 overflow-auto px-4 [scrollbar-width:thin] sm:pb-10 ${bare ? "pt-10" : ""} ${bottom ? "pb-16" : "pb-4"} ${showingFlow ? "invisible" : ""}`}>
+        className={`flex min-h-0 flex-1 overflow-auto px-0 [scrollbar-width:thin] sm:px-4 sm:pb-10 ${bare ? "pt-10" : ""} pb-0 ${showingFlow ? "invisible" : ""}`}>
         {/* Clipped, not hidden: below 100% the frame's full-size layout box sticks out of this one, and a hidden box can still be scrolled by the prototype (a modal taking focus), which slid the whole phone sideways in Safari. A clipped box can't be scrolled at all. */}
         <div
           style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
@@ -661,8 +675,17 @@ export function PrototypeFrame({
         </div>
       </div>
 
-      {bottom && mode === "view" && url && !showingFlow ? (
-        <div className="absolute inset-x-0 bottom-4 z-[var(--z-raised)] flex justify-center sm:hidden">{bottom}</div>
+
+      {corner && mode === "view" && !showingFlow && !bare ? (
+        <div className="absolute bottom-10 right-10 z-[var(--z-raised)] hidden sm:block">{corner}</div>
+      ) : null}
+
+      {/* On a phone, how it is looked at and the comments sit under the prototype, centred. */}
+      {mode === "view" && url && !showingFlow ? (
+        <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2 sm:hidden">
+          {lookControl}
+          {pinButtons}
+        </div>
       ) : null}
 
       {(showingFlow || (canvasKey && warmKey === canvasKey)) && canvas && addressed ? (

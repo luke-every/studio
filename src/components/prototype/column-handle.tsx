@@ -14,7 +14,21 @@ const CLICK_SLOP = 4;
  * keyboard. Wide screens only, where the
  * column sits beside the prototype.
  */
-export function ColumnHandle({ offset, onDrag, onHide }: { offset: number; onDrag: (offset: number) => void; onHide: () => void }) {
+export function ColumnHandle({
+  offset,
+  onDrag,
+  onHide,
+  edge = "2rem",
+  vertical = "bottom-6 top-2",
+}: {
+  offset: number;
+  onDrag: (offset: number) => void;
+  onHide: () => void;
+  /** How far the column is in from the window's left edge. */
+  edge?: string;
+  /** Where the grip starts and ends down the page, as Tailwind insets. */
+  vertical?: string;
+}) {
   const [dragging, setDragging] = useState(false);
   const start = useRef(0);
 
@@ -51,8 +65,8 @@ export function ColumnHandle({ offset, onDrag, onHide }: { offset: number; onDra
         }
       }}
       // Sits in the gap between the column and the prototype: the page's side margin, then the column's width, and follows the column's edge as it is pulled.
-      style={{ left: `max(2rem, calc(2rem + var(--detail-side-width) + ${offset}px))` }}
-      className="group/handle absolute bottom-6 top-2 z-[var(--z-raised)] hidden w-4 cursor-ew-resize touch-none items-center justify-center outline-none lg:flex"
+      style={{ left: `max(${edge}, calc(${edge} + var(--detail-side-width) + ${offset}px))` }}
+      className={`group/handle absolute ${vertical} z-[var(--z-raised)] hidden w-4 cursor-ew-resize touch-none items-center justify-center outline-none lg:flex`}
     >
       <span className="h-12 w-1 rounded-[var(--r-full)] bg-foreground-muted opacity-0 transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] group-hover/handle:opacity-100 group-focus-visible/handle:opacity-100 group-data-[dragging]/handle:opacity-100" />
     </div>
