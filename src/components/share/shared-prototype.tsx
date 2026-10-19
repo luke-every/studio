@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { SharedCommentsContext } from "@/components/prototype/shared-comments";
 import { ColumnHandle, RevealTab } from "@/components/prototype/column-handle";
@@ -138,7 +138,7 @@ function Shared({
   if (phone) {
     return (
       <>
-        <iframe src={address} title={`${name} ${version.label}`} className="fixed inset-0 block h-lvh w-full border-0 bg-surface" />
+        <GrowingFrame src={address} title={`${name} ${version.label}`} />
         <IconButton onClick={() => setAbout(true)} className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[var(--z-raised)] shadow-floating">
           About
         </IconButton>
@@ -212,6 +212,48 @@ function Shared({
         }}
       />
     </div>
+  );
+}
+
+/**
+ * The prototype as tall as its own content, so the page scrolls rather than
+ * the frame. Safari only slides its bars away and draws the page beneath them
+ * when the document scrolls, as it does when a prototype is opened directly.
+ */
+function GrowingFrame({ src, title }: { src: string; title: string }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState<number>();
+
+  useEffect(() => {
+    const el = frame.current;
+    let watch: ResizeObserver | undefined;
+    const attach = () => {
+      const doc = el?.contentDocument;
+      if (!doc?.documentElement) return;
+      watch?.disconnect();
+      const measure = () => setHeight(Math.max(doc.documentElement.scrollHeight, window.innerHeight));
+      watch = new ResizeObserver(measure);
+      watch.observe(doc.documentElement);
+      watch.observe(doc.body);
+      measure();
+    };
+    el?.addEventListener("load", attach);
+    attach();
+    return () => {
+      el?.removeEventListener("load", attach);
+      watch?.disconnect();
+    };
+  }, [src]);
+
+  return (
+    <iframe
+      ref={frame}
+      src={src}
+      title={title}
+      scrolling="no"
+      style={{ height: height ?? "100dvh" }}
+      className="block w-full border-0 bg-surface"
+    />
   );
 }
 

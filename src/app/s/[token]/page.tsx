@@ -1,4 +1,3 @@
-import type { Viewport } from "next";
 import { notFound } from "next/navigation";
 
 import { SharedPrototype } from "@/components/share/shared-prototype";
@@ -20,9 +19,6 @@ async function shared(token: string) {
   const version = prototype?.versions.find((item) => item.key === named.key);
   return prototype && version?.url ? { prototype, version } : null;
 }
-
-/** Lets the prototype run edge to edge on a phone, under Safari's bars, as it does when opened directly. */
-export const viewport: Viewport = { colorScheme: "light dark", viewportFit: "cover" };
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const found = await shared((await params).token);
