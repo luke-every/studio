@@ -138,8 +138,8 @@ function Shared({
   if (phone) {
     return (
       <>
-        <iframe src={address} title={`${name} ${version.label}`} className="block h-dvh w-full border-0 bg-surface" />
-        <IconButton onClick={() => setAbout(true)} className="fixed right-3 top-3 z-[var(--z-raised)] shadow-floating">
+        <iframe src={address} title={`${name} ${version.label}`} className="fixed inset-0 block h-lvh w-full border-0 bg-surface" />
+        <IconButton onClick={() => setAbout(true)} className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[var(--z-raised)] shadow-floating">
           About
         </IconButton>
         <AboutSheet open={about} onClose={() => setAbout(false)} label={`About ${name}`}>
