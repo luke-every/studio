@@ -449,24 +449,6 @@ async function previousFlow(document: RegistryDocument, slug: string) {
   }
 }
 
-/** The controls of the newest earlier version that has any (last 6 looked at), so /push can carry them forward. */
-async function previousControls(document: RegistryDocument, slug: string) {
-  const newestFirst = document.versions
-    .filter((item) => item.prototypeSlug === slug && item.version)
-    .sort((a, b) => compareVersions(b.label ?? b.version, a.label ?? a.version))
-    .slice(0, 6);
-  for (const earlier of newestFirst) {
-    try {
-      const file = await fetchPrototypeFile(slug, versionSegment(earlier.version), ["studio.json"], null);
-      const controls = file ? ((await file.json()) as { controls?: unknown[] }).controls : null;
-      if (Array.isArray(controls) && controls.length) return { version: earlier.label ?? earlier.version, controls };
-    } catch {
-      // An unreadable studio.json counts as having none.
-    }
-  }
-  return null;
-}
-
 /**
  * The first half of /push: which version this will be, and where its files
  * go. Nothing is written — /push commits the files to the content
@@ -490,13 +472,7 @@ export async function reserveVersion(input: {
     planned = plan(document, input);
   }
   const { slug, version } = planned;
-  return {
-    slug,
-    version,
-    prefix: versionPrefix(slug, version),
-    previousFlow: await previousFlow(document, slug),
-    previousControls: await previousControls(document, slug),
-  };
+  return { slug, version, prefix: versionPrefix(slug, version), previousFlow: await previousFlow(document, slug) };
 }
 
 /**

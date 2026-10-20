@@ -50,9 +50,8 @@ multi-screen prototype, or this session changed its screens or navigation.
 Otherwise skip it.
 
 **Controls:** switchable states, variants or scenarios belong in studio
-controls, and the script carries the previous version's forward
-(`--no-controls` drops them). Read the "Controls" section of `FLOW.md` only if
-this prototype has such switches.
+controls, kept in each version's own `studio.json`. Read the "Controls" section
+of `FLOW.md` only if this prototype has such switches.
 
 ## 2. Write the notes
 

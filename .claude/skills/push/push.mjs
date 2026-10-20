@@ -20,7 +20,7 @@
  *     --title "Tighter results layout" --changes "Cut the second card." \
  *     [--entry index.html] [--slug quiz-results] [--team acquisition] \
  *     [--project some-project] [--description "..."] [--version v0.5] [--small] [--figma <url>] [--notion <url>] \
- *     [--flow flow.json | --no-flow] [--no-controls]
+ *     [--flow flow.json | --no-flow]
  *
  * Studio address and password come from ~/.claude/prototype-studio.json
  * unless --studio-url / --studio-password override them.
@@ -292,8 +292,8 @@ if (appMode) {
   }));
 }
 
-// Controls (studio.json `controls`): the folder's own always win; otherwise the previous version's are carried
-// forward, so adding a flow or rebuilding can't silently drop them. Merged into the uploaded studio.json like the flow.
+// Controls (studio.json `controls`): checked before anything is uploaded. They belong to each version and are never
+// carried over from an earlier one: a version that drops a control meant to.
 function validateControls(controls) {
   const problems = [];
   const ids = new Set();
@@ -336,22 +336,19 @@ const writeManifest = (manifest) => {
 let controlsLine = "Controls: none";
 {
   const own = readManifest().controls;
-  let controls = Array.isArray(own) && own.length ? own : null;
-  const carriedControls = !controls && !args.includes("--no-controls") && start.previousControls?.controls?.length ? start.previousControls : null;
-  if (carriedControls) controls = carriedControls.controls;
+  const controls = Array.isArray(own) && own.length ? own : null;
   if (controls) {
     const problems = validateControls(controls);
     if (problems.length) {
       console.error(`Nothing was pushed: the controls have a problem: ${problems.join("; ")}.`);
       process.exit(1);
     }
-    if (carriedControls) writeManifest({ ...readManifest(), controls });
     const sources = files.filter((file) => /\.(m?js|html)$/.test(file.path) && file.size < 5_000_000).map((file) => readFileSync(file.filePath, "utf8"));
     for (const control of controls) {
       const param = control.param ?? control.id;
       if (!sources.some((text) => text.includes(param))) console.warn(`Heads up: nothing in the files reads ?${param}=, so that control would do nothing.`);
     }
-    controlsLine = `Controls: ${controls.length}${carriedControls ? ` (carried over from ${carriedControls.version})` : ""}`;
+    controlsLine = `Controls: ${controls.length}`;
   }
 }
 
