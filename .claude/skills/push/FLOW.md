@@ -40,8 +40,7 @@ it says none and the prototype has several screens, write one and push again.
 
 A prototype with switchable states, variants or scenarios exposes them as studio
 controls in `public/studio.json` (the folder's `studio.json` for plain folders).
-**Edit that file, never replace it**: it also holds the flow. Controls are not
-carried over from an earlier version, so each version's file says what it offers.
+**Edit that file, never replace it**: it also holds the flow.
 
 ```json
 { "controls": [
