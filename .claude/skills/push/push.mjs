@@ -27,7 +27,7 @@
  */
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 
@@ -181,6 +181,48 @@ function walk(dir, skip = SKIP_DIRS) {
   return found;
 }
 
+// An app that wasn't started with /newprototype doesn't know about the studio's address. Rather than ask anyone to
+// edit their code, the build runs behind a small wrapper config: the app's own next.config is moved aside, a
+// pass-through wrapper takes its place (it does nothing unless STUDIO_BASE_PATH is set, so `next dev` still works),
+// and the original is put back the moment the build ends. Apps whose config already reads STUDIO_BASE_PATH are left alone.
+const CONFIG_EXTENSIONS = ["ts", "mjs", "js", "cjs"];
+function studioConfig(dir) {
+  const configs = CONFIG_EXTENSIONS.map((ext) => ({ ext, path: join(dir, `next.config.${ext}`), aside: join(dir, `next.config.studio-original.${ext}`) }));
+  // A push that was killed mid-build leaves the original moved aside: put it back first.
+  for (const config of configs) {
+    if (existsSync(config.aside)) {
+      rmSync(config.path.replace(/\.[^.]+$/, ".mjs"), { force: true });
+      rmSync(config.path, { force: true });
+      renameSync(config.aside, config.path);
+    }
+  }
+  const original = configs.find((config) => existsSync(config.path));
+  if (original && readFileSync(original.path, "utf8").includes("STUDIO_BASE_PATH")) return { apply() {}, restore() {} };
+  const wrapperExt = original?.ext === "ts" ? "ts" : "mjs";
+  const wrapperPath = join(dir, `next.config.${wrapperExt}`);
+  const importPath = original ? `./next.config.studio-original${original.ext === "ts" ? "" : `.${original.ext}`}` : null;
+  const typed = wrapperExt === "ts";
+  const wrapper = `// Written by /push for the studio build and removed straight after.
+${typed ? 'import type { NextConfig } from "next";\n' : ""}${importPath ? `import original from "${importPath}";` : `const original${typed ? ": NextConfig" : ""} = {};`}
+export default async (...args${typed ? ": unknown[]" : ""})${typed ? ": Promise<NextConfig>" : ""} => {
+${typed ? "  const source = original as unknown as NextConfig | ((...rest: unknown[]) => NextConfig | Promise<NextConfig>);\n" : ""}  const base${typed ? ": NextConfig" : ""} = typeof ${typed ? "source" : "original"} === "function" ? await ${typed ? "source" : "original"}(...args) : (${typed ? "source" : "original"} ?? {});
+  const studioBase = process.env.STUDIO_BASE_PATH;
+  if (!studioBase) return base;
+  return { ...base, output: "export", basePath: studioBase, distDir: ".next", images: { ...base.images, unoptimized: true } };
+};
+`;
+  return {
+    apply() {
+      if (original) renameSync(original.path, original.aside);
+      writeFileSync(wrapperPath, wrapper);
+    },
+    restore() {
+      rmSync(wrapperPath, { force: true });
+      if (original) renameSync(original.aside, original.path);
+    },
+  };
+}
+
 let files;
 if (appMode) {
   const usesPnpm = existsSync(join(root, "pnpm-lock.yaml")) || String(packageJson.packageManager ?? "").startsWith("pnpm");
@@ -204,7 +246,14 @@ if (appMode) {
   const out = join(root, "out");
   rmSync(out, { recursive: true, force: true });
   console.log(`Building for /p/${start.slug}/${segment} ...`);
-  const built = run(usesPnpm ? `${pnpm} run build` : "npm run build", { ...process.env, STUDIO_BASE_PATH: `/p/${start.slug}/${segment}` });
+  const config = studioConfig(root);
+  config.apply();
+  let built;
+  try {
+    built = run(usesPnpm ? `${pnpm} run build` : "npm run build", { ...process.env, STUDIO_BASE_PATH: `/p/${start.slug}/${segment}` });
+  } finally {
+    config.restore();
+  }
   if (!built.ok || !existsSync(join(out, "index.html"))) {
     console.error(
       `The build didn't produce a site, so nothing was pushed. Studio prototypes are static: API routes, server actions and middleware can't be part of one. Last lines of the build:\n${built.tail}`,
@@ -212,6 +261,24 @@ if (appMode) {
     process.exit(1);
   }
   lap("build");
+  // Paths that start with "/" ignore the studio's address, so they load from the wrong place. Next's own links and
+  // <Image> add it; a plain <img src="/logo.png"> or CSS url(/bg.png) doesn't. Say so once, naming a few.
+  {
+    const base = `/p/${start.slug}/${segment}/`;
+    const bare = new Set();
+    for (const file of walk(out, new Set())) {
+      if (!/\.(html|css)$/.test(file) || statSync(file).size > 2_000_000) continue;
+      const text = readFileSync(file, "utf8");
+      for (const match of text.matchAll(/(?:<(?:img|source|video|audio)\b[^>]*?\bsrc|url\()\s*=?\s*["']?(\/(?!\/)[^"'\s)>]*)/g)) {
+        if (!match[1].startsWith(base) && !match[1].startsWith("/p/")) bare.add(match[1]);
+      }
+    }
+    if (bare.size) {
+      console.warn(
+        `Heads up: ${bare.size} file path(s) start with "/" (${[...bare].slice(0, 3).join(", ")}${bare.size > 3 ? ", …" : ""}). Those ignore the studio's address, so they won't load there. Use relative paths, or the framework's own image and link components.`,
+      );
+    }
+  }
   entryPath = join(out, "index.html");
   // The built site is the version; the app's own source rides along in _source/ so engineers can read it all.
   const site = walk(out, new Set()).map((filePath) => ({ filePath, path: relative(out, filePath).split(sep).join("/"), size: statSync(filePath).size }));

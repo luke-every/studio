@@ -29,6 +29,10 @@ files to check the upload; trust the script's output.
   `_source/` for engineers. Studio prototypes are static, so API routes,
   server actions and middleware can't be part of one: the script stops on them
   at once and says which files. Fetching data from the browser is fine.
+  It doesn't matter how the app was started: if its `next.config` doesn't know
+  about the studio, the script builds behind a temporary wrapper and puts the
+  person's config back untouched. Don't edit their config or code to make a
+  build work.
 - **Any other build:** build it yourself and push the output folder.
 
 The prototype's name decides whether it is new or the next version of one the
@@ -88,6 +92,10 @@ chose in your closing line.
 Only if the person asks for a specific number ("push this as v1.0"), add
 `--version v1.0`. It must look like `v0.8` and be one that prototype doesn't
 already have. Never pass it to "fix" an error.
+
+If it prints a "Heads up" about file paths starting with "/", tell the person in one
+line that those images won't load in the studio and the fix is a relative path or
+the framework's image component; don't change their code unless they ask.
 
 If it prints a "Heads up" about the prototype adding the time to its own file
 addresses, tell the person in one line: it makes the prototype slow to open in
