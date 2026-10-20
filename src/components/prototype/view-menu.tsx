@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
-import { MotionPopover } from "@/components/motion";
+import { canHover, MotionPopover } from "@/components/motion";
 import { ChevronDownIcon, DesktopIcon, FitIcon, LargePhoneIcon, MinusIcon, PlusIcon, SmallPhoneIcon, TabletIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { DEVICES, ZOOMS, type Device } from "@/lib/phone";
@@ -56,10 +56,11 @@ export function ViewMenu({
     <MotionPopover
       open={open}
       onClose={() => setOpen(false)}
+      onOpen={() => setOpen(true)}
       align="center"
       className="w-72"
       trigger={
-        <IconButton onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open}>
+        <IconButton onClick={() => setOpen((value) => canHover() || !value)} aria-haspopup="menu" aria-expanded={open}>
           <span>
             {device.name} · {percent(now)}
           </span>

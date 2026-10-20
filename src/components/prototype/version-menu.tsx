@@ -3,7 +3,7 @@
 import { barControl, IconButton } from "@/components/ui/button";
 import { useState } from "react";
 
-import { MotionPopover } from "@/components/motion";
+import { canHover, MotionPopover } from "@/components/motion";
 import { ChevronDownIcon } from "@/components/shell/nav-icons";
 import { menuItem } from "@/components/ui/menu-item";
 import { Stamp } from "@/components/ui/stamp";
@@ -38,10 +38,11 @@ export function VersionMenu({
     <MotionPopover
       open={open}
       onClose={() => setOpen(false)}
+      onOpen={() => setOpen(true)}
       align="start"
       className="w-64"
       trigger={
-        <IconButton onClick={() => setOpen((value) => !value)} aria-haspopup="listbox" aria-expanded={open}>
+        <IconButton onClick={() => setOpen((value) => canHover() || !value)} aria-haspopup="listbox" aria-expanded={open}>
           {label}
         </IconButton>
       }

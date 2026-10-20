@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 
+/** True where a pointer can hover (a mouse or trackpad), so a click on a hover-opened popover should not shut it again. */
+export const canHover = () => typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
+
 type Align = "start" | "center" | "end";
 
 /**
@@ -13,10 +16,15 @@ type Align = "start" | "center" | "end";
  *
  * Dismissal (outside pointer, escape) lives here too, because every popover
  * needs it and none of them should reimplement it.
+ *
+ * With `onOpen` the popover also opens while a mouse hovers it and closes a
+ * moment after the mouse leaves (long enough to cross the small gap to the
+ * layer). Touch is unaffected: it still taps to open.
  */
 export function MotionPopover({
   open,
   onClose,
+  onOpen,
   trigger,
   children,
   align = "end",
@@ -26,6 +34,8 @@ export function MotionPopover({
 }: {
   open: boolean;
   onClose: () => void;
+  /** Opens on hover when given. */
+  onOpen?: () => void;
   /** The control that owns this popover. Rendered as the anchor. */
   trigger: ReactNode;
   children: ReactNode;
@@ -37,6 +47,8 @@ export function MotionPopover({
   className?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
+  const leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(leaving.current), []);
 
   useEffect(() => {
     if (!open) return;
@@ -55,7 +67,27 @@ export function MotionPopover({
   }, [open, onClose]);
 
   return (
-    <div ref={container} className={rootClassName}>
+    <div
+      ref={container}
+      className={rootClassName}
+      onPointerEnter={
+        onOpen
+          ? (event) => {
+              if (event.pointerType !== "mouse") return;
+              clearTimeout(leaving.current);
+              onOpen();
+            }
+          : undefined
+      }
+      onPointerLeave={
+        onOpen
+          ? (event) => {
+              if (event.pointerType !== "mouse") return;
+              leaving.current = setTimeout(onClose, 200);
+            }
+          : undefined
+      }
+    >
       {trigger}
 
       {open ? (
