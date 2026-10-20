@@ -26,9 +26,9 @@ files to check the upload; trust the script's output.
 - **A Next app** (`package.json` with `next`, no `index.html`): push the app's
   own folder. The script installs, builds it pinned to the version's address,
   so it behaves exactly as in `next dev`, and saves the source beside it in
-  `_source/` for engineers. If the build stops, its error names the file:
-  studio prototypes are static, so API routes, server actions and middleware
-  can't be part of one. Fetching data from the browser is fine.
+  `_source/` for engineers. Studio prototypes are static, so API routes,
+  server actions and middleware can't be part of one: the script stops on them
+  at once and says which files. Fetching data from the browser is fine.
 - **Any other build:** build it yourself and push the output folder.
 
 The prototype's name decides whether it is new or the next version of one the
@@ -92,10 +92,17 @@ If it prints a "Heads up" about the prototype adding the time to its own file
 addresses, tell the person in one line: it makes the prototype slow to open in
 the studio, and the fix is to pin that value to a fixed string.
 
+## If the script stops
+
+Tell the person in a line or two what it said, and ask what they want to do.
+**Do not** edit their code, open a browser, run builds or checks, or try
+another approach to get past it. Those are their decisions, and each costs
+minutes.
+
 ## 4. Tell them where it went
 
 One line: the version number and the link the script printed, plus its `Flow:`
-line. Nothing more.
+and `Time:` lines. Nothing more.
 
 ## Never
 

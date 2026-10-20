@@ -37,6 +37,15 @@ const flag = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
+// One line of timings at the end, so a slow push shows where the time went.
+const laps = [];
+let lapAt = Date.now();
+const lap = (label) => {
+  const now = Date.now();
+  laps.push(`${label} ${((now - lapAt) / 1000).toFixed(1)}s`);
+  lapAt = now;
+};
+
 const dirArg = flag("dir");
 const name = flag("name");
 if (!dirArg || !name) {
@@ -66,6 +75,43 @@ if (!existsSync(root) || !statSync(root).isDirectory()) {
 const packagePath = join(root, "package.json");
 const packageJson = existsSync(packagePath) ? JSON.parse(readFileSync(packagePath, "utf8")) : null;
 const appMode = Boolean(packageJson && { ...packageJson.dependencies, ...packageJson.devDependencies }.next) && !flag("entry") && !existsSync(join(root, "index.html"));
+
+// Studio prototypes are static exports, so anything that needs a server stops here in a moment, not after a build.
+// A route handler marked force-static is fine: it is built to a file.
+function serverFeatures(dir) {
+  const found = [];
+  const skip = new Set(["node_modules", ".next", ".git", "out", "dist", "build"]);
+  const visit = (current) => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (entry.name.startsWith(".") || skip.has(entry.name)) continue;
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) {
+        visit(full);
+        continue;
+      }
+      const rel = relative(dir, full).split(sep).join("/");
+      if (!/\.(m?[jt]sx?)$/.test(entry.name)) continue;
+      if (/^(src\/)?(middleware|proxy)\.[jt]s$/.test(rel)) found.push(`${rel} (middleware)`);
+      else if (statSync(full).size < 1_000_000) {
+        const text = readFileSync(full, "utf8");
+        if (/(^|\/)app\/.*\/route\.[jt]sx?$|^(src\/)?app\/route\.[jt]sx?$/.test(rel) && !text.includes("force-static")) found.push(`${rel} (API route)`);
+        else if (/^["']use server["']/m.test(text)) found.push(`${rel} (server action)`);
+      }
+    }
+  };
+  for (const folder of ["src", "app"]) if (existsSync(join(dir, folder))) visit(join(dir, folder));
+  for (const file of ["middleware.ts", "middleware.js", "proxy.ts", "proxy.js"]) if (existsSync(join(dir, file))) found.push(`${file} (middleware)`);
+  return [...new Set(found)];
+}
+if (appMode) {
+  const blockers = serverFeatures(root);
+  if (blockers.length) {
+    console.error(
+      `Nothing was pushed: studio prototypes are static, and this app uses ${blockers.slice(0, 5).join(", ")}${blockers.length > 5 ? ` and ${blockers.length - 5} more` : ""}. Fetch from the browser instead.`,
+    );
+    process.exit(1);
+  }
+}
 
 const entryRel = flag("entry") ?? "index.html";
 let entryPath = resolve(root, entryRel);
@@ -113,6 +159,7 @@ if (flag("version") && start.version !== flag("version")) {
   console.error(`The studio chose ${start.version}, not ${flag("version")}. It needs updating before it will take a version number.`);
   process.exit(1);
 }
+lap("studio");
 const { owner, repo, branch, token } = start.repository;
 const prefix = start.prefix;
 
@@ -138,30 +185,33 @@ let files;
 if (appMode) {
   const usesPnpm = existsSync(join(root, "pnpm-lock.yaml")) || String(packageJson.packageManager ?? "").startsWith("pnpm");
   const pnpm = spawnSync("pnpm", ["--version"]).status === 0 ? "pnpm" : `npx -y pnpm@${String(packageJson.packageManager ?? "").replace(/^pnpm@/, "") || "10"}`;
+  // Output is captured and only its tail is shown on failure: a full build log is thousands of tokens nobody reads.
+  const run = (command, env = process.env) => {
+    const result = spawnSync(command, { cwd: root, shell: true, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, env });
+    const tail = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n").slice(-20).join("\n");
+    return { ok: result.status === 0, tail };
+  };
   if (!existsSync(join(root, "node_modules"))) {
     console.log("Installing dependencies ...");
-    const installed = spawnSync(usesPnpm ? `${pnpm} install --silent` : "npm install --silent", { cwd: root, shell: true, stdio: "inherit" });
-    if (installed.status !== 0) {
-      console.error("Installing the app's dependencies failed, so nothing was pushed.");
+    const installed = run(usesPnpm ? `${pnpm} install --silent` : "npm install --silent");
+    if (!installed.ok) {
+      console.error(`Installing the app's dependencies failed, so nothing was pushed.\n${installed.tail}`);
       process.exit(1);
     }
+    lap("install");
   }
   const segment = start.version.replace(/\./g, "-");
   const out = join(root, "out");
   rmSync(out, { recursive: true, force: true });
   console.log(`Building for /p/${start.slug}/${segment} ...`);
-  const built = spawnSync(usesPnpm ? `${pnpm} run build` : "npm run build", {
-    cwd: root,
-    shell: true,
-    stdio: "inherit",
-    env: { ...process.env, STUDIO_BASE_PATH: `/p/${start.slug}/${segment}` },
-  });
-  if (built.status !== 0 || !existsSync(join(out, "index.html"))) {
+  const built = run(usesPnpm ? `${pnpm} run build` : "npm run build", { ...process.env, STUDIO_BASE_PATH: `/p/${start.slug}/${segment}` });
+  if (!built.ok || !existsSync(join(out, "index.html"))) {
     console.error(
-      "The build didn't produce a site, so nothing was pushed. Studio prototypes are static: API routes, server actions and middleware can't be part of one. If the build error names a file, that is the one to change.",
+      `The build didn't produce a site, so nothing was pushed. Studio prototypes are static: API routes, server actions and middleware can't be part of one. Last lines of the build:\n${built.tail}`,
     );
     process.exit(1);
   }
+  lap("build");
   entryPath = join(out, "index.html");
   // The built site is the version; the app's own source rides along in _source/ so engineers can read it all.
   const site = walk(out, new Set()).map((filePath) => ({ filePath, path: relative(out, filePath).split(sep).join("/"), size: statSync(filePath).size }));
@@ -249,6 +299,7 @@ if (manifest) {
   }
 }
 const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+lap("scan");
 
 async function github(path, init = {}) {
   for (let attempt = 1; ; attempt++) {
@@ -296,6 +347,7 @@ const known = new Set();
   for (const entry of listing.tree) if (entry.type === "blob") known.add(entry.sha);
   if (listing.truncated) console.error("The repository listing was cut short, so some unchanged files may be uploaded again.");
 }
+lap("listing");
 
 const tree = [];
 let uploaded = 0;
@@ -316,11 +368,13 @@ async function uploadNext() {
     }
     tree.push({ path: `${prefix}/${file.path}`, mode: "100644", type: "blob", sha });
     uploaded += 1;
-    process.stdout.write(`\rUploading ${uploaded}/${files.length}`);
+    // The counter redraws a line on a terminal; captured output would keep every redraw.
+    if (process.stdout.isTTY) process.stdout.write(`\rUploading ${uploaded}/${files.length}`);
   }
 }
 await Promise.all(Array.from({ length: 6 }, uploadNext));
-process.stdout.write("\n");
+if (process.stdout.isTTY) process.stdout.write("\n");
+lap("upload");
 
 // Someone else pushing at the same moment moves the branch; build on top
 // of wherever it is now and try again.
@@ -351,6 +405,8 @@ for (let attempt = 1; !commitSha; attempt++) {
   }
 }
 
+lap("commit");
+
 // 3. Tell the studio.
 const notes = { name, version: start.version, commit: commitSha, slug: start.slug };
 for (const field of ["team", "project", "description", "author", "title", "changes", "figma", "notion"]) {
@@ -360,10 +416,12 @@ for (const field of ["team", "project", "description", "author", "title", "chang
 if (!notes.author) notes.author = spawnSync("git", ["config", "user.name"], { encoding: "utf8" }).stdout.trim() || "Someone";
 
 const result = await studio("/api/push", notes);
+lap("record");
 
 console.log(`Uploaded ${files.length - reused} new file(s), ${reused} unchanged, ${(totalBytes / 1024 / 1024).toFixed(1)} MB total`);
 console.log(`Pushed ${result.slug} ${result.version}`);
 console.log(result.studio);
+console.log(`Time: ${laps.join(" · ")}`);
 console.log(
   flowScreens
     ? `Flow: ${flowScreens} screens`
