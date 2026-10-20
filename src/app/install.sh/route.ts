@@ -37,6 +37,7 @@ fi
 
 mkdir -p "$SKILL_DIR"
 curl -fsSL "$STUDIO/skill/push/SKILL.md" -o "$SKILL_DIR/SKILL.md"
+curl -fsSL "$STUDIO/skill/push/FLOW.md" -o "$SKILL_DIR/FLOW.md"
 curl -fsSL "$STUDIO/skill/push/push.mjs" -o "$SKILL_DIR/push.mjs"
 
 # Keep the password from last time, if it was for this studio.

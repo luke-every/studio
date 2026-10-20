@@ -26,7 +26,8 @@
  * unless --studio-url / --studio-password override them.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 
@@ -60,24 +61,72 @@ if (!existsSync(root) || !statSync(root).isDirectory()) {
   process.exit(1);
 }
 
+// A Next app (a package.json with next in it, and no index.html) is built here, after the studio has said which
+// version it will be: the build is pinned to that version's address, so it runs as it does in `next dev`.
+const packagePath = join(root, "package.json");
+const packageJson = existsSync(packagePath) ? JSON.parse(readFileSync(packagePath, "utf8")) : null;
+const appMode = Boolean(packageJson && { ...packageJson.dependencies, ...packageJson.devDependencies }.next) && !flag("entry") && !existsSync(join(root, "index.html"));
+
 const entryRel = flag("entry") ?? "index.html";
-const entryPath = resolve(root, entryRel);
-if (!existsSync(entryPath)) {
+let entryPath = resolve(root, entryRel);
+if (!appMode && !existsSync(entryPath)) {
   console.error(`No entry file at ${entryPath}. Pass --entry if it isn't index.html.`);
   process.exit(1);
 }
+
+async function studio(path, body, { soft = false } = {}) {
+  const response = await fetch(new URL(path, studioUrl), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(studioPassword ? { "x-studio-password": studioPassword } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.error) {
+    const error = result.error ?? `The studio answered ${response.status}.`;
+    if (soft) return { error };
+    console.error(error);
+    process.exit(1);
+  }
+  return result;
+}
+
+// 1. Which version this becomes, and where it goes.
+// The studio works out from the name whether this is new or the next version of something it has, so there is no lookup first.
+// Nothing is written and nothing is built until this answers.
+const start = await studio("/api/push/start", { name, slug: flag("slug"), team: flag("team"), version: flag("version"), small: args.includes("--small") }, { soft: true });
+if (start.error) {
+  console.error(start.error);
+  if (/needs a team/.test(start.error)) {
+    const known = await fetch(new URL("/api/prototypes", studioUrl), { headers: studioPassword ? { "x-studio-password": studioPassword } : {} })
+      .then((response) => response.json())
+      .catch(() => null);
+    if (known?.teams) console.error(`Teams: ${known.teams.map((team) => team.slug).join(", ")}. Run again with --team <one of them>.`);
+  }
+  process.exit(1);
+}
+// A studio that predates --version ignores it and picks its own number;
+// better to stop than to save the files under a number nobody asked for.
+if (flag("version") && start.version !== flag("version")) {
+  console.error(`The studio chose ${start.version}, not ${flag("version")}. It needs updating before it will take a version number.`);
+  process.exit(1);
+}
+const { owner, repo, branch, token } = start.repository;
+const prefix = start.prefix;
 
 const SKIP_DIRS = new Set(["node_modules", ".git", ".next", ".vercel", "dist", "build"]);
 // GitHub refuses any single file over 100MB.
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
-function walk(dir) {
+function walk(dir, skip = SKIP_DIRS) {
   const found = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
+    if (entry.name.startsWith(".") || skip.has(entry.name)) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      found.push(...walk(full));
+      found.push(...walk(full, skip));
     } else if (entry.isFile()) {
       found.push(full);
     }
@@ -85,11 +134,46 @@ function walk(dir) {
   return found;
 }
 
-const files = walk(root).map((filePath) => ({
-  filePath,
-  path: filePath === entryPath ? "index.html" : relative(root, filePath).split(sep).join("/"),
-  size: statSync(filePath).size,
-}));
+let files;
+if (appMode) {
+  const usesPnpm = existsSync(join(root, "pnpm-lock.yaml")) || String(packageJson.packageManager ?? "").startsWith("pnpm");
+  const pnpm = spawnSync("pnpm", ["--version"]).status === 0 ? "pnpm" : `npx -y pnpm@${String(packageJson.packageManager ?? "").replace(/^pnpm@/, "") || "10"}`;
+  if (!existsSync(join(root, "node_modules"))) {
+    console.log("Installing dependencies ...");
+    const installed = spawnSync(usesPnpm ? `${pnpm} install --silent` : "npm install --silent", { cwd: root, shell: true, stdio: "inherit" });
+    if (installed.status !== 0) {
+      console.error("Installing the app's dependencies failed, so nothing was pushed.");
+      process.exit(1);
+    }
+  }
+  const segment = start.version.replace(/\./g, "-");
+  const out = join(root, "out");
+  rmSync(out, { recursive: true, force: true });
+  console.log(`Building for /p/${start.slug}/${segment} ...`);
+  const built = spawnSync(usesPnpm ? `${pnpm} run build` : "npm run build", {
+    cwd: root,
+    shell: true,
+    stdio: "inherit",
+    env: { ...process.env, STUDIO_BASE_PATH: `/p/${start.slug}/${segment}` },
+  });
+  if (built.status !== 0 || !existsSync(join(out, "index.html"))) {
+    console.error(
+      "The build didn't produce a site, so nothing was pushed. Studio prototypes are static: API routes, server actions and middleware can't be part of one. If the build error names a file, that is the one to change.",
+    );
+    process.exit(1);
+  }
+  entryPath = join(out, "index.html");
+  // The built site is the version; the app's own source rides along in _source/ so engineers can read it all.
+  const site = walk(out, new Set()).map((filePath) => ({ filePath, path: relative(out, filePath).split(sep).join("/"), size: statSync(filePath).size }));
+  const source = walk(root, new Set([...SKIP_DIRS, "out"])).map((filePath) => ({ filePath, path: `_source/${relative(root, filePath).split(sep).join("/")}`, size: statSync(filePath).size }));
+  files = [...site, ...source];
+} else {
+  files = walk(root).map((filePath) => ({
+    filePath,
+    path: filePath === entryPath ? "index.html" : relative(root, filePath).split(sep).join("/"),
+    size: statSync(filePath).size,
+  }));
+}
 
 // --flow: the prototype's flow, kept as a file in its own source and merged into the
 // uploaded studio.json (beside any controls), so a build can't wipe it.
@@ -165,34 +249,6 @@ if (manifest) {
   }
 }
 const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-
-async function studio(path, body) {
-  const response = await fetch(new URL(path, studioUrl), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(studioPassword ? { "x-studio-password": studioPassword } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || result.error) {
-    console.error(result.error ?? `The studio answered ${response.status}.`);
-    process.exit(1);
-  }
-  return result;
-}
-
-// 1. Which version this becomes, and where it goes.
-const start = await studio("/api/push/start", { name, slug: flag("slug"), team: flag("team"), version: flag("version"), small: args.includes("--small") });
-// A studio that predates --version ignores it and picks its own number;
-// better to stop than to save the files under a number nobody asked for.
-if (flag("version") && start.version !== flag("version")) {
-  console.error(`The studio chose ${start.version}, not ${flag("version")}. It needs updating before it will take a version number.`);
-  process.exit(1);
-}
-const { owner, repo, branch, token } = start.repository;
-const prefix = start.prefix;
 
 async function github(path, init = {}) {
   for (let attempt = 1; ; attempt++) {
@@ -301,7 +357,7 @@ for (const field of ["team", "project", "description", "author", "title", "chang
   const value = flag(field);
   if (value) notes[field] = value;
 }
-if (!notes.author) notes.author = "Someone";
+if (!notes.author) notes.author = spawnSync("git", ["config", "user.name"], { encoding: "utf8" }).stdout.trim() || "Someone";
 
 const result = await studio("/api/push", notes);
 

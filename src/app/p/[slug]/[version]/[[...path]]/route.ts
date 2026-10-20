@@ -35,10 +35,17 @@ export async function GET(
   { params }: { params: Promise<{ slug: string; version: string; path?: string[] }> },
 ) {
   const { slug, version, path = [] } = await params;
-  const relativePath = path.join("/") || "index.html";
+  let relativePath = path.join("/") || "index.html";
   const range = request.headers.get("range");
 
   let upstream = await fetchPrototypeFile(slug, version, path, range);
+  // A page of an exported app: /about is about/index.html (or about.html).
+  if (!upstream && path.length && !path[path.length - 1].includes(".")) {
+    upstream =
+      (await fetchPrototypeFile(slug, version, [...path, "index.html"], range)) ??
+      (await fetchPrototypeFile(slug, version, [...path.slice(0, -1), `${path[path.length - 1]}.html`], range));
+    if (upstream) relativePath += ".html";
+  }
   // A miss only needs the registry for a version from before the move to
   // GitHub, and a version GitHub holds an index.html for isn't one. Other
   // files of a version are the common miss, so that is checked first.

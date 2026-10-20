@@ -227,7 +227,8 @@ talks — questions and reasoning, not tickets and metadata.
 Run before calling any stage done:
 
 ```
-npm run lint
-npx tsc --noEmit
-npm run build
+npm run check
 ```
+
+It runs lint, `tsc --noEmit` and the build, prints nothing when all three pass,
+and only the failing output when one doesn't.

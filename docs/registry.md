@@ -61,6 +61,12 @@ The token handed out is the content repository's own, behind the studio
 password. That password already authorises writing a prototype, and the
 token is scoped to that one repository, so it grants nothing new.
 
+A Next app is built by the skill, not the studio: once the version is reserved it
+builds a static export pinned to `/p/<slug>/<version>`, commits that as the
+version, and commits the app's source under `_source/` in the same folder.
+The studio only ever serves static files, so a page of an export (`/about`)
+is found as `about/index.html` or `about.html`.
+
 Serving streams the file rather than buffering it — which is what gets a
 file past the same 4.5MB limit on the way out — and passes range requests
 through, which Safari needs to play a video.

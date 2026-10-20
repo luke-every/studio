@@ -4,13 +4,14 @@ import { join } from "node:path";
 /**
  * The /push skill, as files, for the installer to fetch.
  *
- * Only these two, read from the skill's own folder in this repository, so the
+ * Only these three, read from the skill's own folder in this repository, so the
  * studio always hands out the version that matches it. They are the same
  * public code as in the repository; nothing here is secret, which is why the
  * door lets them through to a terminal that has no cookie.
  */
 const FILES: Record<string, string> = {
   "SKILL.md": "text/markdown; charset=utf-8",
+  "FLOW.md": "text/markdown; charset=utf-8",
   "push.mjs": "text/javascript; charset=utf-8",
 };
 
