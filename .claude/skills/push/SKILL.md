@@ -44,14 +44,15 @@ If the script says no studio is configured, the person hasn't run the install
 command yet. Tell them to open the studio, tap "Get set up", and paste the one
 command into Terminal.
 
-**Flow:** the script carries the previous version's flow forward on its own.
+**Flow:** the script carries the previous version's flow forward on its own, as long as its parameters are still read by the files.
 Read `FLOW.md` (next to this file) only if this is the first push of a
 multi-screen prototype, or this session changed its screens or navigation.
 Otherwise skip it.
 
 **Controls:** switchable states, variants or scenarios belong in studio
-controls, and the script carries the previous version's forward
-(`--no-controls` drops them). Read the "Controls" section of `FLOW.md` only if
+controls. If the folder has none, the script carries the previous version's
+forward, only those that still apply (something still reads their parameter);
+`--no-controls` drops them. Read the "Controls" section of `FLOW.md` only if
 this prototype has such switches.
 
 ## 2. Write the notes

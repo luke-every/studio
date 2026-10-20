@@ -333,25 +333,43 @@ const writeManifest = (manifest) => {
   if (existing) Object.assign(existing, { content, size: content.length });
   else files.push({ filePath: join(root, "studio.json"), path: "studio.json", size: content.length, content });
 };
+// Whether anything in the built or source files mentions a URL parameter: the test for "does this still apply".
+let sourceTexts;
+const readsParam = (param) => {
+  sourceTexts ??= files.filter((file) => /\.(m?js|html)$/.test(file.path) && file.size < 5_000_000).map((file) => readFileSync(file.filePath, "utf8"));
+  return sourceTexts.some((text) => text.includes(param));
+};
 let controlsLine = "Controls: none";
 {
   const own = readManifest().controls;
   let controls = Array.isArray(own) && own.length ? own : null;
-  const carriedControls = !controls && !args.includes("--no-controls") && start.previousControls?.controls?.length ? start.previousControls : null;
-  if (carriedControls) controls = carriedControls.controls;
+  // No controls of its own: bring the previous version's forward, but only those that still apply (something still
+  // reads the parameter, and whatever they depend on is still there).
+  let carriedControls = null;
+  if (!controls && start.previousControls?.controls?.length && !args.includes("--no-controls")) {
+    const earlier = start.previousControls.controls;
+    let kept = earlier.filter((control) => readsParam(control.param ?? control.id));
+    while (kept.some((control) => control.when && !kept.some((other) => other.id === control.when.control))) {
+      kept = kept.filter((control) => !control.when || kept.some((other) => other.id === control.when.control));
+    }
+    const dropped = earlier.filter((control) => !kept.includes(control)).map((control) => control.id);
+    if (kept.length) {
+      controls = kept;
+      carriedControls = { version: start.previousControls.version, dropped };
+      writeManifest({ ...readManifest(), controls });
+    } else console.log(`Controls: none (${start.previousControls.version}'s no longer apply: nothing reads ${earlier.map((control) => `?${control.param ?? control.id}=`).join(", ")})`);
+  }
   if (controls) {
     const problems = validateControls(controls);
     if (problems.length) {
       console.error(`Nothing was pushed: the controls have a problem: ${problems.join("; ")}.`);
       process.exit(1);
     }
-    if (carriedControls) writeManifest({ ...readManifest(), controls });
-    const sources = files.filter((file) => /\.(m?js|html)$/.test(file.path) && file.size < 5_000_000).map((file) => readFileSync(file.filePath, "utf8"));
     for (const control of controls) {
       const param = control.param ?? control.id;
-      if (!sources.some((text) => text.includes(param))) console.warn(`Heads up: nothing in the files reads ?${param}=, so that control would do nothing.`);
+      if (!readsParam(param)) console.warn(`Heads up: nothing in the files reads ?${param}=, so that control would do nothing.`);
     }
-    controlsLine = `Controls: ${controls.length}${carriedControls ? ` (carried over from ${carriedControls.version})` : ""}`;
+    controlsLine = `Controls: ${controls.length}${carriedControls ? ` (carried over from ${carriedControls.version}${carriedControls.dropped.length ? `; left out because nothing reads them now: ${carriedControls.dropped.join(", ")}` : ""})` : ""}`;
   }
 }
 
@@ -359,7 +377,15 @@ let controlsLine = "Controls: none";
 // uploaded studio.json (beside any controls), so a build can't wipe it.
 const flowArg = flag("flow");
 // Without --flow, the previous version's flow (sent back by the studio) is carried forward; --no-flow drops it.
-const carried = !flowArg && !args.includes("--no-flow") && start.previousFlow?.flow?.screens?.length ? start.previousFlow : null;
+let carried = !flowArg && !args.includes("--no-flow") && start.previousFlow?.flow?.screens?.length ? start.previousFlow : null;
+// Only if it still applies: every parameter its screens open on must still be read by something.
+if (carried) {
+  const stale = [...new Set(carried.flow.screens.flatMap((screen) => Object.keys(screen.params ?? {})))].filter((key) => !readsParam(key));
+  if (stale.length) {
+    console.log(`Flow: not carried over from ${carried.version} (nothing reads ${stale.map((key) => `?${key}=`).join(", ")} any more)`);
+    carried = null;
+  }
+}
 if (flowArg || carried) {
   let flow = carried?.flow;
   if (flowArg) try {
