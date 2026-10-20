@@ -35,3 +35,32 @@ The script validates the flow: a bad arrow or duplicate id stops the push (fix
 the file, re-run); a "Heads up" that nothing reads a parameter means that screen
 opens on the first one. Put the final `Flow:` line in your closing message. If
 it says none and the prototype has several screens, write one and push again.
+
+## Controls
+
+A prototype with switchable states, variants or scenarios exposes them as studio
+controls in `public/studio.json` (the folder's `studio.json` for plain folders).
+**Edit that file, never replace it**: it also holds the flow.
+
+```json
+{ "controls": [
+  { "id": "state", "label": "State", "type": "choice", "default": "a",
+    "options": [{ "value": "a", "label": "A" }, { "value": "b", "label": "B" }] },
+  { "id": "dark", "label": "Dark mode", "type": "toggle" },
+  { "id": "step", "label": "Step", "type": "range", "min": 0, "max": 5, "default": 0 }
+] }
+```
+
+Optional on any control: `param` (the URL parameter, default the id) and
+`when: { "control": "state", "is": "b" }` (only offered while that holds). The
+prototype reads `?<param>=` (or the starter's `useControl` helper, if it has
+one). A `range` may also have `step` (default 1).
+
+If the prototype has its own in-page switcher bar and no controls, ask the
+person ONE short question whether to move those into studio controls, and do it
+only if they say yes.
+
+The script validates controls (unique ids, `when` pointing at a real control, a
+choice's default among its options with at least two, a range's min below max
+with its default between). A problem stops the push; fix it and re-run. A
+"Heads up" that nothing reads `?x=` means that control does nothing.

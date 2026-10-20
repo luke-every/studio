@@ -20,7 +20,7 @@
  *     --title "Tighter results layout" --changes "Cut the second card." \
  *     [--entry index.html] [--slug quiz-results] [--team acquisition] \
  *     [--project some-project] [--description "..."] [--version v0.5] [--small] [--figma <url>] [--notion <url>] \
- *     [--flow flow.json | --no-flow]
+ *     [--flow flow.json | --no-flow] [--no-controls]
  *
  * Studio address and password come from ~/.claude/prototype-studio.json
  * unless --studio-url / --studio-password override them.
@@ -292,6 +292,69 @@ if (appMode) {
   }));
 }
 
+// Controls (studio.json `controls`): the folder's own always win; otherwise the previous version's are carried
+// forward, so adding a flow or rebuilding can't silently drop them. Merged into the uploaded studio.json like the flow.
+function validateControls(controls) {
+  const problems = [];
+  const ids = new Set();
+  for (const control of controls) {
+    if (!control || typeof control.id !== "string" || !control.id) problems.push("a control has no id");
+    else if (ids.has(control.id)) problems.push(`two controls share the id "${control.id}"`);
+    else ids.add(control.id);
+    const id = control?.id ?? "?";
+    if (typeof control?.label !== "string" || !control.label) problems.push(`control "${id}" has no label`);
+    if (control?.type === "choice") {
+      const values = Array.isArray(control.options) ? control.options.map((option) => option?.value) : [];
+      if (values.length < 2) problems.push(`control "${id}" needs at least two options`);
+      else if (!values.includes(control.default)) problems.push(`control "${id}" defaults to "${control.default}", which isn't one of its options`);
+    } else if (control?.type === "range") {
+      const { min, max, step, default: value } = control;
+      if (![min, max, value].every(Number.isFinite) || min >= max) problems.push(`control "${id}" needs numbers with min below max`);
+      else if (value < min || value > max) problems.push(`control "${id}" defaults to ${value}, outside ${min} to ${max}`);
+      if (step !== undefined && !(step > 0)) problems.push(`control "${id}" needs a step above 0`);
+    } else if (control?.type !== "toggle") problems.push(`control "${id}" must be a choice or a toggle`);
+  }
+  for (const control of controls) if (control?.when && !ids.has(control.when.control)) problems.push(`control "${control.id}" depends on "${control.when.control}", which isn't a control`);
+  return problems;
+}
+const manifestFile = () => files.find((file) => file.path === "studio.json");
+const readManifest = () => {
+  const existing = manifestFile();
+  if (!existing) return {};
+  try {
+    return JSON.parse(existing.content?.toString() ?? readFileSync(existing.filePath, "utf8"));
+  } catch {
+    return {};
+  }
+};
+const writeManifest = (manifest) => {
+  const existing = manifestFile();
+  const content = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+  if (existing) Object.assign(existing, { content, size: content.length });
+  else files.push({ filePath: join(root, "studio.json"), path: "studio.json", size: content.length, content });
+};
+let controlsLine = "Controls: none";
+{
+  const own = readManifest().controls;
+  let controls = Array.isArray(own) && own.length ? own : null;
+  const carriedControls = !controls && !args.includes("--no-controls") && start.previousControls?.controls?.length ? start.previousControls : null;
+  if (carriedControls) controls = carriedControls.controls;
+  if (controls) {
+    const problems = validateControls(controls);
+    if (problems.length) {
+      console.error(`Nothing was pushed: the controls have a problem: ${problems.join("; ")}.`);
+      process.exit(1);
+    }
+    if (carriedControls) writeManifest({ ...readManifest(), controls });
+    const sources = files.filter((file) => /\.(m?js|html)$/.test(file.path) && file.size < 5_000_000).map((file) => readFileSync(file.filePath, "utf8"));
+    for (const control of controls) {
+      const param = control.param ?? control.id;
+      if (!sources.some((text) => text.includes(param))) console.warn(`Heads up: nothing in the files reads ?${param}=, so that control would do nothing.`);
+    }
+    controlsLine = `Controls: ${controls.length}${carriedControls ? ` (carried over from ${carriedControls.version})` : ""}`;
+  }
+}
+
 // --flow: the prototype's flow, kept as a file in its own source and merged into the
 // uploaded studio.json (beside any controls), so a build can't wipe it.
 const flowArg = flag("flow");
@@ -326,18 +389,7 @@ if (flowArg || carried) {
   if (unread.length) {
     console.warn(`Heads up: nothing in the files reads ${unread.map((key) => `?${key}=`).join(", ")}, so those screens would open on the first one. Add the handling, rebuild and push again.`);
   }
-  const existing = files.find((file) => file.path === "studio.json");
-  let manifest = {};
-  if (existing) {
-    try {
-      manifest = JSON.parse(readFileSync(existing.filePath, "utf8"));
-    } catch {
-      // An unreadable studio.json is replaced.
-    }
-  }
-  const content = Buffer.from(`${JSON.stringify({ ...manifest, flow }, null, 2)}\n`);
-  if (existing) Object.assign(existing, { content, size: content.length });
-  else files.push({ filePath: join(root, "studio.json"), path: "studio.json", size: content.length, content });
+  writeManifest({ ...readManifest(), flow });
 }
 
 const tooBig = files.filter((file) => file.size > MAX_FILE_BYTES);
@@ -511,6 +563,7 @@ console.log(`Uploaded ${files.length - reused} new file(s), ${reused} unchanged,
 console.log(`Pushed ${result.slug} ${result.version}`);
 console.log(result.studio);
 console.log(`Time: ${laps.join(" · ")}`);
+console.log(controlsLine);
 console.log(
   flowScreens
     ? `Flow: ${flowScreens} screens${carried ? ` (carried over from ${carried.version})` : ""}`
