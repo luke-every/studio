@@ -303,7 +303,7 @@ lap("scan");
 
 async function github(path, init = {}) {
   for (let attempt = 1; ; attempt++) {
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}${path}`, {
+    const response = await fetch(`${process.env.GITHUB_API ?? "https://api.github.com"}/repos/${owner}/${repo}${path}`, {
       ...init,
       headers: {
         authorization: `Bearer ${token}`,
@@ -335,41 +335,61 @@ try {
   if (error.status !== 404) throw error;
 }
 
-// Files the repository already holds (same git hash) are referenced, not
-// re-sent. Every version is still a full snapshot. A truncated listing only
-// means a few extra uploads.
+// Blobs the previous version of this prototype already holds (same git hash)
+// are referenced, not re-sent. Every version is still a full snapshot. This is
+// only a shortcut: re-posting an existing blob is harmless, so any failure
+// here just means everything uploads.
 const known = new Set();
-{
+try {
+  const slugDir = prefix.split("/").slice(0, -1).join("/");
   const head = await github(`/git/ref/heads/${branch}`);
-  const headCommit = await github(`/git/commits/${head.object.sha}`);
-  const listing = await github(`/git/trees/${headCommit.tree.sha}?recursive=1`);
-  // A truncated listing leaves `known` incomplete; anything missing from it is simply uploaded.
-  for (const entry of listing.tree) if (entry.type === "blob") known.add(entry.sha);
-  if (listing.truncated) console.error("The repository listing was cut short, so some unchanged files may be uploaded again.");
+  let dir = (await github(`/git/commits/${head.object.sha}`)).tree.sha;
+  for (const part of slugDir.split("/")) {
+    dir = (await github(`/git/trees/${dir}`)).tree.find((entry) => entry.type === "tree" && entry.path === part)?.sha;
+    if (!dir) break;
+  }
+  if (dir) {
+    const own = prefix.split("/").pop();
+    const number = (name) => name.replace(/^v/, "").split(".").map(Number);
+    const newest = (await github(`/git/trees/${dir}`)).tree
+      .filter((entry) => entry.type === "tree" && entry.path !== own)
+      .sort((x, y) => {
+        const [a, b] = [number(x.path), number(y.path)];
+        for (let i = 0; i < Math.max(a.length, b.length); i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (b[i] ?? 0) - (a[i] ?? 0);
+        return 0;
+      })[0];
+    if (newest) for (const entry of (await github(`/git/trees/${newest.sha}?recursive=1`)).tree) if (entry.type === "blob") known.add(entry.sha);
+  }
+} catch {
+  // No listing means nothing is known; everything uploads.
 }
 lap("listing");
 
-const tree = [];
+// One blob per distinct content, however many paths use it.
+const byHash = new Map();
+for (const file of files) {
+  const data = file.content ?? readFileSync(file.filePath);
+  const hash = createHash("sha1").update(`blob ${Buffer.byteLength(data)}\0`).update(data).digest("hex");
+  file.hash = hash;
+  if (!byHash.has(hash)) byHash.set(hash, file);
+}
+const tree = files.map((file) => ({ path: `${prefix}/${file.path}`, mode: "100644", type: "blob", sha: file.hash }));
 let uploaded = 0;
-let reused = 0;
-const queue = [...files];
+const queue = [...byHash.entries()].filter(([hash]) => !known.has(hash));
+const toUpload = queue.length;
+const reused = files.length - toUpload;
 async function uploadNext() {
-  for (let file = queue.shift(); file; file = queue.shift()) {
+  for (let item = queue.shift(); item; item = queue.shift()) {
+    const [hash, file] = item;
     const data = file.content ?? readFileSync(file.filePath);
-    const hash = createHash("sha1").update(`blob ${Buffer.byteLength(data)}\0`).update(data).digest("hex");
-    let sha = hash;
-    if (known.has(hash)) reused += 1;
-    else {
-      const blob = await github("/git/blobs", {
-        method: "POST",
-        body: JSON.stringify({ content: Buffer.from(data).toString("base64"), encoding: "base64" }),
-      });
-      sha = blob.sha;
-    }
-    tree.push({ path: `${prefix}/${file.path}`, mode: "100644", type: "blob", sha });
+    const blob = await github("/git/blobs", {
+      method: "POST",
+      body: JSON.stringify({ content: Buffer.from(data).toString("base64"), encoding: "base64" }),
+    });
+    if (blob.sha !== hash) for (const entry of tree) if (entry.sha === hash) entry.sha = blob.sha;
     uploaded += 1;
     // The counter redraws a line on a terminal; captured output would keep every redraw.
-    if (process.stdout.isTTY) process.stdout.write(`\rUploading ${uploaded}/${files.length}`);
+    if (process.stdout.isTTY) process.stdout.write(`\rUploading ${uploaded}/${toUpload}`);
   }
 }
 await Promise.all(Array.from({ length: 6 }, uploadNext));
