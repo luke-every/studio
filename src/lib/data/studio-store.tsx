@@ -17,6 +17,7 @@ import {
   createProject as createProjectAction,
   createTeam as createTeamAction,
   filePrototype as filePrototypeAction,
+  deleteVersion as deleteVersionAction,
   renameVersion as renameVersionAction,
   updatePrototype as updatePrototypeAction,
   type WriteResult,
@@ -50,6 +51,8 @@ type StudioContextValue = {
   updatePrototype: (input: Parameters<typeof updatePrototypeAction>[0], keys: string[], message?: string) => void;
   /** Rename a version, as people see it. Same way. */
   renameVersion: (input: Parameters<typeof renameVersionAction>[0], keys: string[], message?: string) => void;
+  /** Take a version out of the history. Same way. */
+  deleteVersion: (input: Parameters<typeof deleteVersionAction>[0], keys: string[], message?: string) => void;
   /** Which saves are in flight, by the keys they were started with. */
   isSaving: (key: string) => boolean;
   /** Say something short at the top of the screen. */
@@ -180,6 +183,11 @@ export function StudioProvider({
     [background],
   );
 
+  const deleteVersion = useCallback<StudioContextValue["deleteVersion"]>(
+    (input, keys, message = "Deleted") => background(() => deleteVersionAction(input), keys, message),
+    [background],
+  );
+
   const isSaving = useCallback(
     (key: string) =>
       inFlight.includes(key) ||
@@ -207,6 +215,7 @@ export function StudioProvider({
       filePrototype,
       updatePrototype,
       renameVersion,
+      deleteVersion,
       isSaving,
       notify,
       markOpened,
@@ -215,7 +224,7 @@ export function StudioProvider({
       error,
       dismissError,
     }),
-    [snapshot, addTeam, addProject, filePrototype, updatePrototype, renameVersion, isSaving, notify, markOpened, opened, saving, pending, error, dismissError],
+    [snapshot, addTeam, addProject, filePrototype, updatePrototype, renameVersion, deleteVersion, isSaving, notify, markOpened, opened, saving, pending, error, dismissError],
   );
 
   return (

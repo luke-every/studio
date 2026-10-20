@@ -68,6 +68,10 @@ export async function renameVersion(input: Parameters<typeof registry.renameVers
   return attempt(() => registry.renameVersion(input), ["/"]);
 }
 
+export async function deleteVersion(input: Parameters<typeof registry.deleteVersion>[0]) {
+  return attempt(() => registry.deleteVersion(input), ["/"]);
+}
+
 /**
  * Adding a prototype by hand, from an HTML file. The file is uploaded to the
  * store and served from there, so the prototype is genuinely here — and

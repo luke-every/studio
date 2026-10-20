@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
-import { ArchiveIcon, EllipsisIcon, GithubIcon, PencilIcon, SendIcon, ShuffleIcon, SlidersIcon, UndoIcon } from "@/components/shell/nav-icons";
+import { ArchiveIcon, EllipsisIcon, GithubIcon, PencilIcon, SendIcon, ShuffleIcon, SlidersIcon, TrashIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { DialogForm, fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
@@ -13,7 +13,7 @@ import type { Prototype } from "@/lib/registry/types";
 import { RemixDialog } from "./remix-dialog";
 import { menuItem } from "@/components/ui/menu-item";
 
-type Dialog = "rename" | "move" | "remix" | "archive";
+type Dialog = "rename" | "move" | "remix" | "archive" | "delete";
 
 const item = menuItem;
 
@@ -99,6 +99,12 @@ export function PrototypeMenu({ prototype, version, githubUrl, onEdit }: { proto
                 </a>
               ) : null}
               <div role="separator" className="my-1 h-px bg-border" />
+              {prototype.versions.length > 1 ? (
+                <button type="button" role="menuitem" onClick={() => choose("delete")} className={`${item} text-destructive`}>
+                  <TrashIcon />
+                  Delete {version}
+                </button>
+              ) : null}
               <button type="button" role="menuitem" onClick={() => choose("archive")} className={`${item} text-destructive`}>
                 <ArchiveIcon />
                 Archive
@@ -111,6 +117,7 @@ export function PrototypeMenu({ prototype, version, githubUrl, onEdit }: { proto
       <RemixDialog slug={prototype.slug} version={version} name={prototype.name} open={dialog === "remix"} onClose={close} />
       {dialog === "rename" ? <RenameDialog prototype={prototype} onClose={close} /> : null}
       {dialog === "move" ? <MoveDialog prototype={prototype} onClose={close} /> : null}
+      {dialog === "delete" ? <DeleteVersionDialog prototype={prototype} version={version} onClose={close} /> : null}
             {dialog === "archive" ? <ArchiveDialog prototype={prototype} onClose={close} /> : null}
     </>
   );
@@ -189,6 +196,24 @@ function MoveDialog({ prototype, onClose }: { prototype: Prototype; onClose: () 
         </select>
       </label>
     </DialogForm>
+  );
+}
+
+function DeleteVersionDialog({ prototype, version, onClose }: { prototype: Prototype; version: string; onClose: () => void }) {
+  const { deleteVersion } = useStudio();
+  const target = prototype.versions.find((item) => item.version === version);
+  if (!target) return null;
+  const next = prototype.current.id === target.id ? prototype.versions.find((item) => item.id !== target.id) : null;
+
+  return (
+    <DialogForm
+      title={`Delete ${version}?`}
+      description={`It comes out of the history for everyone.${next ? ` ${next.version} becomes the latest.` : ""} Its comments and files are kept safe, so it can be restored if needed.`}
+      submitLabel="Delete"
+      destructive
+      onClose={onClose}
+      onSubmit={() => deleteVersion({ slug: prototype.slug, versionId: target.id }, ["prototype"], `Deleted ${version}`)}
+    />
   );
 }
 

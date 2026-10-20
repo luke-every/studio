@@ -555,3 +555,31 @@ export async function renameVersion(input: { slug: string; versionId: string; la
     versionSchema.parse(target);
   });
 }
+
+/**
+ * Take a version out of the history, for when an update was a mistake. Only
+ * the registry's record goes: the files stay in the content repository, so
+ * nothing is lost for good and the number is never handed out again. If it
+ * was the current version, the newest one left takes over.
+ */
+export async function deleteVersion(input: { slug: string; versionId: string }) {
+  return mutate((document) => {
+    const prototype = document.prototypes.find((item) => item.slug === input.slug);
+    const target = document.versions.find((version) => version.id === input.versionId && version.prototypeSlug === input.slug);
+    if (!prototype || !target) throw new StoreError("No such version.");
+
+    const rest = document.versions.filter((version) => version.prototypeSlug === input.slug && version !== target);
+    if (!rest.length) throw new StoreError("This is the only version, so there is nothing to go back to.");
+
+    document.versions = document.versions.filter((version) => version !== target);
+
+    if (prototype.currentVersion === target.id) {
+      const latest = rest.reduce((top, other) =>
+        compareVersions(other.label ?? other.version, top.label ?? top.version) > 0 ? other : top,
+      );
+      prototype.currentVersion = latest.id;
+      prototype.preview = { ...prototype.preview, url: latest.url };
+      prototypeSchema.parse(prototype);
+    }
+  });
+}
