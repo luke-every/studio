@@ -78,8 +78,12 @@ else
   BUNDLE="$(mktemp)"
   CODE=$(curl -sL -H "x-studio-password: $PASSWORD" -o "$BUNDLE" -w "%{http_code}" "$STUDIO/skill/newprototype/bundle" 2>/dev/null || echo 000)
   if [ "$CODE" = "200" ] && tar -tzf "$BUNDLE" >/dev/null 2>&1; then
+    # Replace, don't overlay: files deleted upstream (an old API route, say) must disappear here too.
+    UNPACKED="$(mktemp -d)"
+    tar -xzf "$BUNDLE" -C "$UNPACKED" --strip-components=1
     mkdir -p "$CONVENTIONS"
-    tar -xzf "$BUNDLE" -C "$CONVENTIONS" --strip-components=1
+    rsync -a --delete --exclude .git --exclude fonts "$UNPACKED/" "$CONVENTIONS/"
+    rm -rf "$UNPACKED"
   elif [ "$CODE" = "403" ]; then
     NEWPROTOTYPE_WHY="The studio has no password yet, and the fonts in it are licensed. Ask Luke to set one."
   elif [ "$CODE" = "401" ]; then
