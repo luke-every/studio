@@ -10,7 +10,10 @@
  *
  * The entry is served at "/" the way the studio serves it, and video and
  * audio are blocked the way the studio's own preview blocks them, so the
- * picture matches what a tile would have shown.
+ * picture matches what a tile would have shown. A Next app is built pinned to
+ * the address the studio serves it from (/p/<slug>/<version>/) and every file
+ * it loads asks for that prefix, so those are opened there; at "/" they would
+ * load nothing and the picture would be bare, unstyled HTML.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
@@ -61,8 +64,12 @@ let taken = 0;
 
 for (const dir of pending.slice(0, MAX_PER_RUN)) {
   const root = join(process.cwd(), dir);
+  const [, slug, version] = dir.split("/");
+  const base = `/p/${slug}/${version}/`;
+  const pinned = readFileSync(join(root, "index.html"), "utf8").includes(base);
   const server = createServer((request, response) => {
-    const path = normalize(decodeURIComponent(new URL(request.url, "http://x").pathname));
+    let path = normalize(decodeURIComponent(new URL(request.url, "http://x").pathname));
+    if (pinned && path.startsWith(base)) path = `/${path.slice(base.length)}`;
     const file = join(root, path === "/" ? "index.html" : path);
     if (!file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) {
       response.writeHead(404).end();
@@ -70,7 +77,7 @@ for (const dir of pending.slice(0, MAX_PER_RUN)) {
     }
     response.writeHead(200, {
       "content-type": TYPES[extname(file).toLowerCase()] ?? "application/octet-stream",
-      ...(path === "/" ? { "content-security-policy": "media-src 'none'" } : {}),
+      ...(path === "/" || path === "/index.html" ? { "content-security-policy": "media-src 'none'" } : {}),
     });
     response.end(readFileSync(file));
   });
@@ -84,7 +91,7 @@ for (const dir of pending.slice(0, MAX_PER_RUN)) {
   });
   try {
     const page = await context.newPage();
-    await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: "load", timeout: 30_000 });
+    await page.goto(`http://127.0.0.1:${server.address().port}${pinned ? base : "/"}`, { waitUntil: "load", timeout: 30_000 });
     await page.waitForTimeout(SETTLE_MS);
     await page.screenshot({ path: join(root, "studio-preview.jpg"), type: "jpeg", quality: 78 });
     taken += 1;
