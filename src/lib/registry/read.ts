@@ -3,6 +3,7 @@ import "server-only";
 import { isStoreConfigured, readRegistryDocument, type RegistryDocument } from "./store";
 import { contentRepoUrl } from "./github";
 import { versionSegment } from "./version";
+import { aliased } from "./people";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
 import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
 
@@ -130,9 +131,9 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
     name: team.name,
     remit: team.remit,
     description: team.description,
-    lead: team.lead,
-    members: team.members,
-    createdBy: team.created.by,
+    lead: aliased(team.lead),
+    members: team.members.map(aliased),
+    createdBy: aliased(team.created.by),
     createdAt: team.created.at,
     archived: team.archived,
   }));
@@ -141,7 +142,7 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
     slug: project.slug,
     teamSlug: project.teamSlug,
     name: project.name,
-    createdBy: project.created.by,
+    createdBy: aliased(project.created.by),
     createdAt: project.created.at,
   }));
 
@@ -155,7 +156,7 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
         key: version.version,
         title: version.title,
         changes: version.changes,
-        author: version.author,
+        author: aliased(version.author),
         createdAt: version.createdAt,
         // Served from the studio rather than straight from the store: the
         // store sends HTML as a download, which no frame can show.
@@ -173,7 +174,7 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
       projectSlug: record.projectSlug,
       name: record.name,
       description: record.description,
-      owner: record.owner,
+      owner: aliased(record.owner),
       preview: {
         ...record.preview,
         tint: previewTint(record.slug, record.preview.tint),
@@ -181,7 +182,7 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
       },
       versions,
       current,
-      createdBy: record.created.by,
+      createdBy: aliased(record.created.by),
       createdAt: record.created.at,
       updatedAt: record.updatedAt,
       archived: record.archived,

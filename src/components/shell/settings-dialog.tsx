@@ -58,6 +58,32 @@ function NotificationsRow() {
   );
 }
 
+/** Which build of the studio this is, and a way to read what changed. Empty when running locally. */
+function VersionRow() {
+  const commit = process.env.NEXT_PUBLIC_STUDIO_COMMIT;
+  const change = process.env.NEXT_PUBLIC_STUDIO_CHANGE;
+  const repo = process.env.NEXT_PUBLIC_STUDIO_REPO;
+  const built = process.env.NEXT_PUBLIC_STUDIO_BUILT;
+  const date = built ? new Date(built).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className={row}>
+        <span className="text-sm text-foreground">Version</span>
+        <span className="text-sm text-foreground-muted">{commit ? `${commit.slice(0, 7)} · ${date}` : "Running locally"}</span>
+      </div>
+      {change ? <p className="px-2.5 text-xs text-foreground-muted">{change}</p> : null}
+      {repo ? (
+        <div className="px-2.5 pt-1">
+          <a href={`https://github.com/${repo}/commits/main`} target="_blank" rel="noreferrer" className="text-sm text-foreground underline">
+            See changes
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** What can be changed about how the studio looks and behaves. Opened from the user menu. */
 export function SettingsDialog({ open, onClose, onSetup }: { open: boolean; onClose: () => void; onSetup: () => void }) {
   return (
@@ -77,6 +103,7 @@ export function SettingsDialog({ open, onClose, onSetup }: { open: boolean; onCl
             Open
           </Button>
         </div>
+        <VersionRow />
         <div className="flex justify-end">
           <Button onClick={onClose}>Done</Button>
         </div>

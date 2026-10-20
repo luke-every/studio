@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { linkProblem, type LinkKind } from "@/lib/links";
 
 import { isStoreConfigured, readRegistryDocument, updateRegistryDocument, type RegistryDocument } from "./store";
+import { aliased } from "./people";
 import { commitPrototypeVersion, fetchPrototypeFile, prototypeVersionExists, verifyPrototypeVersion, versionPrefix } from "./github";
 import { applierScript, describeEdits, mergeEdits, variantIdPattern, type Edit, type EditsFile, type EditVariant } from "@/lib/edits";
 import { compareVersions, readSeed } from "./read";
@@ -51,7 +52,7 @@ export function slugify(name: string, fallback: string) {
  */
 export function named(name: string | undefined, fallback = "Someone") {
   const trimmed = name?.trim() || fallback;
-  return { login: slugify(trimmed, "person"), name: trimmed };
+  return aliased({ login: slugify(trimmed, "person"), name: trimmed });
 }
 
 function requireStore() {
