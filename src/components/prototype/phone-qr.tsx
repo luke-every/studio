@@ -9,6 +9,12 @@ import { reviewToken } from "@/lib/registry/actions";
 const POLL_MS = 500;
 
 /**
+ * The code last shown on each page. The menu holding it unmounts when it closes, so without this every hover
+ * began from the placeholder and faded the same code in again. With it, a reopened menu shows its code at once.
+ */
+const lastShown = new Map<string, string>();
+
+/**
  * A QR code for the prototype itself, in the Share menu: its own
  * address outside the studio, so a phone with a camera opens the real thing,
  * on the version, controls and variant on screen and wherever you have
@@ -31,7 +37,9 @@ const POLL_MS = 500;
  */
 export function PhoneQr({ stage, className = "size-20" }: { stage: RefObject<HTMLElement | null>; className?: string }) {
   // The code on show, and while one is fading in, the one it is replacing beneath it.
-  const [shown, setShown] = useState<string[]>([]);
+  // A code that was already there when the menu opened is drawn as it is; only a different one fades in.
+  const [already] = useState(() => lastShown.get(window.location.pathname));
+  const [shown, setShown] = useState<string[]>(already ? [already] : []);
   const tokens = useRef(new Map<string, string>());
   const latest = useRef("");
   const box = useRef<HTMLDivElement>(null);
@@ -46,7 +54,9 @@ export function PhoneQr({ stage, className = "size-20" }: { stage: RefObject<HTM
         if (!now || now === "about:blank" || now === latest.current) return;
         latest.current = now;
         void withToken(now, tokens.current).then((href) => {
-          if (latest.current === now) setShown((was) => (was.at(-1) === href ? was : [...was.slice(-1), href]));
+          if (latest.current !== now) return;
+          lastShown.set(window.location.pathname, href);
+          setShown((was) => (was.at(-1) === href ? was : [...was.slice(-1), href]));
         });
       } catch {
         // Not readable: keep what was there.
@@ -64,7 +74,7 @@ export function PhoneQr({ stage, className = "size-20" }: { stage: RefObject<HTM
   return (
     <div ref={box} className={`relative text-[var(--qr-fg)] ${className}`}>
       {shown.map((href) => (
-        <Code key={href} href={href} onArrived={() => setShown((was) => was.slice(-1))} />
+        <Code key={href} href={href} instant={href === already} onArrived={() => setShown((was) => was.slice(-1))} />
       ))}
     </div>
   );
@@ -86,7 +96,7 @@ export async function withToken(href: string, cache: Map<string, string>) {
   return url.href;
 }
 
-function Code({ href, onArrived }: { href: string; onArrived: () => void }) {
+function Code({ href, instant, onArrived }: { href: string; instant: boolean; onArrived: () => void }) {
   const { size, path } = useMemo(() => {
     const code = qrcode(0, "M");
     code.addData(href);
@@ -106,7 +116,7 @@ function Code({ href, onArrived }: { href: string; onArrived: () => void }) {
       aria-label="Scan to open this prototype on your phone"
       shapeRendering="crispEdges"
       onAnimationEnd={onArrived}
-      className="fade-enter absolute inset-0 size-full bg-[var(--qr-bg)]"
+      className={`${instant ? "" : "fade-enter "}absolute inset-0 size-full bg-[var(--qr-bg)]`}
     >
       <path d={path} fill="currentColor" />
     </svg>

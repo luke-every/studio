@@ -12,7 +12,7 @@ import { useComments, useShowComments } from "@/components/prototype/use-comment
 import { MotionSheet } from "@/components/motion";
 import { ShareMenu } from "@/components/prototype/share-menu";
 
-import { CommentIcon, ExpandIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
+import { CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
 
 import { controlOn, IconButton } from "./button";
 import { DialogForm } from "./dialog-form";
@@ -89,6 +89,7 @@ export function PrototypeFrame({
   onFullscreen,
   bare = false,
   onBare,
+  onOpenPrototype,
   minimal = false,
 }: {
   url?: string;
@@ -146,6 +147,8 @@ export function PrototypeFrame({
   /** Only the prototype is on screen: no toolbar, panels, pins or handles. Command-period turns it on and off. */
   bare?: boolean;
   onBare?: (on: boolean) => void;
+  /** A share page's button for the prototype itself: it loads in this tab, as it would opened on its own. */
+  onOpenPrototype?: () => void;
   /** A share page: the version, the viewport, the comment buttons and full screen on the bar, and no look toggle, canvas, restart or share. */
   minimal?: boolean;
 }) {
@@ -191,7 +194,9 @@ export function PrototypeFrame({
     const id = window.setTimeout(preloadComments, 1000);
     return () => window.clearTimeout(id);
   }, []);
-  const [showPins, setShowPins] = useShowComments();
+  const [pinsChosen, setShowPins] = useShowComments();
+  // A share page shows comments only while commenting, so the show and hide switch is not offered there.
+  const showPins = pinsChosen && !minimal;
   const { comments, everything, replies, error: commentsError, add: postComment, place: placeComment, reply: replyToComment, resolve: resolveComment, like: likeComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, commentsOf?.variant, showPins || mode === "comment");
   const { notify } = useStudio();
   // Asked before leaving edit mode with changes that would be lost.
@@ -508,7 +513,7 @@ export function PrototypeFrame({
   ) : null;
   const pinButtons = commentsOf ? (
     <>
-      {comments.length ? (
+      {comments.length && !minimal ? (
         <IconButton label={showPins ? "Hide comments" : "Show comments"} onClick={() => setShowPins(!showPins)}>
           {showPins ? <EyeIcon /> : <EyeOffIcon />}
         </IconButton>
@@ -603,6 +608,13 @@ export function PrototypeFrame({
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end max-sm:contents">
                 {pinButtons ? <div className="flex items-center gap-2 max-sm:hidden">{pinButtons}</div> : null}
+                {minimal && onOpenPrototype && !fullscreen ? (
+                  <span className="hidden lg:block">
+                    <IconButton label="Open the prototype" tooltipAlign="end" onClick={onOpenPrototype}>
+                      <ExternalIcon />
+                    </IconButton>
+                  </span>
+                ) : null}
                 <span className={`hidden ${showingFlow ? "" : "lg:block"}`}>
                   <IconButton
                     label={fullscreen ? "Exit full screen (F)" : "Full screen (F)"}
