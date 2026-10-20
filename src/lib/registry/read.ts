@@ -161,6 +161,7 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
         // store sends HTML as a download, which no frame can show.
         url: version.url ? servedPath(record.slug, version.version) : undefined,
         fileUrl: version.url,
+        source: version.source,
       }));
 
     const current = versions.find((version) => version.id === record.currentVersion) ?? versions[0];

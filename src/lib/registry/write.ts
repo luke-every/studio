@@ -200,6 +200,8 @@ type VersionNotes = {
   tint?: [string, string];
   figmaUrl?: string;
   notionUrl?: string;
+  /** Set by the server when the pushed commit holds `_source/`. */
+  source?: boolean;
 };
 
 /**
@@ -261,6 +263,7 @@ function record(document: RegistryDocument, input: VersionNotes, url: string) {
     author: person,
     createdAt: now(),
     url,
+    ...(input.source ? { source: true } : {}),
   });
   document.versions.push(entry);
 
@@ -484,8 +487,8 @@ export async function recordPushedVersion(input: VersionNotes & { version: strin
   // means something else.
   const { slug, version } = plan(await load(), input);
 
-  const { entryUrl } = await verifyPrototypeVersion(slug, version, input.commit);
-  return mutate((document) => record(document, { ...input, slug, version }, entryUrl));
+  const { entryUrl, source } = await verifyPrototypeVersion(slug, version, input.commit);
+  return mutate((document) => record(document, { ...input, slug, version, source }, entryUrl));
 }
 
 /**

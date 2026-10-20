@@ -110,6 +110,8 @@ export const versionSchema = z.object({
   createdAt: isoTimestamp,
   /** This version's own files. Older versions stay viewable. */
   url: location.optional(),
+  /** The app's source is saved beside the built site, in `_source/`, for engineers. */
+  source: z.boolean().optional(),
 });
 
 export const prototypeSchema = z.object({

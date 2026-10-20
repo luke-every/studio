@@ -151,7 +151,7 @@ export async function verifyPrototypeVersion(
   slug: string,
   version: string,
   commitSha: string,
-): Promise<{ entryUrl: string }> {
+): Promise<{ entryUrl: string; source: boolean }> {
   const cfg = requireConfig();
   if (!/^[0-9a-f]{40}$/.test(commitSha)) {
     throw new Error("That isn't a commit.");
@@ -166,7 +166,13 @@ export async function verifyPrototypeVersion(
     throw new Error(`Commit ${commitSha.slice(0, 7)} has no ${prefix}/index.html.`);
   }
 
-  return { entryUrl: rawEntryUrl(cfg, commitSha, prefix) };
+  // A Next app is pushed with its source beside the built site; "Open in GitHub" goes straight to it.
+  const source = await fetch(
+    `${API}/repos/${cfg.owner}/${cfg.name}/contents/${prefix}/_source/package.json?ref=${commitSha}`,
+    { headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github+json" } },
+  );
+
+  return { entryUrl: rawEntryUrl(cfg, commitSha, prefix), source: source.ok };
 }
 
 async function api(path: string, cfg: Config, init: RequestInit = {}) {

@@ -171,7 +171,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     return () => document.documentElement.removeAttribute("data-fullscreen");
   }, [focus]);
 
-  const githubUrl = repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}` : undefined;
+  const githubUrl = repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}${selected.source ? "/_source" : ""}` : undefined;
 
   const versionMenu = (
     <VersionMenu

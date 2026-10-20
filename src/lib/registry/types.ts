@@ -33,6 +33,8 @@ export type PrototypeVersion = {
   url?: string;
   /** Where the file actually lives in the store. */
   fileUrl?: string;
+  /** The app's source is saved in `_source/` beside the built site. */
+  source?: boolean;
 };
 
 export type Prototype = {
