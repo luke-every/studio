@@ -11,7 +11,8 @@ import { ColumnHandle, RevealTab } from "@/components/prototype/column-handle";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
-import { applyControls, defaultValues, variantControl, type ControlValues } from "@/lib/controls";
+import { useLiveControls } from "@/components/prototype/use-live-controls";
+import { applyControls, controlParams, defaultValues, variantControl, type ControlValues } from "@/lib/controls";
 import type { Flow } from "@/lib/flow";
 import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
@@ -125,7 +126,13 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     for (const control of offered?.controls ?? []) {
       const raw = params.get(control.param ?? control.id);
       if (raw === null) continue;
-      parts.push(control.type === "toggle" ? control.label : (control.options.find((option) => option.value === raw)?.label ?? raw));
+      parts.push(
+        control.type === "toggle"
+          ? control.label
+          : control.type === "range"
+            ? `${control.label} ${raw}`
+            : (control.options.find((option) => option.value === raw)?.label ?? raw),
+      );
     }
     const made = variants.find((item) => item.id === params.get(VARIANT_PARAM));
     if (made) parts.push(made.label);
@@ -150,6 +157,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const flow = usePrototypeFlow(address?.split("?")[0]);
   const [flowOpen, setFlowOpen] = useState(false);
   const showingFlow = flowOpen && !!address;
+  // What the iframe is given: the address with `studio=1`, held still once the prototype can take control changes as messages.
+  const frameUrl = useLiveControls(address, `${selected.url}|${variant ?? ""}`, controlParams(offered, values), showingFlow);
   // Commenting with the list (the comment button, or C) brings the list, which takes the column's room.
   const side = (mode === "view" || (mode === "comment" && !listing)) && !showingFlow;
   // The column can be dragged out of the way (and tapped back at the left edge); `drag` is how far it is being pulled while it is.
@@ -272,7 +281,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
       <div className="stagger-in [--i:1] sm:[--i:0] lg:[--i:1] order-2 min-w-0 flex-1 sm:order-1 lg:order-2 lg:min-h-0">
         <PrototypeFrame
-          url={address}
+          url={frameUrl}
           device={device}
           onDevice={chooseDevice}
           zoom={zoom}

@@ -12,6 +12,9 @@ import { z } from "zod";
  *
  * Leaving a control at its `default` adds nothing to the address: the
  * default is whatever the prototype does when the parameter is absent.
+ *
+ * A prototype that also speaks the studio's small message protocol (see
+ * docs/controls.md) is sent changes instead of being reloaded.
  */
 
 const common = {
@@ -40,17 +43,26 @@ const toggleControl = z.object({
   default: z.boolean().default(false),
 });
 
+const rangeControl = z.object({
+  ...common,
+  type: z.literal("range"),
+  min: z.number(),
+  max: z.number(),
+  step: z.number().positive().default(1),
+  default: z.number(),
+});
+
 export const controlsSchema = z.object({
-  controls: z.array(z.discriminatedUnion("type", [choiceControl, toggleControl])).default([]),
+  controls: z.array(z.discriminatedUnion("type", [choiceControl, toggleControl, rangeControl])).default([]),
 });
 
 export type Control = z.infer<typeof controlsSchema>["controls"][number];
 export type Controls = z.infer<typeof controlsSchema>;
-/** A control's current value: the option's value, or "on" / "off" for a toggle. */
+/** A control's current value: the option's value, "on" / "off" for a toggle, the number as text for a range. */
 export type ControlValues = Record<string, string>;
 
 const defaultOf = (control: Control) =>
-  control.type === "toggle" ? (control.default ? "on" : "off") : control.default;
+  control.type === "toggle" ? (control.default ? "on" : "off") : String(control.default);
 
 export function defaultValues(controls: Controls | null): ControlValues {
   return Object.fromEntries((controls?.controls ?? []).map((control) => [control.id, defaultOf(control)]));
@@ -63,20 +75,28 @@ export function visibleControls(controls: Controls, values: ControlValues) {
   );
 }
 
-/** The prototype's address with every non-default, visible control applied. */
-export function applyControls(url: string, controls: Controls | null, values: ControlValues) {
-  if (!controls) return url;
+/** The URL parameters every non-default, visible control stands for: what applyControls puts on the address, and what a live prototype is sent. */
+export function controlParams(controls: Controls | null, values: ControlValues) {
+  const params: Record<string, string> = {};
+  if (!controls) return params;
 
-  const params = new URLSearchParams();
   for (const control of visibleControls(controls, values)) {
     const value = values[control.id] ?? defaultOf(control);
     if (value === defaultOf(control)) continue;
-    params.set(control.param ?? control.id, control.type === "toggle" ? control.value : value);
+    params[control.param ?? control.id] = control.type === "toggle" ? control.value : value;
   }
+  return params;
+}
 
-  const query = params.toString();
+/** The prototype's address with every non-default, visible control applied. */
+export function applyControls(url: string, controls: Controls | null, values: ControlValues) {
+  const query = new URLSearchParams(controlParams(controls, values)).toString();
   return query ? `${url}?${query}` : url;
 }
+
+/** Tells a prototype it is shown inside the studio (so it can hide its own switcher). For iframes only, never thumbnails. */
+export const EMBED_PARAM = "studio";
+export const embedded = (url: string) => `${url}${url.includes("?") ? "&" : "?"}${EMBED_PARAM}=1`;
 
 /** The control whose options are the prototype's variants: the one marked, else the only choice there is. */
 export function variantControl(controls: Controls | null) {

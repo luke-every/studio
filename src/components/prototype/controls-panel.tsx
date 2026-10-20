@@ -21,9 +21,23 @@ export function ControlsPanel({
     <div className="flex flex-col gap-6">
       {visibleControls(controls, values).map((control) => (
         <div key={control.id} className="flex flex-col gap-2">
-          <p className="text-base text-foreground">{control.label}</p>
+          <p className="flex justify-between gap-2 text-base text-foreground">
+            {control.label}
+            {control.type === "range" ? <span className="text-foreground-subtle">{values[control.id] ?? control.default}</span> : null}
+          </p>
 
-          {control.type === "choice" ? (
+          {control.type === "range" ? (
+            <input
+              type="range"
+              aria-label={control.label}
+              min={control.min}
+              max={control.max}
+              step={control.step}
+              value={values[control.id] ?? control.default}
+              onChange={(event) => onChange(control.id, event.target.value)}
+              className="w-full accent-accent"
+            />
+          ) : control.type === "choice" ? (
             <div role="radiogroup" aria-label={control.label} className="flex flex-wrap gap-2">
               {control.options.map((option) => {
                 const selected = values[control.id] === option.value;

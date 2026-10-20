@@ -21,7 +21,8 @@ import { usePrototypeControls } from "@/components/prototype/use-prototype-contr
 import { AvatarStack } from "@/components/shell/user-avatar";
 import { barControl, IconButton } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
-import { applyControls, defaultValues, type ControlValues } from "@/lib/controls";
+import { useLiveControls } from "@/components/prototype/use-live-controls";
+import { applyControls, controlParams, defaultValues, type ControlValues } from "@/lib/controls";
 import { VARIANT_PARAM } from "@/lib/edits";
 import type { Person } from "@/lib/registry/types";
 import { useMediaQuery } from "@/lib/use-media-query";
@@ -82,6 +83,8 @@ function Shared({
   const address = `${chosenAddress}${chosenAddress.includes("?") ? "&" : "?"}review=${encodeURIComponent(review)}`;
 
   const phone = useMediaQuery("(max-width: 639px)");
+  // What the iframe is given: `studio=1` added, held still once the prototype can take control changes as messages.
+  const frameUrl = useLiveControls(phone ? address : chosenAddress, `${version.url}|${variant ?? ""}|${phone}`, controlParams(offered, values), false);
   const wide = useMediaQuery("(min-width: 64rem)");
   const [about, setAbout] = useState(false);
 
@@ -141,7 +144,7 @@ function Shared({
   if (phone) {
     return (
       <>
-        <GrowingFrame src={address} title={`${name} ${version.label}`} />
+        <GrowingFrame src={frameUrl ?? address} title={`${name} ${version.label}`} />
         <IconButton onClick={() => setAbout(true)} className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[var(--z-raised)] shadow-floating">
           About
         </IconButton>
@@ -186,7 +189,7 @@ function Shared({
 
       <div className="stagger-in [--i:1] min-w-0 flex-1 lg:min-h-0">
         <PrototypeFrame
-          url={chosenAddress}
+          url={frameUrl}
           title={`${name} ${version.label}`}
           leading={full ? null : <div className={barControl}>{version.label}</div>}
           center={({ scale }) => (
