@@ -94,6 +94,7 @@ else
   rm -f "$BUNDLE"
 fi
 if [ -d "$CONVENTIONS/skills/newprototype" ]; then
+  rm -rf "$CLAUDE_DIR/skills/newprototype"
   cp -R "$CONVENTIONS/skills/newprototype" "$CLAUDE_DIR/skills/"
   NEWPROTOTYPE="yes"
 fi
