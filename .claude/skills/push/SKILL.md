@@ -40,9 +40,10 @@ If the script says no studio is configured, the person hasn't run the install
 command yet. Tell them to open the studio, tap "Get set up", and paste the one
 command into Terminal.
 
-**A prototype with several screens** a person taps between also needs a flow.
-Read `FLOW.md` (next to this file) and follow it. A single screen has none:
-skip it.
+**Flow:** the script carries the previous version's flow forward on its own.
+Read `FLOW.md` (next to this file) only if this is the first push of a
+multi-screen prototype, or this session changed its screens or navigation.
+Otherwise skip it.
 
 ## 2. Write the notes
 
@@ -73,8 +74,8 @@ node ~/.claude/skills/push/push.mjs \
 ```
 
 The author is the person's git `user.name` unless you pass `--author "<name>"`.
-Add `--team acquisition` for a new prototype, `--flow <file>` when it has a
-flow, `--entry app.html` if the entry isn't `index.html`, `--project <slug>`,
+Add `--team acquisition` for a new prototype, `--flow <file>` only when the
+flow is new or changed (`--no-flow` drops it), `--entry app.html` if the entry isn't `index.html`, `--project <slug>`,
 `--description "..."`, and `--figma <url>` / `--notion <url>` only if the
 person gave you those links.
 

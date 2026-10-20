@@ -20,7 +20,7 @@
  *     --title "Tighter results layout" --changes "Cut the second card." \
  *     [--entry index.html] [--slug quiz-results] [--team acquisition] \
  *     [--project some-project] [--description "..."] [--version v0.5] [--small] [--figma <url>] [--notion <url>] \
- *     [--flow flow.json]
+ *     [--flow flow.json | --no-flow]
  *
  * Studio address and password come from ~/.claude/prototype-studio.json
  * unless --studio-url / --studio-password override them.
@@ -228,9 +228,11 @@ if (appMode) {
 // --flow: the prototype's flow, kept as a file in its own source and merged into the
 // uploaded studio.json (beside any controls), so a build can't wipe it.
 const flowArg = flag("flow");
-if (flowArg) {
-  let flow;
-  try {
+// Without --flow, the previous version's flow (sent back by the studio) is carried forward; --no-flow drops it.
+const carried = !flowArg && !args.includes("--no-flow") && start.previousFlow?.flow?.screens?.length ? start.previousFlow : null;
+if (flowArg || carried) {
+  let flow = carried?.flow;
+  if (flowArg) try {
     const parsed = JSON.parse(readFileSync(resolve(flowArg), "utf8"));
     flow = parsed.flow ?? parsed;
   } catch (error) {
@@ -266,6 +268,7 @@ if (flowArg) {
       // An unreadable studio.json is replaced.
     }
   }
+  if (carried) console.log(`Flow: ${flow.screens.length} screens (carried over from ${carried.version})`);
   const content = Buffer.from(`${JSON.stringify({ ...manifest, flow }, null, 2)}\n`);
   if (existing) Object.assign(existing, { content, size: content.length });
   else files.push({ filePath: join(root, "studio.json"), path: "studio.json", size: content.length, content });

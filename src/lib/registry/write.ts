@@ -430,6 +430,22 @@ export async function saveEditedVersion(input: {
   );
 }
 
+/** The flow of the prototype's newest version, so /push can carry it forward instead of asking for it again. */
+async function previousFlow(document: RegistryDocument, slug: string) {
+  const mine = document.versions.filter((item) => item.prototypeSlug === slug && item.version);
+  if (!mine.length) return null;
+  const latest = mine.reduce((top, other) =>
+    compareVersions(other.label ?? other.version, top.label ?? top.version) > 0 ? other : top,
+  );
+  try {
+    const file = await fetchPrototypeFile(slug, versionSegment(latest.version), ["studio.json"], null);
+    const flow = file ? ((await file.json()) as { flow?: { screens?: unknown[] } }).flow : null;
+    return flow?.screens?.length ? { version: latest.label ?? latest.version, flow } : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The first half of /push: which version this will be, and where its files
  * go. Nothing is written — /push commits the files to the content
@@ -453,7 +469,7 @@ export async function reserveVersion(input: {
     planned = plan(document, input);
   }
   const { slug, version } = planned;
-  return { slug, version, prefix: versionPrefix(slug, version) };
+  return { slug, version, prefix: versionPrefix(slug, version), previousFlow: await previousFlow(document, slug) };
 }
 
 /**
