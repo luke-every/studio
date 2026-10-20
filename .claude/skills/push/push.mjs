@@ -268,7 +268,6 @@ if (flowArg || carried) {
       // An unreadable studio.json is replaced.
     }
   }
-  if (carried) console.log(`Flow: ${flow.screens.length} screens (carried over from ${carried.version})`);
   const content = Buffer.from(`${JSON.stringify({ ...manifest, flow }, null, 2)}\n`);
   if (existing) Object.assign(existing, { content, size: content.length });
   else files.push({ filePath: join(root, "studio.json"), path: "studio.json", size: content.length, content });
@@ -447,6 +446,6 @@ console.log(result.studio);
 console.log(`Time: ${laps.join(" · ")}`);
 console.log(
   flowScreens
-    ? `Flow: ${flowScreens} screens`
+    ? `Flow: ${flowScreens} screens${carried ? ` (carried over from ${carried.version})` : ""}`
     : "Flow: none. Fine for a single screen; if this has several, add one (step 2 of the skill) and push again.",
 );
