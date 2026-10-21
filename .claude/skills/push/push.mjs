@@ -76,7 +76,7 @@ const packagePath = join(root, "package.json");
 const packageJson = existsSync(packagePath) ? JSON.parse(readFileSync(packagePath, "utf8")) : null;
 const appMode = Boolean(packageJson && { ...packageJson.dependencies, ...packageJson.devDependencies }.next) && !flag("entry") && !existsSync(join(root, "index.html"));
 
-// Studio prototypes are static exports, so anything that needs a server stops here in a moment, not after a build.
+// Studio prototypes are static exports. If a build fails, these are named as the likely cause.
 // A route handler marked force-static is fine: it is built to a file.
 function serverFeatures(dir) {
   const found = [];
@@ -103,16 +103,6 @@ function serverFeatures(dir) {
   for (const file of ["middleware.ts", "middleware.js", "proxy.ts", "proxy.js"]) if (existsSync(join(dir, file))) found.push(`${file} (middleware)`);
   return [...new Set(found)];
 }
-if (appMode) {
-  const blockers = serverFeatures(root);
-  if (blockers.length) {
-    console.error(
-      `Nothing was pushed: studio prototypes are static, and this app uses ${blockers.slice(0, 5).join(", ")}${blockers.length > 5 ? ` and ${blockers.length - 5} more` : ""}. Fetch from the browser instead.`,
-    );
-    process.exit(1);
-  }
-}
-
 const entryRel = flag("entry") ?? "index.html";
 let entryPath = resolve(root, entryRel);
 if (!appMode && !existsSync(entryPath)) {
@@ -255,8 +245,14 @@ if (appMode) {
     config.restore();
   }
   if (!built.ok || !existsSync(join(out, "index.html"))) {
+    // Server code is only a problem if it ends up in the build (an app's own config may leave it out), so it is
+    // named here, as the likely reason, rather than refused before trying.
+    const blockers = serverFeatures(root);
+    const likely = blockers.length
+      ? ` This app has ${blockers.slice(0, 5).join(", ")}${blockers.length > 5 ? ` and ${blockers.length - 5} more` : ""}, which a static export can't include; that is the likely cause.`
+      : "";
     console.error(
-      `The build didn't produce a site, so nothing was pushed. Studio prototypes are static: API routes, server actions and middleware can't be part of one. Last lines of the build:\n${built.tail}`,
+      `The build didn't produce a site, so nothing was pushed. Studio prototypes are static: API routes, server actions and middleware can't be part of one.${likely} Last lines of the build:\n${built.tail}`,
     );
     process.exit(1);
   }

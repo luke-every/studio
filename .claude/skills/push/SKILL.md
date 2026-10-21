@@ -27,8 +27,8 @@ files to check the upload; trust the script's output.
   own folder. The script installs, builds it pinned to the version's address,
   so it behaves exactly as in `next dev`, and saves the source beside it in
   `_source/` for engineers. Studio prototypes are static, so API routes,
-  server actions and middleware can't be part of one: the script stops on them
-  at once and says which files. Fetching data from the browser is fine.
+  server actions and middleware can't be part of one. An app's own config may
+  leave them out, so the script just builds; if the build fails it names them. Fetching data from the browser is fine.
   It doesn't matter how the app was started: if its `next.config` doesn't know
   about the studio, the script builds behind a temporary wrapper and puts the
   person's config back untouched. Don't edit their config or code to make a
