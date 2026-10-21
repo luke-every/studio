@@ -83,7 +83,8 @@ export function controlParams(controls: Controls | null, values: ControlValues) 
   for (const control of visibleControls(controls, values)) {
     const value = values[control.id] ?? defaultOf(control);
     if (value === defaultOf(control)) continue;
-    params[control.param ?? control.id] = control.type === "toggle" ? control.value : value;
+    // A toggle that is on by default is only ever sent when it is off, so it says off ("0") rather than its on value.
+    params[control.param ?? control.id] = control.type === "toggle" ? (value === "on" ? control.value : "0") : value;
   }
   return params;
 }

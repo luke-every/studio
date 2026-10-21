@@ -64,6 +64,7 @@ const SIZING = "transition-[width,height,transform] duration-[var(--dur-standard
  */
 export function PrototypeFrame({
   url: addressed,
+  openUrl,
   title,
   leading,
   share,
@@ -93,6 +94,8 @@ export function PrototypeFrame({
   minimal = false,
 }: {
   url?: string;
+  /** The address to open the prototype at on its own (new tab, QR), when the frame's own differs: it carries the studio's flag and, with live controls, stops changing. */
+  openUrl?: string;
   title: string;
   /** The version control, at the start of the bar. */
   leading: ReactNode;
@@ -407,7 +410,8 @@ export function PrototypeFrame({
   };
 
   // The wireframe view is the studio's own, so a new tab only keeps it by opening the prototype through the studio.
-  const newTab = url && wireframe ? `/view/${url.replace(/^\/p\//, "")}${url.includes("?") ? "&" : "?"}wireframe` : url;
+  const outside = openUrl && screen ? withParams(openUrl, screen.params) : (openUrl ?? url);
+  const newTab = outside && wireframe ? `/view/${outside.replace(/^\/p\//, "")}${outside.includes("?") ? "&" : "?"}wireframe` : outside;
 
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<{ width: number; height: number } | null>(null);

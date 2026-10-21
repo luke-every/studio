@@ -282,6 +282,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       <div className="stagger-in [--i:1] sm:[--i:0] lg:[--i:1] order-2 min-w-0 flex-1 sm:order-1 lg:order-2 lg:min-h-0">
         <PrototypeFrame
           url={frameUrl}
+          openUrl={address}
           device={device}
           onDevice={chooseDevice}
           zoom={zoom}

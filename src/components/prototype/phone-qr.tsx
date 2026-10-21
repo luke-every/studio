@@ -83,6 +83,7 @@ export function PhoneQr({ stage, className = "size-20" }: { stage: RefObject<HTM
 /** The address with a review token on it, which is asked for once per version. Without one (the studio is locked, or it isn't a prototype's address) it stays as it was. */
 export async function withToken(href: string, cache: Map<string, string>) {
   const url = new URL(href);
+  url.searchParams.delete("studio");
   const match = url.pathname.match(/^\/p\/([^/]+)\/([^/]+)/);
   if (!match) return href;
   const key = `${match[1]}/${match[2]}`;
