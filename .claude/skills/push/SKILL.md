@@ -13,10 +13,11 @@ have been doing — you were there.
 
 One script does the rest. It reads the studio's address from
 `~/.claude/prototype-studio.json`, asks the studio which version this will be,
-builds the app if it is one, commits every file to the content repository at
-its real relative path, and records the version. The prototype is live within
-seconds. **Never run git here**: the prototype folder may be its own
-repository and has nothing to do with the studio's. Don't read the folder's
+builds the app if it is one, sends every file to the content repository in a
+single upload (however many files there are; only what changed travels), and
+records the version. The prototype is live within seconds. The script uses git
+for that in a throwaway folder of its own. **Never run git yourself**: the
+prototype folder may be its own repository and has nothing to do with the studio's. Don't read the folder's
 files to check the upload; trust the script's output.
 
 ## 1. What to push
@@ -113,6 +114,11 @@ Tell the person in a line or two what it said, and ask what they want to do.
 **Do not** edit their code, open a browser, run builds or checks, or try
 another approach to get past it. Those are their decisions, and each costs
 minutes.
+
+Two lines that are not problems: "Couldn't send it in one go … uploading file by
+file instead" (no git on this Mac, or it couldn't reach GitHub; it carries on), and
+"GitHub asked to slow down; waiting …" (it waits and carries on). If it still stops
+on GitHub's rate limit, nothing was saved: say to run /push again in a few minutes.
 
 ## 4. Tell them where it went
 

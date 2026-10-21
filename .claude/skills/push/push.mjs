@@ -8,7 +8,8 @@
  * request over 4.5MB, and GitHub's own ceiling is 100MB a file.
  *
  *   1. /api/push/start  — which version this becomes, and the repository
- *   2. GitHub           — a blob per file, one tree, one commit, move the ref
+ *   2. GitHub           — one commit holding the version, sent in a single git push
+ *                         (file by file through the API on a machine without git)
  *   3. /api/push        — the commit and the notes; the studio records it
  *
  * No scanning what the entry references and no inlining — a relative
@@ -27,8 +28,8 @@
  */
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 
 const args = process.argv.slice(2);
@@ -444,6 +445,8 @@ if (manifest) {
 const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 lap("scan");
 
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
 async function github(path, init = {}) {
   for (let attempt = 1; ; attempt++) {
     const response = await fetch(`${process.env.GITHUB_API ?? "https://api.github.com"}/repos/${owner}/${repo}${path}`, {
@@ -456,14 +459,20 @@ async function github(path, init = {}) {
       },
     });
     if (response.ok) return response.json();
-    // Secondary rate limits and GitHub's own hiccups clear up on a retry.
-    if ((response.status === 403 || response.status === 429 || response.status >= 500) && attempt < 4) {
-      await new Promise((done) => setTimeout(done, attempt * 2000));
+    const text = await response.text();
+    // GitHub's "slow down" (a 403 or 429 about its rate limit) says how long to wait, and its own hiccups (5xx) clear
+    // up on a retry. Any other 403, like a token that can't write, is final.
+    const limited = response.status === 429 || (response.status === 403 && (/rate limit/i.test(text) || response.headers.has("retry-after")));
+    if ((limited || response.status >= 500) && attempt < 6) {
+      const after = Number(response.headers.get("retry-after"));
+      const reset = Number(response.headers.get("x-ratelimit-reset"));
+      const wait = after > 0 ? after * 1000 : limited && reset > 0 ? reset * 1000 - Date.now() : attempt * 5000;
+      const ms = Math.min(Math.max(wait, 1000), 120_000);
+      if (limited) console.log(`GitHub asked to slow down; waiting ${Math.round(ms / 1000)}s ...`);
+      await sleep(ms);
       continue;
     }
-    const error = new Error(
-      `GitHub ${init.method ?? "GET"} ${path} failed (${response.status}): ${(await response.text()).slice(0, 300)}`,
-    );
+    const error = new Error(`GitHub ${init.method ?? "GET"} ${path} failed (${response.status}): ${text.slice(0, 300)}`);
     error.status = response.status;
     throw error;
   }
@@ -478,97 +487,173 @@ try {
   if (error.status !== 404) throw error;
 }
 
-// Blobs the previous version of this prototype already holds (same git hash)
-// are referenced, not re-sent. Every version is still a full snapshot. This is
-// only a shortcut: re-posting an existing blob is harmless, so any failure
-// here just means everything uploads.
-const known = new Set();
-try {
-  const slugDir = prefix.split("/").slice(0, -1).join("/");
-  const head = await github(`/git/ref/heads/${branch}`);
-  let dir = (await github(`/git/commits/${head.object.sha}`)).tree.sha;
-  for (const part of slugDir.split("/")) {
-    dir = (await github(`/git/trees/${dir}`)).tree.find((entry) => entry.type === "tree" && entry.path === part)?.sha;
-    if (!dir) break;
-  }
-  if (dir) {
-    const own = prefix.split("/").pop();
-    const number = (name) => name.replace(/^v/, "").split(".").map(Number);
-    const newest = (await github(`/git/trees/${dir}`)).tree
-      .filter((entry) => entry.type === "tree" && entry.path !== own)
-      .sort((x, y) => {
-        const [a, b] = [number(x.path), number(y.path)];
-        for (let i = 0; i < Math.max(a.length, b.length); i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (b[i] ?? 0) - (a[i] ?? 0);
-        return 0;
-      })[0];
-    if (newest) for (const entry of (await github(`/git/trees/${newest.sha}?recursive=1`)).tree) if (entry.type === "blob") known.add(entry.sha);
-  }
-} catch {
-  // No listing means nothing is known; everything uploads.
-}
-lap("listing");
+const message = `Push ${start.slug} ${start.version}`;
 
-// One blob per distinct content, however many paths use it.
-const byHash = new Map();
-for (const file of files) {
-  const data = file.content ?? readFileSync(file.filePath);
-  const hash = createHash("sha1").update(`blob ${Buffer.byteLength(data)}\0`).update(data).digest("hex");
-  file.hash = hash;
-  if (!byHash.has(hash)) byHash.set(hash, file);
-}
-const tree = files.map((file) => ({ path: `${prefix}/${file.path}`, mode: "100644", type: "blob", sha: file.hash }));
-let uploaded = 0;
-const queue = [...byHash.entries()].filter(([hash]) => !known.has(hash));
-const toUpload = queue.length;
-const reused = files.length - toUpload;
-async function uploadNext() {
-  for (let item = queue.shift(); item; item = queue.shift()) {
-    const [hash, file] = item;
-    const data = file.content ?? readFileSync(file.filePath);
-    const blob = await github("/git/blobs", {
-      method: "POST",
-      body: JSON.stringify({ content: Buffer.from(data).toString("base64"), encoding: "base64" }),
-    });
-    if (blob.sha !== hash) for (const entry of tree) if (entry.sha === hash) entry.sha = blob.sha;
-    uploaded += 1;
-    // The counter redraws a line on a terminal; captured output would keep every redraw.
-    if (process.stdout.isTTY) process.stdout.write(`\rUploading ${uploaded}/${toUpload}`);
-  }
-}
-await Promise.all(Array.from({ length: 6 }, uploadNext));
-if (process.stdout.isTTY) process.stdout.write("\n");
-lap("upload");
-
-// Someone else pushing at the same moment moves the branch; build on top
-// of wherever it is now and try again.
-let commitSha;
-for (let attempt = 1; !commitSha; attempt++) {
-  const ref = await github(`/git/ref/heads/${branch}`);
-  const parent = await github(`/git/commits/${ref.object.sha}`);
-  const newTree = await github("/git/trees", {
-    method: "POST",
-    body: JSON.stringify({ base_tree: parent.tree.sha, tree }),
-  });
-  const commit = await github("/git/commits", {
-    method: "POST",
-    body: JSON.stringify({
-      message: `Push ${start.slug} ${start.version}`,
-      tree: newTree.sha,
-      parents: [ref.object.sha],
-    }),
-  });
+/**
+ * The whole version in one upload, the way `git push` sends it: the new files' contents, the trees and the commit
+ * travel together in one request. A prototype with hundreds of files is no slower to save than one with ten, and
+ * GitHub's limit on how fast content can be created (which a file-by-file upload meets) never comes into it.
+ *
+ * It works in a throwaway folder, never the prototype's own, and fetches only the repository's listing (no file
+ * contents). Unchanged files aren't sent: git sees they are already there. Returns the commit, or null when git
+ * isn't installed or this didn't work, and the file-by-file upload below does it instead.
+ */
+function commitWithGit() {
+  if (spawnSync("git", ["--version"]).status !== 0) return null;
+  const work = mkdtempSync(join(tmpdir(), "studio-push-"));
+  const env = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_AUTHOR_NAME: "Prototype Studio",
+    GIT_AUTHOR_EMAIL: "studio@users.noreply.github.com",
+    GIT_COMMITTER_NAME: "Prototype Studio",
+    GIT_COMMITTER_EMAIL: "studio@users.noreply.github.com",
+    // The token travels as a header rather than in the address, so it never shows in a process list or an error.
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.extraHeader",
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
+  };
+  const remote = process.env.STUDIO_GIT_REMOTE ?? `https://github.com/${owner}/${repo}.git`;
+  const git = (args, input) => spawnSync("git", args, { cwd: join(work, "repo"), env, input, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  // Git's own explanation, its "fatal:" line where there is one.
+  const why = (step, result) => {
+    const lines = (result.stderr || result.error?.message || "").trim().split("\n");
+    return `${step}: ${(lines.find((line) => line.startsWith("fatal:")) ?? lines.at(-1) ?? "").replace(/^fatal:\s*/, "")}`;
+  };
   try {
-    await github(`/git/refs/heads/${branch}`, {
-      method: "PATCH",
-      body: JSON.stringify({ sha: commit.sha }),
-    });
-    commitSha = commit.sha;
-  } catch (error) {
-    if (error.status !== 422 || attempt >= 5) throw error;
+    // The latest commit and its trees, without a single file's contents.
+    const cloned = spawnSync("git", ["clone", "-q", "--no-checkout", "--depth=1", "--filter=blob:none", "--single-branch", "--branch", branch, remote, "repo"], { cwd: work, env, encoding: "utf8" });
+    if (cloned.status !== 0) return { failed: why("fetching the repository", cloned) };
+    lap("fetch");
+
+    // Every file into the throwaway repository: from disk in one go, and the few made here (studio.json) one by one.
+    const onDisk = files.filter((file) => !file.content);
+    const hashed = git(["hash-object", "-w", "--stdin-paths"], onDisk.map((file) => file.filePath).join("\n") + "\n");
+    if (hashed.status !== 0) return { failed: why("reading the files", hashed) };
+    const shas = hashed.stdout.trim().split("\n");
+    onDisk.forEach((file, index) => (file.hash = shas[index]));
+    for (const file of files.filter((item) => item.content)) {
+      const made = git(["hash-object", "-w", "--stdin"], file.content);
+      if (made.status !== 0) return { failed: why("reading the files", made) };
+      file.hash = made.stdout.trim();
+    }
+    const entries = files.map((file) => `100644 ${file.hash}\t${prefix}/${file.path}`).join("\n") + "\n";
+
+    // Someone else saving at the same moment moves the branch; build on top of wherever it is now and try again.
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      if (attempt > 1) {
+        const fetched = git(["fetch", "-q", "--depth=1", "origin", branch]);
+        if (fetched.status !== 0) return { failed: why("catching up with the repository", fetched) };
+      }
+      const parent = git(["rev-parse", attempt > 1 ? "FETCH_HEAD" : "HEAD"]).stdout.trim();
+      // The index holds the whole repository's listing; only the version's folder is added to it.
+      const steps = [
+        ["read-tree", parent],
+        ["update-index", "--add", "--index-info"],
+      ];
+      for (const [index, args] of steps.entries()) {
+        const done = git(args, index === 1 ? entries : undefined);
+        if (done.status !== 0) return { failed: why("preparing the commit", done) };
+      }
+      // Other prototypes' files were never fetched, so the tree is written without looking for them.
+      const tree = git(["write-tree", "--missing-ok"]);
+      if (tree.status !== 0) return { failed: why("preparing the commit", tree) };
+      const commit = git(["commit-tree", tree.stdout.trim(), "-p", parent, "-m", message]);
+      if (commit.status !== 0) return { failed: why("preparing the commit", commit) };
+      const sha = commit.stdout.trim();
+      // The thorough walk, not git's quicker default: a new version's folder is a new path, and only the thorough walk
+      // notices that most of its files are already in the repository under the last version, so they aren't sent again.
+      const pushed = git(["-c", "pack.useSparse=false", "push", "-q", "origin", `${sha}:refs/heads/${branch}`]);
+      if (pushed.status === 0) return { sha };
+      if (!/non-fast-forward|fetch first|rejected/i.test(pushed.stderr)) return { failed: why("sending it", pushed) };
+    }
+    return { failed: "the repository kept moving while saving" };
+  } finally {
+    rmSync(work, { recursive: true, force: true });
   }
 }
 
-lap("commit");
+/** The same commit made through GitHub's API, a file at a time: for a machine without git. */
+async function commitWithApi() {
+  // Blobs the previous version of this prototype already holds (same git hash) are referenced, not re-sent. Every
+  // version is still a full snapshot. Only a shortcut: re-posting an existing blob is harmless.
+  const known = new Set();
+  try {
+    const slugDir = prefix.split("/").slice(0, -1).join("/");
+    const head = await github(`/git/ref/heads/${branch}`);
+    let dir = (await github(`/git/commits/${head.object.sha}`)).tree.sha;
+    for (const part of slugDir.split("/")) {
+      dir = (await github(`/git/trees/${dir}`)).tree.find((entry) => entry.type === "tree" && entry.path === part)?.sha;
+      if (!dir) break;
+    }
+    if (dir) {
+      const own = prefix.split("/").pop();
+      const number = (name) => name.replace(/^v/, "").split(".").map(Number);
+      const newest = (await github(`/git/trees/${dir}`)).tree
+        .filter((entry) => entry.type === "tree" && entry.path !== own)
+        .sort((x, y) => {
+          const [a, b] = [number(x.path), number(y.path)];
+          for (let i = 0; i < Math.max(a.length, b.length); i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (b[i] ?? 0) - (a[i] ?? 0);
+          return 0;
+        })[0];
+      if (newest) for (const entry of (await github(`/git/trees/${newest.sha}?recursive=1`)).tree) if (entry.type === "blob") known.add(entry.sha);
+    }
+  } catch {
+    // No listing means nothing is known; everything uploads.
+  }
+  lap("listing");
+
+  // One blob per distinct content, however many paths use it.
+  const byHash = new Map();
+  for (const file of files) {
+    const data = file.content ?? readFileSync(file.filePath);
+    const hash = createHash("sha1").update(`blob ${Buffer.byteLength(data)}\0`).update(data).digest("hex");
+    file.hash = hash;
+    if (!byHash.has(hash)) byHash.set(hash, file);
+  }
+  const tree = files.map((file) => ({ path: `${prefix}/${file.path}`, mode: "100644", type: "blob", sha: file.hash }));
+  let uploaded = 0;
+  const queue = [...byHash.entries()].filter(([hash]) => !known.has(hash));
+  const toUpload = queue.length;
+  async function uploadNext() {
+    for (let item = queue.shift(); item; item = queue.shift()) {
+      const [hash, file] = item;
+      const data = file.content ?? readFileSync(file.filePath);
+      const blob = await github("/git/blobs", {
+        method: "POST",
+        body: JSON.stringify({ content: Buffer.from(data).toString("base64"), encoding: "base64" }),
+      });
+      if (blob.sha !== hash) for (const entry of tree) if (entry.sha === hash) entry.sha = blob.sha;
+      uploaded += 1;
+      // The counter redraws a line on a terminal; captured output would keep every redraw.
+      if (process.stdout.isTTY) process.stdout.write(`\rUploading ${uploaded}/${toUpload}`);
+    }
+  }
+  // Fewer at once than a browser would: GitHub limits how fast content can be created.
+  await Promise.all(Array.from({ length: 3 }, uploadNext));
+  if (process.stdout.isTTY) process.stdout.write("\n");
+  lap("upload");
+
+  // Someone else pushing at the same moment moves the branch; build on top of wherever it is now and try again.
+  for (let attempt = 1; ; attempt++) {
+    const ref = await github(`/git/ref/heads/${branch}`);
+    const parent = await github(`/git/commits/${ref.object.sha}`);
+    const newTree = await github("/git/trees", { method: "POST", body: JSON.stringify({ base_tree: parent.tree.sha, tree }) });
+    const commit = await github("/git/commits", { method: "POST", body: JSON.stringify({ message, tree: newTree.sha, parents: [ref.object.sha] }) });
+    try {
+      await github(`/git/refs/heads/${branch}`, { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
+      return { sha: commit.sha, summary: `Uploaded ${toUpload} new file(s), ${files.length - toUpload} unchanged` };
+    } catch (error) {
+      if (error.status !== 422 || attempt >= 5) throw error;
+    }
+  }
+}
+
+const viaGit = commitWithGit();
+if (viaGit?.failed) console.log(`Couldn't send it in one go (${viaGit.failed}); uploading file by file instead.`);
+const saved = viaGit?.sha ? { sha: viaGit.sha, summary: `Sent ${files.length} file(s) in one upload` } : await commitWithApi();
+const commitSha = saved.sha;
+lap(viaGit?.sha ? "upload" : "commit");
 
 // 3. Tell the studio.
 const notes = { name, version: start.version, commit: commitSha, slug: start.slug };
@@ -581,7 +666,7 @@ if (!notes.author) notes.author = spawnSync("git", ["config", "user.name"], { en
 const result = await studio("/api/push", notes);
 lap("record");
 
-console.log(`Uploaded ${files.length - reused} new file(s), ${reused} unchanged, ${(totalBytes / 1024 / 1024).toFixed(1)} MB total`);
+console.log(`${saved.summary}, ${(totalBytes / 1024 / 1024).toFixed(1)} MB total`);
 console.log(`Pushed ${result.slug} ${result.version}`);
 console.log(result.studio);
 console.log(`Time: ${laps.join(" · ")}`);
