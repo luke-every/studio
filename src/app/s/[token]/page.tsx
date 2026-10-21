@@ -6,6 +6,7 @@ import { versionSegment } from "@/lib/registry/version";
 import { mintReviewToken } from "@/lib/review";
 import { collaborators } from "@/lib/registry/select";
 import { readShareToken } from "@/lib/share";
+import { contentRepoUrl } from "@/lib/registry/github";
 
 /**
  * One version of a prototype, shared with somebody who doesn't have the
@@ -39,6 +40,11 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
       version={{ label: version.version, url: version.url! }}
       slug={prototype.slug}
       versionKey={version.key}
+      // The version's files on GitHub, straight to the app's source when it has one, for an engineer picking it up.
+      githubUrl={(() => {
+        const repo = contentRepoUrl();
+        return repo ? `${repo}/p/${prototype.slug}/${versionSegment(version.key)}${version.source ? "/_source" : ""}` : undefined;
+      })()}
       token={(await params).token}
       // What lets somebody with the link leave a comment on this version, and nothing else.
       review={mintReviewToken(prototype.slug, versionSegment(version.key), { forever: true })}

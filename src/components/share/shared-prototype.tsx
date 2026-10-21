@@ -58,6 +58,7 @@ function Shared({
   review,
   slug,
   versionKey,
+  githubUrl,
 }: {
   name: string;
   description: string;
@@ -71,6 +72,8 @@ function Shared({
   slug: string;
   /** The version as it is stored (v2.0), which comments are filed under. */
   versionKey: string;
+  /** Its files on GitHub, for engineers. */
+  githubUrl?: string;
 }) {
   const offered = usePrototypeControls(version.url);
   const variants = useVersionVariants(version.url);
@@ -218,6 +221,7 @@ function Shared({
             }
           }}
           onOpenPrototype={() => window.location.assign(address)}
+          githubUrl={full ? undefined : githubUrl}
           minimal
           corner={full ? undefined : <ShareQr />}
         />

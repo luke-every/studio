@@ -12,7 +12,7 @@ import { useComments, useShowComments } from "@/components/prototype/use-comment
 import { MotionSheet } from "@/components/motion";
 import { ShareMenu } from "@/components/prototype/share-menu";
 
-import { CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
+import { CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, GithubIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
 
 import { controlOn, IconButton } from "./button";
 import { DialogForm } from "./dialog-form";
@@ -91,6 +91,7 @@ export function PrototypeFrame({
   bare = false,
   onBare,
   onOpenPrototype,
+  githubUrl,
   minimal = false,
 }: {
   url?: string;
@@ -152,6 +153,8 @@ export function PrototypeFrame({
   onBare?: (on: boolean) => void;
   /** A share page's button for the prototype itself: it loads in this tab, as it would opened on its own. */
   onOpenPrototype?: () => void;
+  /** A share page's link to the version's files on GitHub, for engineers. */
+  githubUrl?: string;
   /** A share page: the version, the viewport, the comment buttons and full screen on the bar, and no look toggle, canvas, restart or share. */
   minimal?: boolean;
 }) {
@@ -612,6 +615,13 @@ export function PrototypeFrame({
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end max-sm:contents">
                 {pinButtons ? <div className="flex items-center gap-2 max-sm:hidden">{pinButtons}</div> : null}
+                {minimal && githubUrl ? (
+                  <span className="hidden lg:block">
+                    <IconButton label="Open in GitHub" tooltipAlign="end" href={githubUrl} external>
+                      <GithubIcon />
+                    </IconButton>
+                  </span>
+                ) : null}
                 {minimal && onOpenPrototype && !fullscreen ? (
                   <span className="hidden lg:block">
                     <IconButton label="Open the prototype" tooltipAlign="end" onClick={onOpenPrototype}>
