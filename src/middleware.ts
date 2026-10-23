@@ -45,8 +45,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/fonts/") ||
     // The installer and the skill files it fetches, run from a terminal.
     pathname === "/install.sh" ||
-    // The comment script a review link adds to a prototype, fetched by the prototype's page.
+    // The comment script a review link adds to a prototype, and the anchor code it uses, fetched by the prototype's page.
     pathname === "/studio-review.js" ||
+    pathname === "/studio-anchor.js" ||
     // The service worker and manifest are fetched by the browser without the cookie.
     pathname === "/sw.js" ||
     pathname === "/manifest.webmanifest" ||

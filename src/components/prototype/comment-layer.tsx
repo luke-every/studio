@@ -2,22 +2,15 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 
+import { addressFor, anchorAt, bringIntoView, elementOf, nearestOf, ownedBy, pageKey, spotOf, type Found } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
 
-import {
-  anchorAt,
-  Card,
-  CommentCard,
-  Composer,
-  DraftPin,
-  elementOf,
-  nearestOf,
-  pageKey,
-  Pin,
-  spotOf,
-  type CommentsUi,
-  type Spot,
-} from "./comment-parts";
+import { Card, CommentCard, Composer, DraftPin, Pin, PIN, type CommentsUi } from "./comment-parts";
+import { usePinWatch } from "./use-pin-watch";
+
+const NEAREST = "This screen looks different for you, so it is pinned to the nearest match.";
+const LOOKING = "Finding where this was left…";
+const MISSING = "Couldn't find where this was left. The prototype may have changed since.";
 
 /**
  * Comments over a prototype: the pins, the card for the one that is open, and
@@ -25,9 +18,9 @@ import {
  * anchor. It is the studio's own layer above the frame, never inside the
  * prototype's document, so the prototype itself is not touched.
  *
- * Pin positions are read from the prototype every frame while any are on
- * screen, so they follow it as it scrolls, resizes or moves things about; a
- * state is only set when somebody's pin actually moved.
+ * Pin positions are read from the prototype whenever something could have
+ * moved them (`usePinWatch`), so they follow it as it scrolls, resizes or
+ * moves things about; a state is only set when somebody's pin actually moved.
  */
 export function CommentLayer({
   frame,
@@ -46,6 +39,7 @@ export function CommentLayer({
     focus,
     onFocus,
     onLocate,
+    searching = false,
     onAdd,
     onReply,
     onResolve,
@@ -56,7 +50,12 @@ export function CommentLayer({
 
   const [draft, setDraft] = useState<Anchor | null>(null);
   const [retry, setRetry] = useState({ text: "" });
-  const [spots, setSpots] = useState<Record<string, Spot>>({});
+  const [spots, setSpots] = useState<Record<string, Found>>({});
+  // How going to the comment asked for ended, once it has: `missing` when nothing of it was on the screen it ended on.
+  const [settled, setSettled] = useState<{ at: number; missing: boolean } | null>(null);
+  // The ask the flow was searched for: it says it is still looking until it has settled, not only while the search runs.
+  const [searched, setSearched] = useState<number | null>(null);
+  if (searching && focus && searched !== focus.at) setSearched(focus.at);
   // Where the layer is in the window, so a card can be drawn outside the frame's clipping and still sit by its pin.
   const [origin, setOrigin] = useState({ left: 0, top: 0 });
   const root = useRef<HTMLDivElement>(null);
@@ -72,40 +71,36 @@ export function CommentLayer({
   const shownDraft = stillPlacing ? draft : null;
 
   const focusId = focus?.id;
-  useEffect(() => {
-    if (!visible) return;
-    let raf = 0;
-    let last = "";
-    const tick = () => {
-      const doc = frame.current?.contentDocument;
-      if (doc?.body) {
-        const next: Record<string, Spot> = {};
-        const page = pageKey(doc);
-        for (const comment of comments) {
-          // The one asked for is shown at the nearest thing there when its own element isn't.
-          const spot = spotOf(doc, comment.anchor, page, comment.id === focusId);
-          if (spot) next[comment.id] = spot;
-        }
-        const draftSpot = shownDraft ? spotOf(doc, shownDraft, page) : null;
-        if (draftSpot) next.draft = draftSpot;
-        const box = root.current?.getBoundingClientRect();
-        const moved = { left: box?.left ?? 0, top: box?.top ?? 0 };
-        const signature = JSON.stringify([next, moved]);
-        if (signature !== last) {
-          last = signature;
-          setSpots(next);
-          setOrigin(moved);
-        }
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => cancelAnimationFrame(raf);
-  }, [visible, comments, shownDraft, frame, focusId]);
+  const last = useRef("");
+  const read = () => {
+    const doc = frame.current?.contentDocument;
+    if (!doc?.body) return;
+    const next: Record<string, Found> = {};
+    const page = pageKey(doc);
+    for (const comment of comments) {
+      // The one asked for is shown at the nearest thing there when its own element isn't.
+      const spot = spotOf(doc, comment.anchor, page, comment.id === focusId);
+      if (spot) next[comment.id] = spot;
+    }
+    const draftSpot = shownDraft ? spotOf(doc, shownDraft, page) : null;
+    if (draftSpot) next.draft = draftSpot;
+    const box = root.current?.getBoundingClientRect();
+    const moved = { left: box?.left ?? 0, top: box?.top ?? 0 };
+    const signature = JSON.stringify([next, moved]);
+    if (signature !== last.current) {
+      last.current = signature;
+      setSpots(next);
+      setOrigin(moved);
+    }
+  };
+  usePinWatch(() => [frame.current], read, visible, [comments, shownDraft, focusId]);
 
-  // Asked for a comment: go to its screen if it is on another, and bring it into view.
+  // Asked for a comment: put the prototype back where it was left (its page and its own address), go to its flow screen if
+  // it is on another, bring it into view, and say how that ended. Run again when a search of the flow ends, and when the
+  // comment arrives in the list (it is on another setup, which has just been put on screen).
+  const known = !!focus && comments.some((item) => item.id === focus.id);
   useEffect(() => {
-    if (!focus) return;
+    if (!focus || searching) return;
     const comment = latest.current.find((item) => item.id === focus.id);
     const element = frame.current;
     const win = element?.contentWindow;
@@ -120,7 +115,7 @@ export function CommentLayer({
       if (comment.anchor.selector && !exact && locate.current?.(comment)) return;
       // Looked for already and not found as it was: the nearest thing there.
       const target = exact ?? nearestOf(doc, comment.anchor)?.element;
-      if (target) target.scrollIntoView({ block: "center", inline: "center" });
+      if (target) bringIntoView(doc, target, comment.anchor);
       else
         win.scrollTo(
           0,
@@ -130,7 +125,10 @@ export function CommentLayer({
       // There, but not as it was (another step drawn the same way): once it has settled, ask for the screen that has it.
       check = window.setTimeout(() => {
         const now = element.contentDocument;
-        if (now && !spotOf(now, comment.anchor)) locate.current?.(comment);
+        if (!now) return;
+        if (!spotOf(now, comment.anchor) && locate.current?.(comment)) return;
+        // Missing is nothing of it there at all; one that is there but out of sight is only waiting to be scrolled back to.
+        setSettled({ at: focus.at, missing: !!comment.anchor.selector && !nearestOf(now, comment.anchor) });
       }, 350);
     };
 
@@ -146,12 +144,15 @@ export function CommentLayer({
         wait = window.setTimeout(start, 30);
         return;
       }
-      if (win.location.pathname === comment.anchor.screen) {
+      const to = addressFor(win.location, comment.anchor, ownedBy(element));
+      if (!to) {
         reveal();
         return;
       }
-      element.addEventListener("load", reveal, { once: true });
-      win.location.assign(comment.anchor.screen);
+      // Only the hash changing loads nothing; the prototype's own router takes it, and is given a moment.
+      if (to.reload) element.addEventListener("load", reveal, { once: true });
+      else wait = window.setTimeout(reveal, 100);
+      win.location.assign(to.href);
     };
 
     start();
@@ -160,7 +161,7 @@ export function CommentLayer({
       window.clearTimeout(wait);
       element.removeEventListener("load", reveal);
     };
-  }, [focus, frame]);
+  }, [focus, frame, searching, known]);
 
   // The glass takes clicks, not scrolling: a wheel over it scrolls whatever in the prototype is under the pointer and can
   // still move that way, else the page, by the distance it moved on screen.
@@ -229,15 +230,25 @@ export function CommentLayer({
         doc,
         (event.clientX - box.left) / scale,
         (event.clientY - box.top) / scale,
+        ownedBy(frame.current!),
       ),
     );
   };
 
-  const open = comments.find((item) => item.id === focus?.id);
-  const windowAt = (spot: Spot) => ({
+  const windowAt = (spot: { x: number; y: number }) => ({
     left: origin.left + spot.x * scale,
     top: origin.top + spot.y * scale,
   });
+  // The comment asked for opens wherever it is, and says so when that isn't where it was left. Not found, or still being
+  // looked for, it opens at the frame's corner; found but scrolled out of sight, it waits until it is back.
+  const open = comments.find((item) => item.id === focus?.id);
+  const openSpot = open ? spots[open.id] : undefined;
+  const ended = settled && settled.at === focus?.at ? settled : null;
+  const openAs = openSpot
+    ? { at: windowAt(openSpot), note: openSpot.exact ? undefined : NEAREST }
+    : ended?.missing || searching || (searched === focus?.at && !ended)
+      ? { at: { left: origin.left, top: origin.top + PIN }, note: ended?.missing ? MISSING : LOOKING }
+      : null;
 
   return (
     <div
@@ -272,11 +283,12 @@ export function CommentLayer({
           })
         : null}
 
-      {visible && open && spots[open.id] ? (
+      {visible && open && openAs ? (
         <CommentCard
           comment={open}
           replies={replies[open.id] ?? []}
-          at={windowAt(spots[open.id])}
+          at={openAs.at}
+          note={openAs.note}
           onClose={() => onFocus(null)}
           onReply={onReply}
           onResolve={(comment, resolved) => {

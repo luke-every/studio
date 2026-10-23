@@ -12,8 +12,10 @@ import { z } from "zod";
  */
 
 export const anchorSchema = z.object({
-  /** Where inside the prototype it was left: the frame's path and query, so a flow screen reopens. */
+  /** Which page of the prototype it was left on: the frame's path. */
   screen: z.string().max(500),
+  /** The prototype's own place in its address when it was left, as `stateOf` writes it: going to the comment puts it back. */
+  state: z.string().max(500).optional(),
   /** The element clicked, as `selectorFor` writes it. Null when the click was on the bare page. */
   selector: z.string().max(1000).nullable(),
   /** The start of that element's text, so a step that reuses the same markup position isn't mistaken for it. */

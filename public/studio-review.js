@@ -13,7 +13,7 @@
  */
 (function () {
   var script = document.currentScript;
-  if (!script || !script.dataset.token || window.__studioReview) return;
+  if (!script || !script.dataset.token || window.__studioReview || !window.__studioAnchor) return;
   window.__studioReview = true;
 
   var slug = script.dataset.slug;
@@ -46,52 +46,13 @@
     return made ? (text ? text + "&" : "") + "studio-variant=" + made : text;
   }
 
-  // --- Where a comment goes: the same description of a place the studio uses, so its pin lands on the same element. ---
-  function clamp(n) { return Math.min(1, Math.max(0, n)); }
-
-  function selectorFor(element) {
-    var doc = element.ownerDocument;
-    var parts = [];
-    var node = element;
-    while (node && node !== doc.body && node !== doc.documentElement) {
-      if (node.id && doc.querySelectorAll("#" + CSS.escape(node.id)).length === 1) {
-        parts.unshift("#" + CSS.escape(node.id));
-        return parts.join(" > ");
-      }
-      var tag = node.tagName.toLowerCase();
-      var same = Array.prototype.filter.call(
-        node.parentElement ? node.parentElement.children : [],
-        function (sibling) { return sibling.tagName === node.tagName; }
-      );
-      parts.unshift(same.length > 1 ? tag + ":nth-of-type(" + (same.indexOf(node) + 1) + ")" : tag);
-      node = node.parentElement;
-    }
-    return ["body"].concat(parts).join(" > ");
-  }
-
-  function pageKey() {
-    return ((document.body && document.body.innerText) || "")
-      .toLowerCase().replace(/[^a-z]+/g, " ").trim().slice(0, 40);
-  }
-
-  function elementAt(x, y) {
-    var hit = document.elementFromPoint(x, y);
-    return hit && hit !== document.body && hit !== document.documentElement ? hit : null;
-  }
-
-  function anchorAt(x, y, element) {
-    var root = document.documentElement;
-    var rect = element ? element.getBoundingClientRect() : null;
-    return {
-      screen: location.pathname,
-      page: pageKey(),
-      selector: element ? selectorFor(element) : null,
-      text: element ? (element.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60) || undefined : undefined,
-      x: rect && rect.width ? clamp((x - rect.left) / rect.width) : 0,
-      y: rect && rect.height ? clamp((y - rect.top) / rect.height) : 0,
-      fx: clamp((x + window.scrollX) / Math.max(1, root.scrollWidth)),
-      fy: clamp((y + window.scrollY) / Math.max(1, root.scrollHeight)),
-    };
+  // --- Where a comment goes: the studio's own description of a place (src/lib/anchor.ts, built into
+  // studio-anchor.js, which the studio adds just before this), so its pin lands on the same element. ---
+  var place = window.__studioAnchor;
+  var STUDIO_KEYS = ["review", "preview", "studio", "studio-variant"];
+  // Which keys of the address are the studio's rather than the prototype's own; all of them while the controls are unknown.
+  function studioOwns(names) {
+    return function (key) { return STUDIO_KEYS.indexOf(key) !== -1 || !names || names.indexOf(key) !== -1; };
   }
 
   // --- Who is commenting. The studio's own choice is the default; this page keeps its own so it never disturbs it. ---
@@ -297,7 +258,8 @@
   function compose(x, y, again) {
     composing = true;
     var at = again ? again.at : { x: x + window.scrollX, y: y + window.scrollY };
-    var anchor = again ? again.anchor : anchorAt(x, y, elementAt(x, y));
+    // The prototype's own place in its address is added when it is posted, once the controls say which keys are theirs.
+    var anchor = again ? again.anchor : place.anchorAt(document, x, y, studioOwns(null));
     var name = savedName();
     var scrim = el("div", { className: "scrim" });
     var pin = makePin(name, at);
@@ -382,7 +344,7 @@
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               slug: slug, version: version, token: token,
-              text: text, anchor: anchor, variant: setupOf(names), by: name || undefined, avatar: avatarOf(name),
+              text: text, anchor: Object.assign({}, anchor, { state: place.stateOf(location, studioOwns(names)) }), variant: setupOf(names), by: name || undefined, avatar: avatarOf(name),
             }),
           });
         }).then(function (response) {

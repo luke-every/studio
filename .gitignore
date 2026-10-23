@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Local-only registry used by `next dev` with no content repository
 /.local/
+
+# Built from src/lib/anchor.ts by scripts/build-anchor.ts
+/public/studio-anchor.js

@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { CommentsUi } from "@/components/prototype/comment-parts";
-import { locateScreen } from "@/components/prototype/locate-screen";
+import { useCommentFocus } from "@/components/prototype/use-comment-focus";
 import { reviewPrompt, type Anchor, type Comment } from "@/lib/comments";
 import { useStudio } from "@/lib/data/studio-store";
 import { useEditSession } from "@/components/prototype/use-edit-session";
@@ -217,10 +217,6 @@ export function PrototypeFrame({
   };
   const commenting = mode === "comment" && !!commentsOf;
   const [listOpen, setListOpen] = useState(false);
-  const [focus, setFocus] = useState<{ id: string; at: number } | null>(null);
-  const askFor = (id: string | null) => setFocus((now) => (id ? { id, at: (now?.at ?? 0) + 1 } : null));
-  // A link from a notification names a comment: open the list and go to it, once the comments have loaded.
-  const [asked, setAsked] = useState(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("comment")));
   const openCount = everything.filter((comment) => !comment.resolvedAt).length;
   // The panel keeps showing what it held while it closes.
   const panelOpen = (dev && !showingFlow) || (commenting && listing);
@@ -231,57 +227,34 @@ export function PrototypeFrame({
   const [target, setTarget] = useState<Element | null>(null);
   // While Selecting, clicks pick a part; while Interacting they go to the prototype, to move between screens.
   const [interacting, setInteracting] = useState(false);
-  // A comment asked for that isn't on the screen showing is on another step of the flow. Most know which (it is noted when
-  // they are left) and that screen is shown at once; one that doesn't is looked for, once per ask, and noted for next time.
-  const [located, setLocated] = useState(0);
   const show = (screen: FlowScreen) => {
     setOpened({ address: addressed, screen });
     // Starts it over even if that screen is already the one open, since the prototype may have moved on from it.
     setRestarts((count) => count + 1);
   };
-  const locate = (comment: Comment) => {
-    if (!flow || !addressed || !focus || located === focus.at) return false;
-    setLocated(focus.at);
-    const known = flow.screens.find((screen) => screen.id === comment.anchor.flowScreen);
-    if (known) {
-      show(known);
-      return true;
-    }
-    void locateScreen(addressed, flow, device, comment.anchor).then((found) => {
-      if (!found) return;
-      show(found.screen);
-      // Only somewhere it is exactly as it was is noted; the nearest is a guess for this person's prototype.
-      if (found.exact) void placeComment(comment, found.screen.id);
-    });
-    return true;
-  };
-  // Choosing a comment from the list. One noted as on another flow screen than the one open goes there at once, without
-  // first looking for it on this one (where a step drawn over another can make it seem to be).
-  const goTo = (comment: Comment) => {
-    const next = (focus?.at ?? 0) + 1;
-    setFocus({ id: comment.id, at: next });
-    // Left on another setup: show that one, and it is opened there once the prototype has reloaded.
-    if (!showingVariants && commentsOf?.onSetup && comment.variant !== commentsOf.variant) {
-      commentsOf.onSetup(comment.variant ?? "");
-      return;
-    }
-    const known = flow?.screens.find((item) => item.id === comment.anchor.flowScreen);
-    if (known && addressed && known.id !== (screen ?? flow?.screens[0])?.id) {
-      setLocated(next);
-      show(known);
-    }
-  };
-  // Leaving a comment: which flow screen it is on is found straight after, out of sight, so going to it later is instant.
+  const { focus, ask, goTo, locate, searching, placeNew } = useCommentFocus({
+    flow,
+    address: addressed,
+    size: device,
+    screen,
+    show,
+    setup: { variant: commentsOf?.variant, onSetup: showingVariants ? undefined : commentsOf?.onSetup, canShow: commentsOf?.canShow },
+    everything,
+    ready: !!url,
+    place: placeComment,
+    onLinked: () => {
+      changeMode("comment");
+      setListing(!narrow);
+    },
+  });
   const addComment = async (text: string, anchor: Anchor, setup?: string) => {
     const posted = await postComment(text, anchor, setup);
-    if (posted && flow && addressed && !anchor.flowScreen && setup === undefined) {
-      void locateScreen(addressed, flow, device, anchor).then((found) => void (found?.exact && placeComment(posted, found.screen.id)));
-    }
+    if (posted && setup === undefined) placeNew(posted, anchor);
     return !!posted;
   };
   const commentsUi: CommentsUi | null =
     commentsOf && !dev
-      ? { list: comments, visible: !bare && (showPins || commenting), placing: commenting && !interacting, focus, onFocus: askFor, onLocate: locate, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
+      ? { list: comments, visible: !bare && (showPins || commenting), placing: commenting && !interacting, focus, onFocus: ask, onLocate: locate, searching, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
       : null;
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
@@ -436,30 +409,6 @@ export function PrototypeFrame({
       () => (opened ? (opened.location.href = address) : undefined),
     );
   };
-  // A link from a notification names a comment. It is gone to once the comment has loaded and the setup it was left on can
-  // be shown, which is after the page: the prototype's options and variants load on their own. The same as choosing it in the list.
-  const [waited, setWaited] = useState(false);
-  useEffect(() => {
-    if (!asked) return undefined;
-    const timer = window.setTimeout(() => setWaited(true), 4000);
-    return () => window.clearTimeout(timer);
-  }, [asked]);
-  const askedComment = asked ? everything.find((item) => item.id === asked) : undefined;
-  const askedReady = !!askedComment && !!url && (waited || (commentsOf?.canShow?.(askedComment.variant) ?? true));
-  /* eslint-disable react-hooks/set-state-in-effect -- going to a comment is a reaction to it having arrived */
-  useEffect(() => {
-    if (!askedReady || !askedComment) return;
-    setAsked(null);
-    const address = new URL(window.location.href);
-    address.searchParams.delete("comment");
-    window.history.replaceState(null, "", address);
-    changeMode("comment");
-    setListing(!narrow);
-    goTo(askedComment);
-    // Once, when it becomes ready; the rest is read from the render that sees it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [askedReady]);
-  /* eslint-enable react-hooks/set-state-in-effect */
   useEffect(() => {
     const element = stage.current;
     if (!element) return;

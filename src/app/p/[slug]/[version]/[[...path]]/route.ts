@@ -114,9 +114,12 @@ function withBase(html: string, href: string) {
   return root ? html.replace(root[0], `${root[0]}${tag}`) : `${tag}${html}`;
 }
 
-/** The comment script, last thing in the page, told which version it is on and what it may do there. */
+/**
+ * The comment script, last thing in the page, told which version it is on and what it may do there. The studio's own
+ * description of where a comment is (`src/lib/anchor.ts`, built into studio-anchor.js) comes first, for it to use.
+ */
 function withReview(html: string, review: { slug: string; version: string; token: string }) {
-  const tag = `<script src="/studio-review.js" data-slug="${review.slug}" data-version="${review.version}" data-token="${review.token}"></script>`;
+  const tag = `<script src="/studio-anchor.js"></script><script src="/studio-review.js" data-slug="${review.slug}" data-version="${review.version}" data-token="${review.token}"></script>`;
   const close = html.lastIndexOf("</body>");
   return close === -1 ? `${html}${tag}` : `${html.slice(0, close)}${tag}${html.slice(close)}`;
 }

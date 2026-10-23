@@ -7,5 +7,7 @@ run() {
 run npx next typegen
 run npx eslint --quiet
 run npx tsc --noEmit --pretty false
+# The phone's comment script loads the studio's anchor code, built from src/lib/anchor.ts.
+run npx tsx scripts/build-anchor.ts
 run npx next build
 echo "ok: lint, types, build"

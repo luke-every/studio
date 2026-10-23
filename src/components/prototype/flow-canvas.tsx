@@ -4,13 +4,15 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { FitIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
+import { anchorAt, ownedBy, pageKey, spotOf, type Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
 import { layoutFlow, withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
 import { applyEmbed } from "@/lib/embed";
 import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 
-import { anchorAt, Card, CommentCard, Composer, DraftPin, pageKey, Pin, spotOf, type CommentsUi, type Spot } from "./comment-parts";
+import { Card, CommentCard, Composer, DraftPin, Pin, type CommentsUi } from "./comment-parts";
+import { usePinWatch } from "./use-pin-watch";
 
 /** How big a screen is drawn on the canvas, as a share of the phone's real size. */
 const SCREEN_SCALE = 0.5;
@@ -168,43 +170,32 @@ export function FlowCanvas({
 
   const list = comments?.list;
   const visible = !!comments?.visible;
-  useEffect(() => {
-    if (!visible || !list) return;
-    let last = "";
-    // Where things are inside a screen only changes when the screen does, so this needn't run every frame, which with a dozen screens would be a lot of reading.
-    const tick = () => {
-      // Nothing moves that anyone can see while the tab is hidden.
-      if (document.hidden) return;
-      const next: typeof found = [];
-      for (const screen of flow.screens) {
-        const doc = frames.current.get(screen.id)?.contentDocument;
-        if (!doc?.body) continue;
-        const page = pageKey(doc);
-        for (const comment of list) {
-          if (setups && (comment.variant ?? "") !== setups[screen.id]) continue;
-          const spot = spotOf(doc, comment.anchor, page);
-          if (spot) next.push({ key: `${comment.id}@${screen.id}`, id: comment.id, screenId: screen.id, spot });
-        }
-        const draftSpot = draft?.screenId === screen.id ? spotOf(doc, draft.anchor, page) : null;
-        if (draftSpot) next.push({ key: "draft", id: "draft", screenId: screen.id, spot: draftSpot });
+  const last = useRef("");
+  const read = () => {
+    if (!list) return;
+    const next: typeof found = [];
+    for (const screen of flow.screens) {
+      const doc = frames.current.get(screen.id)?.contentDocument;
+      if (!doc?.body) continue;
+      const page = pageKey(doc);
+      for (const comment of list) {
+        if (setups && (comment.variant ?? "") !== setups[screen.id]) continue;
+        const spot = spotOf(doc, comment.anchor, page);
+        if (spot) next.push({ key: `${comment.id}@${screen.id}`, id: comment.id, screenId: screen.id, spot });
       }
-      const rect = box.current?.getBoundingClientRect();
-      const moved = { left: rect?.left ?? 0, top: rect?.top ?? 0 };
-      const signature = JSON.stringify([next, moved]);
-      if (signature !== last) {
-        last = signature;
-        setFound(next);
-        setOrigin(moved);
-      }
-    };
-    tick();
-    const timer = window.setInterval(tick, 250);
-    document.addEventListener("visibilitychange", tick);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", tick);
-    };
-  }, [visible, list, draft, flow, setups]);
+      const draftSpot = draft?.screenId === screen.id ? spotOf(doc, draft.anchor, page) : null;
+      if (draftSpot) next.push({ key: "draft", id: "draft", screenId: screen.id, spot: draftSpot });
+    }
+    const rect = box.current?.getBoundingClientRect();
+    const moved = { left: rect?.left ?? 0, top: rect?.top ?? 0 };
+    const signature = JSON.stringify([next, moved]);
+    if (signature !== last.current) {
+      last.current = signature;
+      setFound(next);
+      setOrigin(moved);
+    }
+  };
+  usePinWatch(() => [...frames.current.values()], read, visible && !!list, [list, draft, flow, setups]);
 
   // Asked for a comment: zoom to the screen it is on, filling the clear part of the canvas.
   const here = useRef(found);
@@ -325,11 +316,12 @@ export function FlowCanvas({
       const spot = at(item.id);
       return world.x >= spot.x && world.x <= spot.x + node.width && world.y >= spot.y && world.y <= spot.y + heightOf(item.id);
     });
-    const doc = screen ? frames.current.get(screen.id)?.contentDocument : null;
-    if (!screen || !doc?.body) return;
+    const frame = screen ? frames.current.get(screen.id) : null;
+    const doc = frame?.contentDocument;
+    if (!screen || !frame || !doc?.body) return;
     const spot = at(screen.id);
     comments.onFocus(null);
-    const anchor = anchorAt(doc, (world.x - spot.x) / SCREEN_SCALE, (world.y - spot.y) / SCREEN_SCALE);
+    const anchor = anchorAt(doc, (world.x - spot.x) / SCREEN_SCALE, (world.y - spot.y) / SCREEN_SCALE, ownedBy(frame));
     setDraft({ screenId: screen.id, anchor: setups ? anchor : { ...anchor, flowScreen: screen.id } });
   };
   // Where a spot inside a screen is, on the canvas as it is now and in the window.

@@ -20,12 +20,9 @@ import { controlOn, IconButton } from "@/components/ui/button";
 import { ConfirmPopover } from "@/components/ui/confirm-popover";
 import { Stamp } from "@/components/ui/stamp";
 import type { Anchor, Comment } from "@/lib/comments";
-import { selectorFor } from "@/lib/edit-dom";
 import { menuItem } from "@/components/ui/menu-item";
 
 /** The pieces of commenting that the prototype frame and the flow canvas share. */
-
-export type Spot = { x: number; y: number };
 
 /** What a surface needs to show, add and answer comments. */
 export type CommentsUi = {
@@ -39,6 +36,8 @@ export type CommentsUi = {
   onFocus: (id: string | null) => void;
   /** Asked for a comment that isn't to be found on the screen showing: find the screen it is on and show that. True if it has gone looking. */
   onLocate?: (comment: Comment) => boolean;
+  /** Looking through the flow's screens for the one a comment is on. */
+  searching?: boolean;
   /** What has been said back to each comment, oldest first. */
   replies: Record<string, Comment[]>;
   /** `setup` puts it on a particular setup of the prototype (see `Comment`); an empty one is the version as it is, and none is the setup on screen. */
@@ -52,148 +51,8 @@ export type CommentsUi = {
   onCopy: (comment: Comment) => void;
 };
 
-const clamp = (value: number) => Math.min(1, Math.max(0, value));
-
-const snippet = (element: Element) =>
-  (element.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
-
-/**
- * What a page is saying, in a few words: the start of its visible text, with
- * numbers and punctuation left out so a counter or a clock doesn't change it.
- * Steps of a flow share one address and often one layout, so this is what
- * tells them apart.
- */
-export function pageKey(doc: Document) {
-  return (doc.body?.innerText ?? "")
-    .toLowerCase()
-    .replace(/[^a-z]+/g, " ")
-    .trim()
-    .slice(0, 40);
-}
-
-/** The element an anchor was made on, if it is on screen now: there, showing, and still saying what it said. */
-export function elementOf(doc: Document, anchor: Anchor): Element | null {
-  if (!anchor.selector) return null;
-  let element: Element | null = null;
-  try {
-    element = doc.querySelector(anchor.selector);
-  } catch {
-    // A selector that no longer parses is an element that is gone.
-  }
-  if (!element) return null;
-  if (
-    !element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
-  )
-    return null;
-  if (anchor.text && snippet(element) !== anchor.text) return null;
-  return element;
-}
-
-/**
- * For a comment whose element isn't there as it was, the same element showing something else. A prototype can read
- * differently for whoever opens it (a quiz's results are built from the answers in the commenter's own browser), so
- * asked for, a comment goes to: the element at its path; else one of its kind (`shapeFor`), the one saying what it
- * said if there is one; else the deepest part of its path that is there. `depth` says how near, to compare screens.
- */
-export function nearestOf(doc: Document, anchor: Anchor): { element: Element; depth: number } | null {
-  if (!anchor.selector) return null;
-  const showing = (element: Element) => element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
-  const all = (selector: string) => {
-    try {
-      return [...doc.querySelectorAll(selector)].filter(showing);
-    } catch {
-      // A selector that no longer parses matches nothing.
-      return [];
-    }
-  };
-  const parts = anchor.selector.split(" > ");
-  const at = all(anchor.selector)[0];
-  if (at) return { element: at, depth: parts.length };
-  const kind = anchor.shape ? all(anchor.shape) : [];
-  const like = kind.find((element) => anchor.text && snippet(element) === anchor.text) ?? kind[0];
-  if (like) return { element: like, depth: parts.length - 0.5 };
-  for (let depth = parts.length - 1; depth > 1; depth--) {
-    const element = all(parts.slice(0, depth).join(" > "))[0];
-    if (element) return { element, depth };
-  }
-  return null;
-}
-
-/**
- * Where an anchor is in a document, in its own pixels, or null when it isn't
- * on this screen right now. A prototype can swap one step for another without
- * changing page, or draw a step over the one before, so a comment shows only
- * where its element is there, uncovered, and the page reads as it did.
- */
-export function spotOf(
-  doc: Document,
-  anchor: Anchor,
-  page = pageKey(doc),
-  /** The comment asked for: shown at the nearest thing there (`nearestOf`) when its own element isn't. */
-  near = false,
-): Spot | null {
-  if (anchor.screen !== doc.location.pathname) return null;
-  if (!near && anchor.page && anchor.page !== page) return null;
-  if (!anchor.selector) {
-    const root = doc.documentElement;
-    const win = doc.defaultView!;
-    return {
-      x: anchor.fx * root.scrollWidth - win.scrollX,
-      y: anchor.fy * root.scrollHeight - win.scrollY,
-    };
-  }
-  const element = elementOf(doc, anchor) ?? (near ? (nearestOf(doc, anchor)?.element ?? null) : null);
-  const rect = element?.getBoundingClientRect();
-  if (!element || !rect || !(rect.width || rect.height)) return null;
-  const spot = {
-    x: rect.left + anchor.x * rect.width,
-    y: rect.top + anchor.y * rect.height,
-  };
-  // It has to be what you would see there: a step drawn over the top of it, or the page scrolled past it, hides the pin.
-  const hit = doc.elementFromPoint(spot.x, spot.y);
-  if (!hit || !(element.contains(hit) || hit.contains(element))) return null;
-  return spot;
-}
-
-/**
- * What kind of element this is: its tag and classes, and those of the few
- * elements above it, with no counting. A meal card's rating is still a meal
- * card's rating when the page holds other meals in another order, as a
- * prototype built from somebody's own answers will. Undefined when nothing
- * near it has a class to go by.
- */
-export function shapeFor(element: Element): string | undefined {
-  const parts: string[] = [];
-  for (let node: Element | null = element; node && node.tagName !== "BODY" && parts.length < 4; node = node.parentElement) {
-    parts.unshift([node.tagName.toLowerCase(), ...[...node.classList].map((name) => `.${CSS.escape(name)}`)].join(""));
-  }
-  // Kept within what a comment can hold, from the element up.
-  while (parts.join(" > ").length > 1000) parts.shift();
-  return parts.some((part) => part.includes(".")) ? parts.join(" > ") : undefined;
-}
-
-/** The anchor for a click at (x, y) in a document's own pixels. */
-export function anchorAt(doc: Document, x: number, y: number): Anchor {
-  const win = doc.defaultView!;
-  const root = doc.documentElement;
-  const hit = doc.elementFromPoint(x, y);
-  const element = hit && hit !== doc.body && hit !== root ? hit : null;
-  const rect = element?.getBoundingClientRect();
-  return {
-    screen: doc.location.pathname,
-    page: pageKey(doc),
-    selector: element ? selectorFor(element) : null,
-    text: element ? snippet(element) : undefined,
-    shape: element ? shapeFor(element) : undefined,
-    x: rect && rect.width ? clamp((x - rect.left) / rect.width) : 0,
-    y: rect && rect.height ? clamp((y - rect.top) / rect.height) : 0,
-    fx: clamp((x + win.scrollX) / Math.max(1, root.scrollWidth)),
-    fy: clamp((y + win.scrollY) / Math.max(1, root.scrollHeight)),
-  };
-}
-
 /** The pin is 2rem square; an opened pin or card is 16rem wide. Both are drawn from the pin's point. */
-const PIN = 32;
+export const PIN = 32;
 const WIDTH = 256;
 /** A card that has room to breathe: the open comment. */
 const ROOMY_WIDTH = 320;
@@ -704,10 +563,13 @@ export function CommentCard({
   onLike,
   onDelete,
   onCopy,
+  note,
 }: {
   comment: Comment;
   replies: Comment[];
   at: { left: number; top: number };
+  /** Said above the comment when it isn't shown where it was left: still being looked for, pinned to the nearest match, or not found. */
+  note?: string;
   onClose: () => void;
   onReply: (parent: Comment, text: string) => Promise<boolean>;
   onResolve: (comment: Comment, resolved: boolean) => void;
@@ -736,6 +598,7 @@ export function CommentCard({
           </IconButton>
         </div>
       </div>
+      {note ? <p className="text-ui text-foreground-subtle">{note}</p> : null}
       <div className="flex gap-3">
         <UserAvatar name={comment.author.name} className="size-10" />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
