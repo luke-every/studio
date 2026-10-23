@@ -1,7 +1,7 @@
 import type { Anchor } from "@/lib/comments";
 import { withParams, type Flow, type FlowScreen } from "@/lib/flow";
 
-import { spotOf } from "./comment-parts";
+import { nearestOf, spotOf } from "./comment-parts";
 
 /** How often a screen is asked, while it loads and plays its entrance. */
 const POLL = 50;
@@ -13,8 +13,10 @@ const PER_SCREEN = 1500;
  * step for another without changing its address, so the address says nothing
  * about it; the only way to know is to look. Each screen is loaded out of
  * sight, all at once at the size of the frame, and asked whether the comment's element is
- * there, showing, and the page says what it said. The first to say yes wins;
- * null if none does.
+ * there, showing, and the page says what it said. The first to say yes wins.
+ * If none does, the screen where most of its path is there is the nearest
+ * (`exact` false): a prototype can read differently for whoever opens it.
+ * Null if no screen has any of it.
  */
 export function locateScreen(
   base: string,
@@ -22,16 +24,17 @@ export function locateScreen(
   size: { width: number; height: number },
   anchor: Anchor,
 ) {
-  return new Promise<FlowScreen | null>((resolve) => {
+  return new Promise<{ screen: FlowScreen; exact: boolean } | null>((resolve) => {
     const frames: HTMLIFrameElement[] = [];
     let pending = flow.screens.length;
     let finished = false;
+    let nearest: { screen: FlowScreen; depth: number } | null = null;
 
     const finish = (hit: FlowScreen | null) => {
       if (finished) return;
       finished = true;
       frames.forEach((frame) => frame.remove());
-      resolve(hit);
+      resolve(hit ? { screen: hit, exact: true } : nearest && { screen: nearest.screen, exact: false });
     };
 
     flow.screens.forEach((screen) => {
@@ -54,11 +57,14 @@ export function locateScreen(
           if (
             doc &&
             frame.contentWindow?.location.href !== "about:blank" &&
-            doc.readyState !== "loading" &&
-            spotOf(doc, anchor)
+            doc.readyState !== "loading"
           ) {
-            finish(screen);
-            return;
+            if (spotOf(doc, anchor)) {
+              finish(screen);
+              return;
+            }
+            const near = doc.location.pathname === anchor.screen ? nearestOf(doc, anchor) : null;
+            if (near && near.depth > (nearest?.depth ?? 0)) nearest = { screen, depth: near.depth };
           }
         } catch {
           // A screen that can't be read has nothing to say.

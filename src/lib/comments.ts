@@ -18,6 +18,8 @@ export const anchorSchema = z.object({
   selector: z.string().max(1000).nullable(),
   /** The start of that element's text, so a step that reuses the same markup position isn't mistaken for it. */
   text: z.string().max(80).optional(),
+  /** What kind of element it was, by its classes and those just above it (see `shapeFor`), whatever it said and wherever it was. */
+  shape: z.string().max(1000).optional(),
   /** What the page was saying when it was left (see `pageKey`): the step of a flow, which the address alone doesn't tell apart. */
   page: z.string().max(80).optional(),
   /** Which screen of the prototype's flow it was left on, when it has one: opening it goes straight there. */

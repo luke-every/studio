@@ -37,8 +37,8 @@ export type CommentsUi = {
   /** The comment that is open, and a count that goes up each time it is asked for, so asking again goes to it again. */
   focus: { id: string; at: number } | null;
   onFocus: (id: string | null) => void;
-  /** Asked for a comment that isn't to be found on the screen showing: find the screen it is on and show that. */
-  onLocate?: (comment: Comment) => void;
+  /** Asked for a comment that isn't to be found on the screen showing: find the screen it is on and show that. True if it has gone looking. */
+  onLocate?: (comment: Comment) => boolean;
   /** What has been said back to each comment, oldest first. */
   replies: Record<string, Comment[]>;
   /** `setup` puts it on a particular setup of the prototype (see `Comment`); an empty one is the version as it is, and none is the setup on screen. */
@@ -90,6 +90,36 @@ export function elementOf(doc: Document, anchor: Anchor): Element | null {
 }
 
 /**
+ * For a comment whose element isn't there as it was, the same element showing something else. A prototype can read
+ * differently for whoever opens it (a quiz's results are built from the answers in the commenter's own browser), so
+ * asked for, a comment goes to: the element at its path; else one of its kind (`shapeFor`), the one saying what it
+ * said if there is one; else the deepest part of its path that is there. `depth` says how near, to compare screens.
+ */
+export function nearestOf(doc: Document, anchor: Anchor): { element: Element; depth: number } | null {
+  if (!anchor.selector) return null;
+  const showing = (element: Element) => element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+  const all = (selector: string) => {
+    try {
+      return [...doc.querySelectorAll(selector)].filter(showing);
+    } catch {
+      // A selector that no longer parses matches nothing.
+      return [];
+    }
+  };
+  const parts = anchor.selector.split(" > ");
+  const at = all(anchor.selector)[0];
+  if (at) return { element: at, depth: parts.length };
+  const kind = anchor.shape ? all(anchor.shape) : [];
+  const like = kind.find((element) => anchor.text && snippet(element) === anchor.text) ?? kind[0];
+  if (like) return { element: like, depth: parts.length - 0.5 };
+  for (let depth = parts.length - 1; depth > 1; depth--) {
+    const element = all(parts.slice(0, depth).join(" > "))[0];
+    if (element) return { element, depth };
+  }
+  return null;
+}
+
+/**
  * Where an anchor is in a document, in its own pixels, or null when it isn't
  * on this screen right now. A prototype can swap one step for another without
  * changing page, or draw a step over the one before, so a comment shows only
@@ -99,9 +129,11 @@ export function spotOf(
   doc: Document,
   anchor: Anchor,
   page = pageKey(doc),
+  /** The comment asked for: shown at the nearest thing there (`nearestOf`) when its own element isn't. */
+  near = false,
 ): Spot | null {
   if (anchor.screen !== doc.location.pathname) return null;
-  if (anchor.page && anchor.page !== page) return null;
+  if (!near && anchor.page && anchor.page !== page) return null;
   if (!anchor.selector) {
     const root = doc.documentElement;
     const win = doc.defaultView!;
@@ -110,7 +142,7 @@ export function spotOf(
       y: anchor.fy * root.scrollHeight - win.scrollY,
     };
   }
-  const element = elementOf(doc, anchor);
+  const element = elementOf(doc, anchor) ?? (near ? (nearestOf(doc, anchor)?.element ?? null) : null);
   const rect = element?.getBoundingClientRect();
   if (!element || !rect || !(rect.width || rect.height)) return null;
   const spot = {
@@ -121,6 +153,23 @@ export function spotOf(
   const hit = doc.elementFromPoint(spot.x, spot.y);
   if (!hit || !(element.contains(hit) || hit.contains(element))) return null;
   return spot;
+}
+
+/**
+ * What kind of element this is: its tag and classes, and those of the few
+ * elements above it, with no counting. A meal card's rating is still a meal
+ * card's rating when the page holds other meals in another order, as a
+ * prototype built from somebody's own answers will. Undefined when nothing
+ * near it has a class to go by.
+ */
+export function shapeFor(element: Element): string | undefined {
+  const parts: string[] = [];
+  for (let node: Element | null = element; node && node.tagName !== "BODY" && parts.length < 4; node = node.parentElement) {
+    parts.unshift([node.tagName.toLowerCase(), ...[...node.classList].map((name) => `.${CSS.escape(name)}`)].join(""));
+  }
+  // Kept within what a comment can hold, from the element up.
+  while (parts.join(" > ").length > 1000) parts.shift();
+  return parts.some((part) => part.includes(".")) ? parts.join(" > ") : undefined;
 }
 
 /** The anchor for a click at (x, y) in a document's own pixels. */
@@ -135,6 +184,7 @@ export function anchorAt(doc: Document, x: number, y: number): Anchor {
     page: pageKey(doc),
     selector: element ? selectorFor(element) : null,
     text: element ? snippet(element) : undefined,
+    shape: element ? shapeFor(element) : undefined,
     x: rect && rect.width ? clamp((x - rect.left) / rect.width) : 0,
     y: rect && rect.height ? clamp((y - rect.top) / rect.height) : 0,
     fx: clamp((x + win.scrollX) / Math.max(1, root.scrollWidth)),

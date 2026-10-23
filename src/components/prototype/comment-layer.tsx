@@ -11,6 +11,7 @@ import {
   Composer,
   DraftPin,
   elementOf,
+  nearestOf,
   pageKey,
   Pin,
   spotOf,
@@ -70,6 +71,7 @@ export function CommentLayer({
   const stillPlacing = placing && draft;
   const shownDraft = stillPlacing ? draft : null;
 
+  const focusId = focus?.id;
   useEffect(() => {
     if (!visible) return;
     let raf = 0;
@@ -80,7 +82,8 @@ export function CommentLayer({
         const next: Record<string, Spot> = {};
         const page = pageKey(doc);
         for (const comment of comments) {
-          const spot = spotOf(doc, comment.anchor, page);
+          // The one asked for is shown at the nearest thing there when its own element isn't.
+          const spot = spotOf(doc, comment.anchor, page, comment.id === focusId);
           if (spot) next[comment.id] = spot;
         }
         const draftSpot = shownDraft ? spotOf(doc, shownDraft, page) : null;
@@ -98,7 +101,7 @@ export function CommentLayer({
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [visible, comments, shownDraft, frame]);
+  }, [visible, comments, shownDraft, frame, focusId]);
 
   // Asked for a comment: go to its screen if it is on another, and bring it into view.
   useEffect(() => {
@@ -112,12 +115,11 @@ export function CommentLayer({
     const reveal = () => {
       const doc = element.contentDocument;
       if (!doc) return;
-      const target = elementOf(doc, comment.anchor);
+      const exact = elementOf(doc, comment.anchor);
       // Not on this screen at all: it is on another step, so ask for that one straight away rather than waiting to see.
-      if (comment.anchor.selector && !target) {
-        locate.current?.(comment);
-        return;
-      }
+      if (comment.anchor.selector && !exact && locate.current?.(comment)) return;
+      // Looked for already and not found as it was: the nearest thing there.
+      const target = exact ?? nearestOf(doc, comment.anchor)?.element;
       if (target) target.scrollIntoView({ block: "center", inline: "center" });
       else
         win.scrollTo(

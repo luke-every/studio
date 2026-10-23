@@ -240,18 +240,20 @@ export function PrototypeFrame({
     setRestarts((count) => count + 1);
   };
   const locate = (comment: Comment) => {
-    if (!flow || !addressed || !focus || located === focus.at) return;
+    if (!flow || !addressed || !focus || located === focus.at) return false;
     setLocated(focus.at);
     const known = flow.screens.find((screen) => screen.id === comment.anchor.flowScreen);
     if (known) {
       show(known);
-      return;
+      return true;
     }
     void locateScreen(addressed, flow, device, comment.anchor).then((found) => {
       if (!found) return;
-      show(found);
-      void placeComment(comment, found.id);
+      show(found.screen);
+      // Only somewhere it is exactly as it was is noted; the nearest is a guess for this person's prototype.
+      if (found.exact) void placeComment(comment, found.screen.id);
     });
+    return true;
   };
   // Choosing a comment from the list. One noted as on another flow screen than the one open goes there at once, without
   // first looking for it on this one (where a step drawn over another can make it seem to be).
@@ -273,7 +275,7 @@ export function PrototypeFrame({
   const addComment = async (text: string, anchor: Anchor, setup?: string) => {
     const posted = await postComment(text, anchor, setup);
     if (posted && flow && addressed && !anchor.flowScreen && setup === undefined) {
-      void locateScreen(addressed, flow, device, anchor).then((found) => found && placeComment(posted, found.id));
+      void locateScreen(addressed, flow, device, anchor).then((found) => void (found?.exact && placeComment(posted, found.screen.id)));
     }
     return !!posted;
   };
