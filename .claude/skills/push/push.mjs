@@ -259,9 +259,37 @@ if (appMode) {
   }
   lap("build");
   // Paths that start with "/" ignore the studio's address, so they load from the wrong place. Next's own links and
-  // <Image> add it; a plain <img src="/logo.png"> or CSS url(/bg.png) doesn't. Say so once, naming a few.
+  // <Image> add it; a plain <img src="/logo.png"> or CSS url(/bg.png) doesn't. Fix the ones that name a file in the
+  // site by prefixing them in the uploaded copy only: the source keeps its real paths, which are right in production.
   {
     const base = `/p/${start.slug}/${segment}/`;
+    const present = new Set(
+      walk(out, new Set())
+        .map((file) => `/${relative(out, file).split(sep).join("/")}`)
+        .filter((path) => !path.startsWith("/_next/") && !/\.(html|js|css|txt|json|map)$/.test(path)),
+    );
+    const known = (path) => {
+      try {
+        return present.has(decodeURI(path));
+      } catch {
+        return false;
+      }
+    };
+    const fixed = new Set();
+    for (const file of walk(out, new Set())) {
+      if (!/\.(html|css|js|txt|json)$/.test(file) || statSync(file).size > 5_000_000) continue;
+      const text = readFileSync(file, "utf8");
+      const rewritten = text.replace(/(["'(=,\s])(\/(?!\/)[\w\-.~%@/]+\.\w+)(?=[\s"')?#,;\\]|$)/g, (all, lead, path) => {
+        if (!known(path)) return all;
+        fixed.add(path);
+        return `${lead}${base.slice(0, -1)}${path}`;
+      });
+      if (rewritten !== text) writeFileSync(file, rewritten);
+    }
+    if (fixed.size) {
+      console.log(`Fixed ${fixed.size} file path(s) that started with "/" (${[...fixed].slice(0, 3).join(", ")}${fixed.size > 3 ? ", …" : ""}) so they load in the studio. Only the uploaded copy changed, not your source.`);
+    }
+    // Whatever is left names no file in the site (or is built in code), so it can't be fixed here.
     const bare = new Set();
     for (const file of walk(out, new Set())) {
       if (!/\.(html|css)$/.test(file) || statSync(file).size > 2_000_000) continue;
@@ -272,7 +300,7 @@ if (appMode) {
     }
     if (bare.size) {
       console.warn(
-        `Heads up: ${bare.size} file path(s) start with "/" (${[...bare].slice(0, 3).join(", ")}${bare.size > 3 ? ", …" : ""}). Those ignore the studio's address, so they won't load there. Use relative paths, or the framework's own image and link components.`,
+        `Heads up: ${bare.size} file path(s) start with "/" (${[...bare].slice(0, 3).join(", ")}${bare.size > 3 ? ", …" : ""}). Those ignore the studio's address and name no file in the site, so they won't load there. Use the framework's own image and link components, or a literal path to a file in public/.`,
       );
     }
   }
@@ -665,6 +693,8 @@ if (!notes.author) notes.author = spawnSync("git", ["config", "user.name"], { en
 
 const result = await studio("/api/push", notes);
 lap("record");
+// The export was only for the upload, and it doubles the prototype's public/ on disk.
+if (appMode) rmSync(join(root, "out"), { recursive: true, force: true });
 
 console.log(`${saved.summary}, ${(totalBytes / 1024 / 1024).toFixed(1)} MB total`);
 console.log(`Pushed ${result.slug} ${result.version}`);

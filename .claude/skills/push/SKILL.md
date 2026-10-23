@@ -100,9 +100,13 @@ Only if the person asks for a specific number ("push this as v1.0"), add
 `--version v1.0`. It must look like `v0.8` and be one that prototype doesn't
 already have. Never pass it to "fix" an error.
 
-If it prints a "Heads up" about file paths starting with "/", tell the person in one
-line that those images won't load in the studio and the fix is a relative path or
-the framework's image component; don't change their code unless they ask.
+If it prints "Fixed N file path(s) that started with "/"", the script has already
+corrected them in the uploaded copy; their source is untouched and stays right for
+production. Mention it in one line only if they ask. If instead it prints a "Heads up"
+about paths starting with "/", those name no file in the site (or are built in code),
+so they won't load in the studio: tell the person in one line that the fix is the
+framework's image component or a literal path to a file in `public/`; don't change
+their code unless they ask.
 
 If it prints a "Heads up" about the prototype adding the time to its own file
 addresses, tell the person in one line: it makes the prototype slow to open in

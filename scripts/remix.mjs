@@ -64,7 +64,8 @@ async function ask(question) {
 }
 
 let dir;
-const suggestion = join(homedir(), "Claude", `${slug}-remix`);
+// In the prototypes workspace (see /newprototype) it shares one install of the dependencies; anywhere else it installs its own.
+const suggestion = join(homedir(), "Claude", "prototypes", `${slug}-remix`);
 while (!dir) {
   const typed = await ask(`Where should it go? [${suggestion.replace(homedir(), "~")}] `);
   const chosen = resolve(typed ? typed.replace(/^~(?=$|\/)/, homedir()) : suggestion);
@@ -76,7 +77,11 @@ while (!dir) {
 
 const tree = await github(`/git/trees/${branch}:${found.prefix}?recursive=1`);
 if (tree.truncated) fail("This prototype has too many files to copy.");
-const files = tree.tree.filter((entry) => entry.type === "blob");
+let files = tree.tree.filter((entry) => entry.type === "blob");
+// A built app's version is its static export with the app's own source in _source/: the source is what gets remixed.
+if (files.some((file) => file.path === "_source/package.json")) {
+  files = files.filter((file) => file.path.startsWith("_source/")).map((file) => ({ ...file, path: file.path.slice("_source/".length) }));
+}
 
 let copied = 0;
 const queue = [...files];
