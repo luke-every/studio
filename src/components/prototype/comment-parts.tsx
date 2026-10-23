@@ -198,6 +198,8 @@ const WIDTH = 256;
 /** A card that has room to breathe: the open comment. */
 const ROOMY_WIDTH = 320;
 const EDGE = 8;
+/** The space between a pin and the open comment beside it. */
+const GAP = 8;
 
 type Tip = { left: number; top: number };
 
@@ -206,25 +208,30 @@ type Tip = { left: number; top: number };
  * the right, unless there isn't room, then to the left and/or down. The one
  * rule for both, so a card opens exactly where the pin did. Each side that
  * can't be used is left out, so the box stays fixed to the corner it grows from.
+ * `beside` puts it next to the pin instead of over it, so the pin still shows
+ * where the comment is (the open comment).
  */
-function cornerOf(tip: Tip, height: number, width = WIDTH) {
+function cornerOf(tip: Tip, height: number, width = WIDTH, beside = false) {
   const root = document.documentElement;
-  const left = tip.left + width > root.clientWidth - EDGE;
+  const shift = beside ? PIN + GAP : 0;
+  const left = tip.left + shift + width > root.clientWidth - EDGE;
   const down = tip.top - height < EDGE;
   return {
     left,
     down,
     style: {
       ...(left
-        ? { right: root.clientWidth - (tip.left + PIN) }
-        : { left: tip.left }),
+        ? { right: root.clientWidth - (tip.left + PIN) + shift }
+        : { left: tip.left + shift }),
       ...(down
         ? { top: tip.top - PIN }
         : { bottom: root.clientHeight - tip.top }),
       zIndex: "var(--z-popover)",
     },
     // Whichever corner is at the pin stays square.
-    square: down
+    square: beside
+      ? ""
+      : down
       ? left
         ? "rounded-tr-none"
         : "rounded-tl-none"
@@ -443,7 +450,7 @@ export function Card({
       window.removeEventListener("blur", left);
     };
   }, []);
-  const corner = cornerOf(at, height, roomy ? ROOMY_WIDTH : WIDTH);
+  const corner = cornerOf(at, height, roomy ? ROOMY_WIDTH : WIDTH, roomy);
 
   return createPortal(
     <div
