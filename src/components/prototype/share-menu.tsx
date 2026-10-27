@@ -18,7 +18,7 @@ const item = `${menuItem} text-foreground`;
 
 /**
  * Everything for getting this version in front of somebody else: copy a link
- * that opens without the password, open it in a tab, or scan its code from a
+ * (to the latest version, or pinned to this one) that opens without the password, open it in a tab, or scan its code from a
  * phone. Opens on hover with a mouse, on a tap otherwise.
  */
 export function ShareMenu({
@@ -60,9 +60,9 @@ export function ShareMenu({
   };
 
   // The link is made on the server, so the copy is handed a promise of it: Safari only lets a page write the clipboard straight from a tap.
-  const copy = () => {
+  const copy = (pinned: boolean) => {
     setOpen(false);
-    const link = shareLink(slug, versionKey).then((result) => {
+    const link = shareLink(slug, pinned ? versionKey : undefined).then((result) => {
       if (!result.ok) throw new Error(result.error);
       return `${window.location.origin}${result.value}`;
     });
@@ -71,7 +71,7 @@ export function ShareMenu({
         ? link.then((text) => navigator.clipboard.writeText(text))
         : navigator.clipboard.write([new ClipboardItem({ "text/plain": link.then((text) => new Blob([text], { type: "text/plain" })) })]);
     copied.then(
-      () => notify(`Copied a share link to ${version}`),
+      () => notify(pinned ? `Copied a link to ${version}` : "Copied a share link to the latest version"),
       () => notify("Couldn't copy the share link", true),
     );
   };
@@ -90,9 +90,13 @@ export function ShareMenu({
         }
       >
         <div role="menu" className="flex flex-col">
-          <button type="button" role="menuitem" onClick={copy} className={item}>
+          <button type="button" role="menuitem" onClick={() => copy(false)} className={item}>
             <LinkIcon />
             Copy share link
+          </button>
+          <button type="button" role="menuitem" onClick={() => copy(true)} className={item}>
+            <LinkIcon />
+            Copy link to {version}
           </button>
           {newTab ? (
             onOpenNew ? (

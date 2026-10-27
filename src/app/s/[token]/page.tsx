@@ -5,16 +5,16 @@ import { getPrototype } from "@/lib/registry";
 import { versionSegment } from "@/lib/registry/version";
 import { mintReviewToken } from "@/lib/review";
 import { collaborators } from "@/lib/registry/select";
-import { readShareToken } from "@/lib/share";
+import { resolveShareToken } from "@/lib/share";
 import { contentRepoUrl } from "@/lib/registry/github";
 
 /**
- * One version of a prototype, shared with somebody who doesn't have the
+ * A prototype (its latest version, or the one version the link was pinned to), shared with somebody who doesn't have the
  * password. Outside the studio and its door: no nav, nothing to change, and
  * nothing else in the studio reachable from here.
  */
 async function shared(token: string) {
-  const named = readShareToken(token);
+  const named = await resolveShareToken(token);
   if (!named) return null;
   const prototype = await getPrototype(named.slug);
   const version = prototype?.versions.find((item) => item.key === named.key);

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { isUnlocked } from "@/lib/gate";
 import { mintReviewToken } from "@/lib/review";
-import { mintShareToken, readShareToken } from "@/lib/share";
+import { LATEST, mintShareToken, resolveShareToken } from "@/lib/share";
 
 import { EDIT_IMAGE_DIR, editsSchema, type Edit } from "@/lib/edits";
 
@@ -158,9 +158,9 @@ export async function reviewToken(slug: string, version: string) {
   return attempt(async () => mintReviewToken(slug, version), []);
 }
 
-/** A link to one version that opens without the password, for sharing outside the studio. `key` is the version it is stored under (v2.0). */
-export async function shareLink(slug: string, key: string) {
-  return attempt(async () => `/s/${mintShareToken(slug, key)}`, []);
+/** A link that opens without the password, for sharing outside the studio. It follows the latest version, or with `key` (the version it is stored under, v2.0) stays on that one. */
+export async function shareLink(slug: string, key?: string) {
+  return attempt(async () => `/s/${mintShareToken(slug, key ?? LATEST)}`, []);
 }
 
 /**
@@ -170,7 +170,7 @@ export async function shareLink(slug: string, key: string) {
  * Resolving and deleting stay with the studio.
  */
 async function shared<T>(token: string, work: (at: { slug: string; version: string }) => Promise<T>): Promise<WriteResult<{ value: T }>> {
-  const named = readShareToken(token);
+  const named = await resolveShareToken(token);
   if (!named) return { ok: false, error: "This share link isn't valid." };
   try {
     return { ok: true, value: await work({ slug: named.slug, version: named.key }) };
