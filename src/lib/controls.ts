@@ -52,17 +52,30 @@ const rangeControl = z.object({
   default: z.number(),
 });
 
+const multiControl = z.object({
+  ...common,
+  type: z.literal("multi"),
+  /** Values must not contain a comma: the chosen ones travel as one comma-separated parameter. */
+  options: z.array(z.object({ value: z.string(), label: z.string() })).min(1),
+  /** The values on to start with. */
+  default: z.array(z.string()).default([]),
+});
+
 export const controlsSchema = z.object({
-  controls: z.array(z.discriminatedUnion("type", [choiceControl, toggleControl, rangeControl])).default([]),
+  controls: z.array(z.discriminatedUnion("type", [choiceControl, toggleControl, rangeControl, multiControl])).default([]),
 });
 
 export type Control = z.infer<typeof controlsSchema>["controls"][number];
 export type Controls = z.infer<typeof controlsSchema>;
-/** A control's current value: the option's value, "on" / "off" for a toggle, the number as text for a range. */
+/** A control's current value: the option's value, "on" / "off" for a toggle, the number as text for a range, the chosen values joined by commas (in option order) for a multi. */
 export type ControlValues = Record<string, string>;
 
+/** The chosen values of a multi as its value: in the order of its options, so the same choice always reads the same. */
+export const multiValue = (control: Extract<Control, { type: "multi" }>, chosen: string[]) =>
+  control.options.filter((option) => chosen.includes(option.value)).map((option) => option.value).join(",");
+
 const defaultOf = (control: Control) =>
-  control.type === "toggle" ? (control.default ? "on" : "off") : String(control.default);
+  control.type === "toggle" ? (control.default ? "on" : "off") : control.type === "multi" ? multiValue(control, control.default) : String(control.default);
 
 export function defaultValues(controls: Controls | null): ControlValues {
   return Object.fromEntries((controls?.controls ?? []).map((control) => [control.id, defaultOf(control)]));

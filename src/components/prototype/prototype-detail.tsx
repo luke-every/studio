@@ -131,7 +131,13 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           ? control.label
           : control.type === "range"
             ? `${control.label} ${raw}`
-            : (control.options.find((option) => option.value === raw)?.label ?? raw),
+            : control.type === "multi"
+              ? raw
+                  .split(",")
+                  .filter(Boolean)
+                  .map((value) => control.options.find((option) => option.value === value)?.label ?? value)
+                  .join(", ") || `No ${control.label}`
+              : (control.options.find((option) => option.value === raw)?.label ?? raw),
       );
     }
     const made = variants.find((item) => item.id === params.get(VARIANT_PARAM));

@@ -9,7 +9,9 @@ each choice into a URL parameter. Format (`src/lib/controls.ts`):
   { "type": "choice", "id": "theme", "label": "Theme", "default": "light",
     "options": [{ "value": "light", "label": "Light" }, { "value": "dark", "label": "Dark" }] },
   { "type": "toggle", "id": "empty", "label": "Empty state", "value": "1", "default": false },
-  { "type": "range", "id": "cols", "label": "Columns", "min": 1, "max": 6, "step": 1, "default": 3 }
+  { "type": "range", "id": "cols", "label": "Columns", "min": 1, "max": 6, "step": 1, "default": 3 },
+  { "type": "multi", "id": "tags", "label": "Tags", "default": ["a"],
+    "options": [{ "value": "a", "label": "A" }, { "value": "b", "label": "B" }] }
 ] }
 ```
 
@@ -19,6 +21,9 @@ each choice into a URL parameter. Format (`src/lib/controls.ts`):
   control whose options the variants canvas lays out side by side.
 - `toggle`: `value` is what the parameter is set to while on (default `"1"`).
 - `range`: a slider; the value travels as a string (`"42"`). `step` defaults to 1.
+- `multi`: any number of `options` on at once (chips you tap on and off); `default` is the list of values on to
+  start with. The parameter is the chosen values joined by commas, in option order (`"a,b"`), so a value must not
+  contain a comma. Choosing none sets the parameter to an empty string, which is different from absent (the default).
 - A control at its default adds nothing; so does a hidden one (`when` unmet).
 
 ## Embedded: `studio=1`

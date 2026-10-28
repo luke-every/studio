@@ -47,6 +47,8 @@ controls in `public/studio.json` (the folder's `studio.json` for plain folders).
   { "id": "state", "label": "State", "type": "choice", "default": "a",
     "options": [{ "value": "a", "label": "A" }, { "value": "b", "label": "B" }] },
   { "id": "dark", "label": "Dark mode", "type": "toggle" },
+  { "id": "tags", "label": "Tags", "type": "multi", "default": ["a"],
+    "options": [{ "value": "a", "label": "A" }, { "value": "b", "label": "B" }] },
   { "id": "step", "label": "Step", "type": "range", "min": 0, "max": 5, "default": 0 }
 ] }
 ```

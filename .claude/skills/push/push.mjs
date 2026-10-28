@@ -337,7 +337,12 @@ function validateControls(controls) {
       if (![min, max, value].every(Number.isFinite) || min >= max) problems.push(`control "${id}" needs numbers with min below max`);
       else if (value < min || value > max) problems.push(`control "${id}" defaults to ${value}, outside ${min} to ${max}`);
       if (step !== undefined && !(step > 0)) problems.push(`control "${id}" needs a step above 0`);
-    } else if (control?.type !== "toggle") problems.push(`control "${id}" must be a choice or a toggle`);
+    } else if (control?.type === "multi") {
+      const values = Array.isArray(control.options) ? control.options.map((option) => option?.value) : [];
+      if (!values.length) problems.push(`control "${id}" needs at least one option`);
+      else if (values.some((value) => typeof value !== "string" || value.includes(","))) problems.push(`control "${id}" has an option value that isn't text or has a comma`);
+      else if (control.default !== undefined && (!Array.isArray(control.default) || control.default.some((value) => !values.includes(value)))) problems.push(`control "${id}" defaults to values that aren't all among its options`);
+    } else if (control?.type !== "toggle") problems.push(`control "${id}" must be a choice, a multi, a range or a toggle`);
   }
   for (const control of controls) if (control?.when && !ids.has(control.when.control)) problems.push(`control "${control.id}" depends on "${control.when.control}", which isn't a control`);
   return problems;

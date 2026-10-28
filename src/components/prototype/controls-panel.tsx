@@ -5,9 +5,9 @@ import { useState, type ReactNode } from "react";
 import { MotionPopover } from "@/components/motion";
 import { ChevronDownIcon } from "@/components/shell/nav-icons";
 import { controlOn, IconButton } from "@/components/ui/button";
-import { visibleControls, type ControlValues, type Controls } from "@/lib/controls";
+import { multiValue, visibleControls, type ControlValues, type Controls } from "@/lib/controls";
 
-/** The controls a prototype offers, as buttons, down the side of the page: a choice is a row of options, a toggle a switch. */
+/** The controls a prototype offers, as buttons, down the side of the page: a choice is a row of options, a multi the same with any number on, a toggle a switch. */
 export function ControlsPanel({
   controls,
   values,
@@ -37,6 +37,25 @@ export function ControlsPanel({
               onChange={(event) => onChange(control.id, event.target.value)}
               className="w-full accent-accent"
             />
+          ) : control.type === "multi" ? (
+            <div role="group" aria-label={control.label} className="flex flex-wrap gap-2">
+              {control.options.map((option) => {
+                const chosen = (values[control.id] ?? "").split(",");
+                const selected = chosen.includes(option.value);
+                return (
+                  <IconButton
+                    key={option.value}
+                    aria-pressed={selected}
+                    onClick={() =>
+                      onChange(control.id, multiValue(control, selected ? chosen.filter((value) => value !== option.value) : [...chosen, option.value]))
+                    }
+                    className={selected ? controlOn : ""}
+                  >
+                    {option.label}
+                  </IconButton>
+                );
+              })}
+            </div>
           ) : control.type === "choice" ? (
             <div role="radiogroup" aria-label={control.label} className="flex flex-wrap gap-2">
               {control.options.map((option) => {
