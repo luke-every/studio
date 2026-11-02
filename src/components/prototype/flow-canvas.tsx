@@ -267,12 +267,38 @@ export function FlowCanvas({
 
   // Once it has arrived, the view glides to where it is sent (a page turning out taller, the Fit button) unless somebody is moving it by hand. The first fit is a place, not a move.
   const gliding = revealed && !byHand;
-  // A press on the canvas pans it; one on a screen or its name moves that screen (`screen`, from where it was: `origin`).
-  const drag = useRef<{ x: number; y: number; from: View; moved: boolean; screen?: string; origin?: { x: number; y: number } } | null>(null);
+  // A press on a screen or its name moves that screen (`screen`, from where it was: `origin`). The canvas itself is
+  // panned with Space held (or the middle button), as in Figma, and by scrolling; a plain press on it only lets go.
+  const drag = useRef<{ x: number; y: number; from: View; moved: boolean; pan: boolean; screen?: string; origin?: { x: number; y: number } } | null>(null);
+  const space = useRef(false);
+  const [panning, setPanning] = useState(false);
+  useEffect(() => {
+    const hold = (on: boolean) => {
+      space.current = on;
+      setPanning(on);
+    };
+    const down = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.code !== "Space" || target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target?.tagName ?? "")) return;
+      event.preventDefault();
+      if (!event.repeat) hold(true);
+    };
+    const up = (event: KeyboardEvent) => event.code === "Space" && hold(false);
+    const away = () => hold(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", away);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", away);
+    };
+  }, []);
   const grab = (event: React.PointerEvent, id: string) => {
-    if (placing) return;
+    // With Space held, a press on a screen pans like anywhere else.
+    if (placing || space.current) return;
     event.stopPropagation();
-    drag.current = { x: event.clientX, y: event.clientY, from: view, moved: false, screen: id, origin: offsets[id] ?? { x: 0, y: 0 } };
+    drag.current = { x: event.clientX, y: event.clientY, from: view, moved: false, pan: false, screen: id, origin: offsets[id] ?? { x: 0, y: 0 } };
   };
   const toScreen = (x: number, y: number) => ({ x: view.x + x * view.scale, y: view.y + y * view.scale });
 
@@ -343,11 +369,11 @@ export function FlowCanvas({
     <div
       ref={box}
       onPointerDown={(event) => {
-        drag.current = { x: event.clientX, y: event.clientY, from: view, moved: false };
+        drag.current = { x: event.clientX, y: event.clientY, from: view, moved: false, pan: space.current || event.button === 1 };
       }}
       onPointerMove={(event) => {
         const start = drag.current;
-        if (!start || event.buttons !== 1) return;
+        if (!start || !(event.buttons & (start.pan ? 5 : 1))) return;
         const dx = event.clientX - start.x;
         const dy = event.clientY - start.y;
         if (!start.moved && Math.hypot(dx, dy) < 4) return;
@@ -365,6 +391,7 @@ export function FlowCanvas({
           setOffsets((now) => ({ ...now, [screen]: { x: origin.x + x, y: origin.y + y } }));
           return;
         }
+        if (!start.pan) return;
         touch(true);
         setView({ ...start.from, x: start.from.x + dx, y: start.from.y + dy });
       }}
@@ -385,7 +412,7 @@ export function FlowCanvas({
         backgroundPosition: `${view.x}px ${view.y}px`,
         transition: gliding || easing ? `background-position var(--dur-deliberate) var(--curve-standard), background-size var(--dur-deliberate) var(--curve-standard)` : undefined,
       }}
-      className="absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] active:cursor-grabbing"
+      className={`absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : ""}`}
     >
       <div
         className="absolute left-0 top-0 origin-top-left"
