@@ -449,7 +449,7 @@ export function FlowCanvas({
               } as React.CSSProperties}
               className={`absolute block overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface text-left ${revealed ? "stagger-in" : "pointer-events-none"}`}
             >
-              <ScreenFrame onReady={() => setReadyIds((now) => (now.has(screen.id) ? now : new Set(now).add(screen.id)))} pageHeight={pageHeight(screen.id)} onMeasured={(found) => setPageHeights((now) => ((now[screen.id] ?? 0) >= found ? now : { ...now, [screen.id]: found }))} wireframe={wireframe} register={(element) => (element ? frames.current.set(screen.id, element) : frames.current.delete(screen.id))} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`} device={device} />
+              <ScreenFrame onReady={() => setReadyIds((now) => (now.has(screen.id) ? now : new Set(now).add(screen.id)))} pageHeight={pageHeight(screen.id)} onMeasured={(found) => setPageHeights((now) => (now[screen.id] === found ? now : { ...now, [screen.id]: found }))} wireframe={wireframe} register={(element) => (element ? frames.current.set(screen.id, element) : frames.current.delete(screen.id))} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`} device={device} />
             </button>
           );
         }) : null}
@@ -656,8 +656,7 @@ function ScreenFrame({
     if (!loaded || !onMeasured) return undefined;
     const timers = MEASURE_AT_MS.map((ms) =>
       window.setTimeout(() => {
-        const doc = frame.current?.contentDocument;
-        const found = doc ? pageHeightOf(doc) : 0;
+        const found = frame.current ? measurePage(frame.current, device.height) : 0;
         if (found) onMeasured(Math.min(MAX_PAGE, found));
       }, ms),
     );
@@ -693,20 +692,42 @@ function ScreenFrame({
 }
 
 /**
- * How tall a screen's whole page is. Most pages scroll the document; an app-like one is pinned to the screen and
- * scrolls a box inside it (a sheet, a results page), so its document is always a phone tall. Then it is the screen
- * plus whatever that box holds below the fold: drawn that tall, the box has room for all of it. The box is the one
- * in front, under the middle of the screen, not a page further back (a homepage under a quiz) nor a list or carousel
- * inside it.
+ * How tall a screen's whole page is, laid out as on the phone it stands for. It is measured with the frame at the
+ * phone's height (set and put back before anything is drawn), so a page that grows with its window can't feed on itself.
+ */
+function measurePage(frame: HTMLIFrameElement, phone: number) {
+  const doc = frame.contentDocument;
+  if (!doc?.body) return 0;
+  const was = frame.style.height;
+  frame.style.height = `${phone}px`;
+  const height = pageHeightOf(doc);
+  frame.style.height = was;
+  return height;
+}
+
+/**
+ * Most pages scroll the document; an app-like one is pinned to the screen and scrolls a box inside it (a sheet, a
+ * results page), so its document is always a phone tall. Then it is the screen plus whatever that box holds below the
+ * fold: drawn that tall, the box has room for all of it. The box is the one in front, under the middle of the screen,
+ * not a page further back (a homepage under a quiz) nor a list or carousel inside it.
+ *
+ * Drawn taller than a phone, anything made at least as tall as the screen (`min-h-screen`, `min-h-full`) would stretch
+ * with it and push what follows down, so it is kept at its phone height first.
  */
 function pageHeightOf(doc: Document) {
   const win = doc.defaultView!;
-  let hidden = 0;
+  let box: Element | null = null;
   for (let element = doc.elementFromPoint(win.innerWidth / 2, win.innerHeight / 2); element && element !== doc.body && element !== doc.documentElement; element = element.parentElement) {
     if (element.clientHeight < win.innerHeight / 2 || element.scrollHeight <= element.clientHeight) continue;
     if (!/auto|scroll/.test(win.getComputedStyle(element).overflowY)) continue;
-    hidden = element.scrollHeight - element.clientHeight;
+    box = element;
     break;
   }
+  const screen = box ? box.clientHeight : win.innerHeight;
+  for (const element of (box ?? doc.body).querySelectorAll<HTMLElement>("*")) {
+    const least = parseFloat(win.getComputedStyle(element).minHeight);
+    if (least >= screen - 1) element.style.setProperty("min-height", `${least}px`, "important");
+  }
+  const hidden = box ? box.scrollHeight - box.clientHeight : 0;
   return Math.max(doc.documentElement.scrollHeight, win.innerHeight + hidden);
 }
