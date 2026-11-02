@@ -20,8 +20,6 @@ export const anchorSchema = z.object({
   selector: z.string().max(1000).nullable(),
   /** The start of that element's text, so a step that reuses the same markup position isn't mistaken for it. */
   text: z.string().max(80).optional(),
-  /** What kind of element it was, by its classes and those just above it (see `shapeFor`), whatever it said and wherever it was. */
-  shape: z.string().max(1000).optional(),
   /** What the page was saying when it was left (see `pageKey`): the step of a flow, which the address alone doesn't tell apart. */
   page: z.string().max(80).optional(),
   /** Which screen of the prototype's flow it was left on, when it has one: opening it goes straight there. */
@@ -44,7 +42,7 @@ export const commentSchema = z.object({
   anchor: anchorSchema,
   /** A comment is resolved, never deleted. */
   resolvedAt: z.string().optional(),
-  /** The setup it was left on: the query of the prototype's address (a control's choice, a studio variant), none for the version as it is. */
+  /** The setup it was left on: the query of the prototype's address (its controls, its own place, a studio variant; see `setupOf`), none for the version as it is. */
   variant: z.string().optional(),
   /** The names of the people who liked it. */
   likes: z.array(z.string()).optional(),
@@ -55,6 +53,13 @@ export const commentSchema = z.object({
 export const commentsFileSchema = z.array(commentSchema);
 
 export type Anchor = z.infer<typeof anchorSchema>;
+
+/** A setup as it is kept: the query's keys in order, so the same place written another way is the same setup. Undefined for none. */
+export function setupOf(query: string | undefined) {
+  const params = new URLSearchParams(query);
+  params.sort();
+  return params.toString() || undefined;
+}
 export type Comment = z.infer<typeof commentSchema>;
 
 /**

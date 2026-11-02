@@ -12,8 +12,8 @@ import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
-import { applyControls, controlParams, defaultValues, variantControl, type ControlValues } from "@/lib/controls";
-import type { Flow } from "@/lib/flow";
+import { applyControls, controlParams, defaultValues, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
+import { withParams, type Flow } from "@/lib/flow";
 import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
 import { useMediaQuery } from "@/lib/use-media-query";
@@ -97,26 +97,36 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     window.history.replaceState(null, "", url);
   };
 
-  const controlled = selected.url ? applyControls(selected.url, offered, values) : undefined;
-  const address = controlled && variant ? `${controlled}${controlled.includes("?") ? "&" : "?"}${VARIANT_PARAM}=${variant}` : controlled;
+  // Where the prototype has put itself, in its own address, beyond what its controls say: a quiz's step, say. Like the
+  // choices, it belongs to the version on screen.
+  const [place, setPlace] = useState<{ id: string; params: Record<string, string> }>({ id: "", params: {} });
+  const extra = place.id === selected.id ? place.params : {};
+  const withVariant = (url: string) => (variant ? withParams(url, { [VARIANT_PARAM]: variant }) : url);
+  const controlled = selected.url ? withParams(applyControls(selected.url, offered, values), extra) : undefined;
+  const address = controlled ? withVariant(controlled) : undefined;
 
   // Comments are listed for the whole version; choosing one left on another setup puts the prototype in that setup.
   const showSetup = (setup: string) => {
-    const params = new URLSearchParams(setup);
-    const next: ControlValues = {};
-    for (const control of offered?.controls ?? []) {
-      const raw = params.get(control.param ?? control.id);
-      if (raw !== null) next[control.id] = control.type === "toggle" ? "on" : raw;
-    }
+    const { values: next, extra: rest } = splitQuery(setup, offered);
     setPicked({ id: selected.id, values: next });
-    chooseVariant(params.get(VARIANT_PARAM));
+    setPlace({ id: selected.id, params: rest });
+    chooseVariant(new URLSearchParams(setup).get(VARIANT_PARAM));
+  };
+  // The prototype moved itself (docs/controls.md): the controls, the address and so every link and comment follow it.
+  const followPlace = (search: string) => {
+    if (!selected.url) return;
+    const { values: next, extra: rest } = splitQuery(search, offered);
+    const all = { ...defaultValues(offered), ...next };
+    live.follow(withVariant(withParams(applyControls(selected.url, offered, all), rest)), { ...controlParams(offered, all), ...rest });
+    setPicked({ id: selected.id, values: next });
+    setPlace({ id: selected.id, params: rest });
   };
   // Whether the controls and variants a setup names are known yet; they load after the page does.
   const canShow = (setup?: string) => {
     if (!setup) return true;
     const known = new Set((offered?.controls ?? []).map((control) => control.param ?? control.id));
     const made = new Set(variants.map((item) => item.id));
-    return [...new URLSearchParams(setup)].every(([key, value]) => (key === VARIANT_PARAM ? made.has(value) : known.has(key)));
+    return [...new URLSearchParams(setup)].every(([key, value]) => (key === VARIANT_PARAM ? made.has(value) : known.has(key) || offered !== null));
   };
   const setupLabel = (setup?: string) => {
     if (!offered && !variants.length) return null;
@@ -164,7 +174,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const [flowOpen, setFlowOpen] = useState(false);
   const showingFlow = flowOpen && !!address;
   // What the iframe is given: the address with `studio=1`, held still once the prototype can take control changes as messages.
-  const frameUrl = useLiveControls(address, `${selected.url}|${variant ?? ""}`, controlParams(offered, values), showingFlow);
+  const live = useLiveControls(address, `${selected.url}|${variant ?? ""}`, { ...controlParams(offered, values), ...extra }, showingFlow);
+  const frameUrl = live.src;
   // Commenting with the list (the comment button, or C) brings the list, which takes the column's room.
   const side = (mode === "view" || (mode === "comment" && !listing)) && !showingFlow;
   // The column can be dragged out of the way (and tapped back at the left edge); `drag` is how far it is being pulled while it is.
@@ -305,6 +316,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           }
           edit={{ slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
           comments={{ slug: prototype.slug, version: selected.key, variant: address?.split("?")[1] || undefined, onSetup: showSetup, canShow, setupLabel }}
+          onPlace={followPlace}
           flow={flow}
           variants={variantsCanvas}
           flowOpen={flowOpen}

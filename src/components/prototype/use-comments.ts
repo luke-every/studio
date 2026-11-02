@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import type { Anchor, Comment } from "@/lib/comments";
+import { setupOf, type Anchor, type Comment } from "@/lib/comments";
 import { useUser } from "@/lib/use-user";
-import { addComment, addSharedComment, deleteComment, likeComment, likeSharedComment, listComments, listSharedComments, resolveComment, setCommentScreen } from "@/lib/registry/actions";
+import { addComment, addSharedComment, deleteComment, likeComment, likeSharedComment, listComments, listSharedComments, resolveComment } from "@/lib/registry/actions";
 
 import { useSharedComments } from "./shared-comments";
 
@@ -130,15 +130,15 @@ export function useComments(slug: string | undefined, version: string | undefine
   const add = async (text: string, anchor: Anchor, setup?: string) => {
     if (!target) return null;
     const pendingId = `pending-${crypto.randomUUID()}`;
-    const setupOf = setup === undefined ? variant : setup || undefined;
+    const kept = setupOf(setup === undefined ? variant : setup);
     setLoaded((now) => {
       const list = now && now.key === key ? now.list : [];
-      const n = Math.max(0, ...list.filter((item) => item.variant === setupOf).map((item) => item.n)) + 1;
-      const pending: Comment = { id: pendingId, n, author: { login: "pending", name: by || "Someone" }, at: new Date().toISOString(), text: text.trim(), anchor, variant: setupOf };
+      const n = Math.max(0, ...list.filter((item) => setupOf(item.variant) === kept).map((item) => item.n)) + 1;
+      const pending: Comment = { id: pendingId, n, author: { login: "pending", name: by || "Someone" }, at: new Date().toISOString(), text: text.trim(), anchor, variant: kept };
       return { key, list: [...list, pending] };
     });
     setWorking(pendingId, true);
-    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: setupOf, by, avatar }) : addComment({ ...target, text, anchor, variant: setupOf, by, avatar })).finally(() => setWorking(pendingId, false));
+    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: kept, by, avatar }) : addComment({ ...target, text, anchor, variant: kept, by, avatar })).finally(() => setWorking(pendingId, false));
     if (!result.ok) {
       setLoaded((now) => (now && now.key === key ? { key, list: now.list.filter((item) => item.id !== pendingId) } : now));
       setError(result.error);
@@ -152,13 +152,6 @@ export function useComments(slug: string | undefined, version: string | undefine
       return now.list.some((item) => item.id === result.value.id) ? now : { key, list: [...now.list, result.value] };
     });
     return result.value;
-  };
-
-  /** Notes which flow screen a comment is on, so going to it next time needs no looking. */
-  const place = async (comment: Comment, flowScreen: string) => {
-    if (!target || sharedAs || comment.anchor.flowScreen === flowScreen) return;
-    const result = await track(setCommentScreen({ ...target, id: comment.id, flowScreen }));
-    if (result.ok) replace(result.value);
   };
 
   const reply = async (parent: Comment, text: string) => {
@@ -214,9 +207,9 @@ export function useComments(slug: string | undefined, version: string | undefine
   // Comments are what has pins and rows; a reply belongs to the comment it answers.
   const every = loaded && loaded.key === key ? loaded.list : [];
   // Pins belong to the setup they were left on; the list of every comment on the version is not so particular.
-  const all = every.filter((item) => item.variant === variant);
+  const all = every.filter((item) => setupOf(item.variant) === setupOf(variant));
   const replies: Record<string, Comment[]> = {};
   for (const item of every) if (item.parentId) (replies[item.parentId] ??= []).push(item);
 
-  return { comments: all.filter((item) => !item.parentId), everything: every.filter((item) => !item.parentId), replies, error, add, place, reply, resolve, like, remove };
+  return { comments: all.filter((item) => !item.parentId), everything: every.filter((item) => !item.parentId), replies, error, add, reply, resolve, like, remove };
 }

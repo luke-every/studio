@@ -195,10 +195,6 @@ export async function likeComment(input: Parameters<typeof comments.setLiked>[0]
   return attempt(() => comments.setLiked(input), []);
 }
 
-export async function setCommentScreen(input: Parameters<typeof comments.setFlowScreen>[0]) {
-  return attempt(() => comments.setFlowScreen(input), []);
-}
-
 export async function deleteComment(input: Parameters<typeof comments.removeComment>[0]) {
   return attempt(() => comments.removeComment(input), []);
 }

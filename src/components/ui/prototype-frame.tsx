@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 
 import type { CommentsUi } from "@/components/prototype/comment-parts";
 import { useCommentFocus } from "@/components/prototype/use-comment-focus";
-import { reviewPrompt, type Anchor, type Comment } from "@/lib/comments";
+import { reviewPrompt, setupOf, type Anchor, type Comment } from "@/lib/comments";
 import { useStudio } from "@/lib/data/studio-store";
 import { useEditSession } from "@/components/prototype/use-edit-session";
 import { useComments, useShowComments } from "@/components/prototype/use-comments";
@@ -93,6 +93,7 @@ export function PrototypeFrame({
   onOpenPrototype,
   githubUrl,
   minimal = false,
+  onPlace,
 }: {
   url?: string;
   /** The address to open the prototype at on its own (new tab, QR), when the frame's own differs: it carries the studio's flag and, with live controls, stops changing. */
@@ -157,6 +158,8 @@ export function PrototypeFrame({
   githubUrl?: string;
   /** A share page: the version, the viewport, the comment buttons and full screen on the bar, and no look toggle, canvas, restart or share. */
   minimal?: boolean;
+  /** The prototype has put somewhere else in its own address (its query, as `?a=1`): where it is now, for the page to follow. */
+  onPlace?: (search: string) => void;
 }) {
   // The flow: the screens of the prototype and how they connect, drawn as a canvas.
   // Opening a screen from it shows the prototype on that screen; both belong to one address.
@@ -203,7 +206,9 @@ export function PrototypeFrame({
   const [pinsChosen, setShowPins] = useShowComments();
   // A share page shows comments only while commenting, so the show and hide switch is not offered there.
   const showPins = pinsChosen && !minimal;
-  const { comments, everything, replies, error: commentsError, add: postComment, place: placeComment, reply: replyToComment, resolve: resolveComment, like: likeComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, commentsOf?.variant, showPins || mode === "comment");
+  // The setup on screen: the page's, and a flow screen's own parameters on top while one is open, so a comment left there goes back there.
+  const setupOnScreen = setupOf(withParams(`?${commentsOf?.variant ?? ""}`, screen?.params ?? {}).split("?")[1]);
+  const { comments, everything, replies, error: commentsError, add: postComment, reply: replyToComment, resolve: resolveComment, like: likeComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, setupOnScreen, showPins || mode === "comment");
   const { notify } = useStudio();
   // Asked before leaving edit mode with changes that would be lost.
   const [leaving, setLeaving] = useState(false);
@@ -232,29 +237,22 @@ export function PrototypeFrame({
     // Starts it over even if that screen is already the one open, since the prototype may have moved on from it.
     setRestarts((count) => count + 1);
   };
-  const { focus, ask, goTo, locate, searching, placeNew } = useCommentFocus({
+  const { focus, ask, goTo } = useCommentFocus({
     flow,
-    address: addressed,
-    size: device,
     screen,
     show,
-    setup: { variant: commentsOf?.variant, onSetup: showingVariants ? undefined : commentsOf?.onSetup, canShow: commentsOf?.canShow },
+    setup: { variant: setupOnScreen, onSetup: showingVariants ? undefined : commentsOf?.onSetup, canShow: commentsOf?.canShow },
     everything,
     ready: !!url,
-    place: placeComment,
     onLinked: () => {
       changeMode("comment");
       setListing(!narrow);
     },
   });
-  const addComment = async (text: string, anchor: Anchor, setup?: string) => {
-    const posted = await postComment(text, anchor, setup);
-    if (posted && setup === undefined) placeNew(posted, anchor);
-    return !!posted;
-  };
+  const addComment = async (text: string, anchor: Anchor, setup?: string) => !!(await postComment(text, anchor, setup));
   const commentsUi: CommentsUi | null =
     commentsOf && !dev
-      ? { list: comments, visible: !bare && (showPins || commenting), placing: commenting && !interacting, focus, onFocus: ask, onLocate: locate, searching, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
+      ? { list: comments, visible: !bare && (showPins || commenting), placing: commenting && !interacting, focus, onFocus: ask, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
       : null;
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
@@ -639,6 +637,7 @@ export function PrototypeFrame({
               inspect={dev ? { ...inspect, picking: !interacting } : null}
               onKey={(event) => hotkeyRef.current(event)}
               comments={showingFlow ? null : commentsUi}
+              onPlace={onPlace}
             />
           ) : (
             <div className="grid size-full place-items-center">
@@ -750,6 +749,32 @@ export function PrototypeFrame({
   );
 }
 
+/** Tells `told` each time a document's query changes without it loading again: its own history, written or gone back through. */
+function watchPlace(win: Window, told: (search: string) => void) {
+  const { history } = win;
+  const { pushState, replaceState } = history;
+  let last = win.location.search;
+  const check = () => {
+    if (win.location.search === last) return;
+    last = win.location.search;
+    told(last);
+  };
+  history.pushState = (...args: Parameters<History["pushState"]>) => {
+    pushState.apply(history, args);
+    check();
+  };
+  history.replaceState = (...args: Parameters<History["replaceState"]>) => {
+    replaceState.apply(history, args);
+    check();
+  };
+  win.addEventListener("popstate", check);
+  return () => {
+    history.pushState = pushState;
+    history.replaceState = replaceState;
+    win.removeEventListener("popstate", check);
+  };
+}
+
 /** Remounted per url, so every version starts from the skeleton. */
 function FrameBody({
   url,
@@ -762,6 +787,7 @@ function FrameBody({
   inspect,
   onKey,
   comments,
+  onPlace,
 }: {
   url: string;
   title: string;
@@ -775,6 +801,7 @@ function FrameBody({
   /** Keys pressed inside the prototype, for the studio's own shortcuts. Dev mode takes them through `inspect` instead. */
   onKey: (event: KeyboardEvent) => void;
   comments: CommentsUi | null;
+  onPlace?: (search: string) => void;
 }) {
   const [posterFailed, setPosterFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -803,6 +830,17 @@ function FrameBody({
     const doc = frame.current?.contentDocument;
     return doc ? applyWireframe(doc, wireframe) : undefined;
   }, [wireframe, documents]);
+
+  // A prototype keeps its place in its own address (docs/controls.md): each time it writes another one there, or the
+  // person goes back, the page is told, so the studio's controls, links and comments follow what is on screen.
+  const placed = useRef(onPlace);
+  useEffect(() => {
+    placed.current = onPlace;
+  });
+  useEffect(() => {
+    const win = frame.current?.contentWindow;
+    return win ? watchPlace(win, (search) => placed.current?.(search)) : undefined;
+  }, [documents]);
 
   // Handlers live in a ref so a new pick doesn't tear the listeners down.
   const handlers = useRef(inspect);

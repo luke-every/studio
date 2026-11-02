@@ -47,3 +47,23 @@ Fallback: until `studio:ready` arrives (or if it never does, for a prototype
 without the helper), a changed control changes the iframe address and it
 reloads. Changing version or variant, and opening a canvas, also start over from
 reloading until the next `studio:ready`.
+
+## The prototype's place: keep it in the address
+
+A prototype keeps where it is in its own address. When the person moves to
+another screen or answers something, it writes that with
+`history.replaceState`, using the same parameters its controls and flow
+screens use (`?start=results&bundle=protein&challenges=time,decide`). Keep the
+path as it is (`location.pathname`; the page has a `<base href>`) and leave keys
+it doesn't own, like `studio=1`, where they are.
+
+The address is then the one place that says what is on screen. Reloading, a new
+tab and a phone's QR code open that place, and the studio follows it: each time
+the prototype writes another address, the controls show what it says, and a
+comment is left on that setup (`?comment=` and the comments list put the
+prototype back there). A change the prototype made itself is not posted back to
+it as `studio:controls`.
+
+A prototype that doesn't do this still works; the studio only knows the place it
+put the prototype in, so a comment left after clicking through to somewhere else
+can't be taken back there.

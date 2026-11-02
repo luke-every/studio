@@ -34,10 +34,6 @@ export type CommentsUi = {
   /** The comment that is open, and a count that goes up each time it is asked for, so asking again goes to it again. */
   focus: { id: string; at: number } | null;
   onFocus: (id: string | null) => void;
-  /** Asked for a comment that isn't to be found on the screen showing: find the screen it is on and show that. True if it has gone looking. */
-  onLocate?: (comment: Comment) => boolean;
-  /** Looking through the flow's screens for the one a comment is on. */
-  searching?: boolean;
   /** What has been said back to each comment, oldest first. */
   replies: Record<string, Comment[]>;
   /** `setup` puts it on a particular setup of the prototype (see `Comment`); an empty one is the version as it is, and none is the setup on screen. */

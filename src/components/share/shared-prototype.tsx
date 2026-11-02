@@ -22,8 +22,9 @@ import { AvatarStack } from "@/components/shell/user-avatar";
 import { barControl, IconButton } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
-import { applyControls, controlParams, defaultValues, type ControlValues } from "@/lib/controls";
+import { applyControls, controlParams, defaultValues, splitQuery, type ControlValues } from "@/lib/controls";
 import { VARIANT_PARAM } from "@/lib/edits";
+import { withParams } from "@/lib/flow";
 import type { Person } from "@/lib/registry/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 
@@ -81,13 +82,26 @@ function Shared({
   const [chosen, setChosen] = useState<string | null>(null);
   const values = { ...defaultValues(offered), ...picked };
   const variant = variants.find((item) => item.id === chosen)?.id ?? null;
-  const controlled = applyControls(version.url, offered, values);
-  const chosenAddress = variant ? `${controlled}${controlled.includes("?") ? "&" : "?"}${VARIANT_PARAM}=${variant}` : controlled;
+  // Where the prototype has put itself in its own address beyond its controls (see the studio's prototype page).
+  const [extra, setExtra] = useState<Record<string, string>>({});
+  const withVariant = (url: string) => (variant ? withParams(url, { [VARIANT_PARAM]: variant }) : url);
+  const controlled = withParams(applyControls(version.url, offered, values), extra);
+  const chosenAddress = withVariant(controlled);
   const address = `${chosenAddress}${chosenAddress.includes("?") ? "&" : "?"}review=${encodeURIComponent(review)}`;
 
   const phone = useMediaQuery("(max-width: 639px)");
   // What the iframe is given: `studio=1` added, held still once the prototype can take control changes as messages.
-  const frameUrl = useLiveControls(phone ? address : chosenAddress, `${version.url}|${variant ?? ""}|${phone}`, controlParams(offered, values), false);
+  const live = useLiveControls(phone ? address : chosenAddress, `${version.url}|${variant ?? ""}|${phone}`, { ...controlParams(offered, values), ...extra }, false);
+  const frameUrl = live.src;
+  // The prototype moved itself: the controls and the setup comments are left on follow it.
+  const followPlace = (search: string) => {
+    const { values: next, extra: rest } = splitQuery(search, offered);
+    const all = { ...defaultValues(offered), ...next };
+    const moved = withVariant(withParams(applyControls(version.url, offered, all), rest));
+    live.follow(phone ? `${moved}${moved.includes("?") ? "&" : "?"}review=${encodeURIComponent(review)}` : moved, { ...controlParams(offered, all), ...rest });
+    setPicked(next);
+    setExtra(rest);
+  };
   const wide = useMediaQuery("(min-width: 64rem)");
   const [about, setAbout] = useState(false);
 
@@ -203,6 +217,7 @@ function Shared({
           zoom={zoom}
           fit={fit}
           comments={full ? undefined : { slug, version: versionKey, variant: chosenAddress.split("?")[1] || undefined }}
+          onPlace={followPlace}
           flow={null}
           flowOpen={false}
           onFlowOpen={() => {}}

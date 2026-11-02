@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { VARIANT_PARAM } from "./edits";
+
 /**
  * Controls a prototype offers to the studio.
  *
@@ -116,4 +118,19 @@ export const embedded = (url: string) => `${url}${url.includes("?") ? "&" : "?"}
 export function variantControl(controls: Controls | null) {
   const choices = (controls?.controls ?? []).filter((control): control is Extract<Control, { type: "choice" }> => control.type === "choice");
   return choices.find((control) => control.variants) ?? (choices.length === 1 ? choices[0] : undefined);
+}
+
+/** A prototype's address split into what its controls say, as their values, and the rest of its own place. The studio's own keys (its flag, a studio variant, a phone's review token) are neither. */
+export function splitQuery(query: string, controls: Controls | null) {
+  const declared = new Map((controls?.controls ?? []).map((control) => [control.param ?? control.id, control]));
+  const values: ControlValues = {};
+  const extra: Record<string, string> = {};
+  new URLSearchParams(query).forEach((value, key) => {
+    if (key === VARIANT_PARAM || key === EMBED_PARAM || key === "review") return;
+    const control = declared.get(key);
+    // A toggle on by default is only ever in the address when it is off ("0"); one off by default, when it is on.
+    if (control) values[control.id] = control.type === "toggle" ? (value === "0" ? "off" : "on") : value;
+    else extra[key] = value;
+  });
+  return { values, extra };
 }

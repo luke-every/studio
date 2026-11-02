@@ -140,15 +140,6 @@ export async function setResolved(input: { slug: string; version: string; id: st
   return next;
 }
 
-/** Records which flow screen a comment is on, found after it was left. Only ever fills it in; the anchor is otherwise kept as it is. */
-export async function setFlowScreen(input: { slug: string; version: string; id: string; flowScreen: string }) {
-  const { next } = await changeOne(input, (found) => ({
-    next: { ...found, anchor: anchorSchema.parse({ ...found.anchor, flowScreen: input.flowScreen }) },
-    message: `Place comment #${found.n}`,
-  }));
-  return next;
-}
-
 /** Takes a comment away, and the replies that answer it. */
 export async function removeComment(input: { slug: string; version: string; id: string }) {
   return update(input.slug, input.version, (comments) => {

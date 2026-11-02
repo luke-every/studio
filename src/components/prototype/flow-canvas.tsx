@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FitIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { anchorAt, ownedBy, pageKey, spotOf, type Spot } from "@/lib/anchor";
-import type { Anchor } from "@/lib/comments";
+import { setupOf, type Anchor } from "@/lib/comments";
 import { layoutFlow, withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
 import { applyEmbed } from "@/lib/embed";
@@ -179,7 +179,7 @@ export function FlowCanvas({
       if (!doc?.body) continue;
       const page = pageKey(doc);
       for (const comment of list) {
-        if (setups && (comment.variant ?? "") !== setups[screen.id]) continue;
+        if (setups && setupOf(comment.variant) !== setupOf(setups[screen.id])) continue;
         const spot = spotOf(doc, comment.anchor, page);
         if (spot) next.push({ key: `${comment.id}@${screen.id}`, id: comment.id, screenId: screen.id, spot });
       }
