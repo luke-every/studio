@@ -49,6 +49,8 @@
   // --- Where a comment goes: the studio's own description of a place (src/lib/anchor.ts, built into
   // studio-anchor.js, which the studio adds just before this), so its pin lands on the same element. ---
   var place = window.__studioAnchor;
+  // The taps that open a sheet or a menu over the page, so a comment left on one can be gone back to.
+  place.watchTaps(document);
   var STUDIO_KEYS = ["review", "preview", "studio", "studio-variant"];
   // Which keys of the address are the studio's rather than the prototype's own; all of them while the controls are unknown.
   function studioOwns(names) {

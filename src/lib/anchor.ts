@@ -68,6 +68,35 @@ export function ownedBy(frame: HTMLIFrameElement): StudioOwns {
   return (key) => keys.has(key);
 }
 
+/** A tap a comment's place depends on: what was tapped, found again the way a comment's element is. */
+export type Step = { selector: string; text?: string };
+
+// The taps since each document's address last changed. A new page is a new document, so it starts with none.
+const taps = new WeakMap<Document, { search: string; list: Step[] }>();
+const TAPPABLE = "button, a, [role=button], [role=tab], [role=menuitem], [role=option], summary, label, input, select";
+/** How many taps a comment keeps: enough for a sheet opened from a menu opened from a card. */
+const STEPS = 5;
+
+/**
+ * Notes each tap in a prototype's page, so a comment left on something it opened over the page (a sheet, a menu, a
+ * modal), which its address doesn't say, can be gone back to by tapping the same things again. A change of address
+ * starts the list over: from there the address says where it is. Taps outside the page's body (the studio's own
+ * phone layer) aren't the prototype's.
+ */
+export function watchTaps(doc: Document) {
+  const heard = (event: Event) => {
+    const node = event.target as Element | null;
+    if (!node || node.nodeType !== 1 || !doc.body?.contains(node)) return;
+    const tapped = node.closest(TAPPABLE) ?? node;
+    const now = taps.get(doc);
+    const list = now && now.search === doc.location.search ? now.list : [];
+    const step = { selector: selectorFor(tapped), text: snippet(tapped) || undefined };
+    taps.set(doc, { search: doc.location.search, list: [...list, step].slice(-STEPS) });
+  };
+  doc.addEventListener("click", heard, true);
+  return () => doc.removeEventListener("click", heard, true);
+}
+
 /** The anchor for a click at (x, y) in a document's own pixels. */
 export function anchorAt(doc: Document, x: number, y: number, studioOwns: StudioOwns): Anchor {
   const win = doc.defaultView!;
@@ -75,12 +104,14 @@ export function anchorAt(doc: Document, x: number, y: number, studioOwns: Studio
   const hit = doc.elementFromPoint(x, y);
   const element = hit && hit !== doc.body && hit !== root ? hit : null;
   const rect = element?.getBoundingClientRect();
+  const tapped = taps.get(doc);
   return {
     screen: doc.location.pathname,
     state: stateOf(doc.location, studioOwns),
     page: pageKey(doc),
     selector: element ? selectorFor(element) : null,
     text: element ? snippet(element) || undefined : undefined,
+    steps: tapped && tapped.search === doc.location.search && tapped.list.length ? tapped.list : undefined,
     x: rect && rect.width ? clamp((x - rect.left) / rect.width) : 0,
     y: rect && rect.height ? clamp((y - rect.top) / rect.height) : 0,
     fx: clamp((x + win.scrollX) / Math.max(1, root.scrollWidth)),
@@ -88,8 +119,8 @@ export function anchorAt(doc: Document, x: number, y: number, studioOwns: Studio
   };
 }
 
-/** The element an anchor was made on, if it is on screen now: there, showing, and still saying what it said. */
-export function elementOf(doc: Document, anchor: Anchor): Element | null {
+/** The element an anchor (or a step) was made on, if it is on screen now: there, showing, and still saying what it said. */
+export function elementOf(doc: Document, anchor: { selector: string | null; text?: string }): Element | null {
   if (!anchor.selector) return null;
   let element: Element | null = null;
   try {

@@ -11,6 +11,8 @@ import { usePinWatch } from "./use-pin-watch";
 const MISSING = "This looks different for you, so it can't be pinned where it was left.";
 /** How long a comment's element is waited for once its setup is on screen: the prototype may still be moving there, or fetching what it shows. It is pinned the moment it is there. */
 const WAIT_FOR = 4000;
+/** How long a tap that opened it is waited for before it is passed over. */
+const STEP_WAIT = 1500;
 
 /**
  * Comments over a prototype: the pins, the card for the one that is open, and
@@ -98,6 +100,10 @@ export function CommentLayer({
 
     let timer = 0;
     let since = 0;
+    // The taps that opened what it was left on, made again one at a time, each once what it taps is there.
+    const steps = comment.anchor.steps ?? [];
+    let step = 0;
+    let stepSince = 0;
     // Done once it can be pinned: there, in view and uncovered. Until then it is looked at again, and if it never can
     // be, the card says so rather than nothing showing at all.
     const reveal = () => {
@@ -108,6 +114,20 @@ export function CommentLayer({
       if (target) bringIntoView(doc, target, comment.anchor);
       else if (!comment.anchor.selector) win.scrollTo(0, comment.anchor.fy * doc.documentElement.scrollHeight - win.innerHeight / 2);
       if (spotOf(doc, comment.anchor)) return;
+      // Not on the page: it was left on something opened over it. A tap whose button never turns up is passed over.
+      if (!target && step < steps.length) {
+        const button = elementOf(doc, steps[step]);
+        stepSince ||= Date.now();
+        if (button) (button as HTMLElement).click();
+        if (button || Date.now() - stepSince > STEP_WAIT) {
+          step += 1;
+          stepSince = 0;
+        }
+        // Its own wait starts after the last tap.
+        since = Date.now();
+        timer = window.setTimeout(reveal, 100);
+        return;
+      }
       if (Date.now() - since < WAIT_FOR) timer = window.setTimeout(reveal, 100);
       else setMissing(focus.at);
     };

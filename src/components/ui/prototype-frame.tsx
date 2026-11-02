@@ -23,6 +23,7 @@ import { useMediaQuery } from "@/lib/use-media-query";
 import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
+import { watchTaps } from "@/lib/anchor";
 import { applyEmbed } from "@/lib/embed";
 import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 
@@ -840,6 +841,11 @@ function FrameBody({
   useEffect(() => {
     const win = frame.current?.contentWindow;
     return win ? watchPlace(win, (search) => placed.current?.(search)) : undefined;
+  }, [documents]);
+  // And what the person taps that the address doesn't remember, for a comment left on a sheet or a menu it opened.
+  useEffect(() => {
+    const doc = frame.current?.contentDocument;
+    return doc ? watchTaps(doc) : undefined;
   }, [documents]);
 
   // Handlers live in a ref so a new pick doesn't tear the listeners down.

@@ -7,7 +7,7 @@ import { build } from "esbuild";
 
 build({
   stdin: {
-    contents: 'import { anchorAt, stateOf } from "@/lib/anchor"; (window as any).__studioAnchor = { anchorAt, stateOf };',
+    contents: 'import { anchorAt, stateOf, watchTaps } from "@/lib/anchor"; (window as any).__studioAnchor = { anchorAt, stateOf, watchTaps };',
     resolveDir: process.cwd(),
     loader: "ts",
   },

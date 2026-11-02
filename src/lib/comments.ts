@@ -24,6 +24,11 @@ export const anchorSchema = z.object({
   page: z.string().max(80).optional(),
   /** Which screen of the prototype's flow it was left on, when it has one: opening it goes straight there. */
   flowScreen: z.string().max(80).optional(),
+  /**
+   * The taps since the prototype's address last changed, oldest first (see `watchTaps`): what opened the sheet, menu or
+   * modal it was left on, which the address doesn't say. Going to the comment taps them again when its element isn't there.
+   */
+  steps: z.array(z.object({ selector: z.string().max(1000), text: z.string().max(80).optional() })).max(5).optional(),
   /** The point inside that element, 0 to 1 across and down. */
   x: z.number().min(0).max(1),
   y: z.number().min(0).max(1),
