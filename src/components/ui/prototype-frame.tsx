@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import type { CommentsUi } from "@/components/prototype/comment-parts";
 import { useCommentFocus } from "@/components/prototype/use-comment-focus";
@@ -777,7 +777,20 @@ function FrameBody({
   comments: CommentsUi | null;
 }) {
   const [posterFailed, setPosterFailed] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [arrivedOnce, setLoaded] = useState(false);
+  // A page this browser has already shown comes from cache: no skeleton to wait behind.
+  const shownBefore = useSyncExternalStore(
+    () => () => {},
+    () => {
+      try {
+        return localStorage.getItem(`frame-loaded:${url}`) !== null;
+      } catch {
+        return false;
+      }
+    },
+    () => false,
+  );
+  const loaded = arrivedOnce || shownBefore;
   // Counts every document the frame has loaded, so a link inside the
   // prototype to another page is styled too.
   const [documents, setDocuments] = useState(0);
@@ -785,6 +798,9 @@ function FrameBody({
 
   const arrived = () => {
     setLoaded(true);
+    try {
+      localStorage.setItem(`frame-loaded:${url}`, "1");
+    } catch {}
     setDocuments((count) => count + 1);
   };
 

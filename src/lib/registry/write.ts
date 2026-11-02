@@ -6,7 +6,7 @@ import { linkProblem, type LinkKind } from "@/lib/links";
 
 import { isStoreConfigured, readRegistryDocument, updateRegistryDocument, type RegistryDocument } from "./store";
 import { aliased } from "./people";
-import { commitPrototypeVersion, fetchPrototypeFile, prototypeVersionExists, verifyPrototypeVersion, versionPrefix } from "./github";
+import { commitPrototypeVersion, deletePrototypeVersion, fetchPrototypeFile, prototypeVersionExists, verifyPrototypeVersion, versionPrefix } from "./github";
 import { applierScript, describeEdits, mergeEdits, variantIdPattern, type Edit, type EditsFile, type EditVariant } from "@/lib/edits";
 import { compareVersions, readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
@@ -601,13 +601,13 @@ export async function renameVersion(input: { slug: string; versionId: string; la
 }
 
 /**
- * Take a version out of the history, for when an update was a mistake. Only
- * the registry's record goes: the files stay in the content repository, so
- * nothing is lost for good and the number is never handed out again. If it
- * was the current version, the newest one left takes over.
+ * Take a version out of the history, for when an update was a mistake. Its
+ * files go from the content repository too, so the number can be pushed
+ * again. If it was the current version, the newest one left takes over.
  */
 export async function deleteVersion(input: { slug: string; versionId: string }) {
-  return mutate((document) => {
+  let removed = "";
+  await mutate((document) => {
     const prototype = document.prototypes.find((item) => item.slug === input.slug);
     const target = document.versions.find((version) => version.id === input.versionId && version.prototypeSlug === input.slug);
     if (!prototype || !target) throw new StoreError("No such version.");
@@ -616,6 +616,7 @@ export async function deleteVersion(input: { slug: string; versionId: string }) 
     if (!rest.length) throw new StoreError("This is the only version, so there is nothing to go back to.");
 
     document.versions = document.versions.filter((version) => version !== target);
+    removed = target.version;
 
     if (prototype.currentVersion === target.id) {
       const latest = rest.reduce((top, other) =>
@@ -626,4 +627,5 @@ export async function deleteVersion(input: { slug: string; versionId: string }) 
       prototypeSchema.parse(prototype);
     }
   });
+  await deletePrototypeVersion(input.slug, removed);
 }
