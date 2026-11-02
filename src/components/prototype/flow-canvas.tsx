@@ -725,7 +725,9 @@ function pageHeightOf(doc: Document) {
   }
   const screen = box ? box.clientHeight : win.innerHeight;
   for (const element of (box ?? doc.body).querySelectorAll<HTMLElement>("*")) {
-    const least = parseFloat(win.getComputedStyle(element).minHeight);
+    // A percentage is given back as one, not in pixels: it is of the parent's height.
+    const given = win.getComputedStyle(element).minHeight;
+    const least = given.endsWith("%") ? (parseFloat(given) / 100) * (element.parentElement?.clientHeight ?? 0) : parseFloat(given);
     if (least >= screen - 1) element.style.setProperty("min-height", `${least}px`, "important");
   }
   const hidden = box ? box.scrollHeight - box.clientHeight : 0;
