@@ -601,7 +601,8 @@ function ScreenFrame({
     if (!loaded || !onMeasured) return undefined;
     const timers = MEASURE_AT_MS.map((ms) =>
       window.setTimeout(() => {
-        const found = frame.current?.contentDocument?.documentElement.scrollHeight;
+        const doc = frame.current?.contentDocument;
+        const found = doc ? pageHeightOf(doc) : 0;
         if (found) onMeasured(Math.min(MAX_PAGE, found));
       }, ms),
     );
@@ -634,4 +635,21 @@ function ScreenFrame({
       sandbox="allow-scripts allow-forms allow-same-origin"
     />
   );
+}
+
+/**
+ * How tall a screen's whole page is. Most pages scroll the document; an app-like one is pinned to the screen and
+ * scrolls a box inside it (a sheet, a results page), so its document is always a phone tall. Then it is the screen
+ * plus whatever its main box holds below the fold: drawn that tall, the box has room for all of it. The main box is the
+ * one that scrolls most and takes up most of the screen, never a list or carousel inside the page.
+ */
+function pageHeightOf(doc: Document) {
+  const win = doc.defaultView!;
+  let hidden = 0;
+  for (const element of doc.body?.querySelectorAll("*") ?? []) {
+    if (element.clientHeight < win.innerHeight / 2 || element.scrollHeight <= element.clientHeight) continue;
+    if (!/auto|scroll/.test(win.getComputedStyle(element).overflowY)) continue;
+    hidden = Math.max(hidden, element.scrollHeight - element.clientHeight);
+  }
+  return Math.max(doc.documentElement.scrollHeight, win.innerHeight + hidden);
 }
