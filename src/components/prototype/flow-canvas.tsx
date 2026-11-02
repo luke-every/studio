@@ -97,10 +97,13 @@ export function FlowCanvas({
   const pageHeight = (id: string) => pageHeights[id] ?? device.height;
   const heightOf = (id: string) => pageHeight(id) * SCREEN_SCALE;
   const { placed, width, height } = layoutFlow(flow, cell, Infinity, (id) => heightOf(id) + GAP.y + LABEL_HEIGHT);
-  // The screens sit below their names.
+  // How far each screen has been dragged from where the layout put it, in the canvas's own units.
+  const [offsets, setOffsets] = useState<Record<string, { x: number; y: number }>>({});
+  // The screens sit below their names, where the layout put them or where they were dragged to.
   const at = (id: string) => {
     const spot = placed.get(id)!;
-    return { x: spot.x, y: spot.y + LABEL_HEIGHT };
+    const moved = offsets[id] ?? { x: 0, y: 0 };
+    return { x: spot.x + moved.x, y: spot.y + LABEL_HEIGHT + moved.y };
   };
 
   const box = useRef<HTMLDivElement>(null);
@@ -264,7 +267,13 @@ export function FlowCanvas({
 
   // Once it has arrived, the view glides to where it is sent (a page turning out taller, the Fit button) unless somebody is moving it by hand. The first fit is a place, not a move.
   const gliding = revealed && !byHand;
-  const drag = useRef<{ x: number; y: number; from: View; moved: boolean } | null>(null);
+  // A press on the canvas pans it; one on a screen or its name moves that screen (`screen`, from where it was: `origin`).
+  const drag = useRef<{ x: number; y: number; from: View; moved: boolean; screen?: string; origin?: { x: number; y: number } } | null>(null);
+  const grab = (event: React.PointerEvent, id: string) => {
+    if (placing) return;
+    event.stopPropagation();
+    drag.current = { x: event.clientX, y: event.clientY, from: view, moved: false, screen: id, origin: offsets[id] ?? { x: 0, y: 0 } };
+  };
   const toScreen = (x: number, y: number) => ({ x: view.x + x * view.scale, y: view.y + y * view.scale });
 
   const arrows = flow.edges.flatMap((edge, i) => {
@@ -343,18 +352,31 @@ export function FlowCanvas({
         const dy = event.clientY - start.y;
         if (!start.moved && Math.hypot(dx, dy) < 4) return;
         start.moved = true;
+        const { screen, origin } = start;
+        if (screen && origin) {
+          // Moved with the pointer, in the canvas's own units; with Shift held, along whichever way it has gone further.
+          let x = dx / start.from.scale;
+          let y = dy / start.from.scale;
+          if (event.shiftKey) {
+            if (Math.abs(x) > Math.abs(y)) y = 0;
+            else x = 0;
+          }
+          setSelected(screen);
+          setOffsets((now) => ({ ...now, [screen]: { x: origin.x + x, y: origin.y + y } }));
+          return;
+        }
         touch(true);
         setView({ ...start.from, x: start.from.x + dx, y: start.from.y + dy });
       }}
       onDoubleClick={(event) => {
         // A screen opens on a double-click, and while placing a comment a click is a comment.
-        if (placing || (event.target as Element).closest("button") || !box.current) return;
+        if (placing || (event.target as Element).closest("button, [data-screen-name]") || !box.current) return;
         const rect = box.current.getBoundingClientRect();
         zoomAt(event.clientX - rect.left, event.clientY - rect.top, DOUBLE_CLICK_ZOOM, true);
       }}
       onPointerUp={() => {
-        // Letting go of a drag isn't a click on anything.
-        if (!drag.current?.moved) setSelected(null);
+        // Letting go of a drag isn't a click on anything; a tap on a screen's name selects it.
+        if (!drag.current?.moved) setSelected(drag.current?.screen ?? null);
         window.setTimeout(() => (drag.current = null), 0);
       }}
       style={{
@@ -376,6 +398,7 @@ export function FlowCanvas({
             <button
               key={screen.id}
               type="button"
+              onPointerDown={(event) => grab(event, screen.id)}
               onPointerUp={(event) => {
                 if (drag.current?.moved) return;
                 event.stopPropagation();
@@ -458,11 +481,15 @@ export function FlowCanvas({
 
           {flow.screens.map((screen) => {
             const spot = toScreen(at(screen.id).x, at(screen.id).y);
+            // The name is a handle too: pressed, it selects its screen and moves it.
             return (
               <span
                 key={`${screen.id}-name`}
+                data-screen-name
+                onPointerDown={(event) => grab(event, screen.id)}
+                onDoubleClick={() => onOpen(screen)}
                 style={{ left: spot.x, top: spot.y - 22, maxWidth: Math.max(60, node.width * view.scale) }}
-                className="pointer-events-none absolute truncate text-xs font-medium text-foreground-muted"
+                className={`absolute truncate text-xs font-medium ${placing ? "pointer-events-none" : "pointer-events-auto cursor-grab"} ${selected === screen.id ? "text-foreground" : "text-foreground-muted"}`}
               >
                 {screen.name}
               </span>
