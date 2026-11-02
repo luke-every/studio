@@ -640,16 +640,18 @@ function ScreenFrame({
 /**
  * How tall a screen's whole page is. Most pages scroll the document; an app-like one is pinned to the screen and
  * scrolls a box inside it (a sheet, a results page), so its document is always a phone tall. Then it is the screen
- * plus whatever its main box holds below the fold: drawn that tall, the box has room for all of it. The main box is the
- * one that scrolls most and takes up most of the screen, never a list or carousel inside the page.
+ * plus whatever that box holds below the fold: drawn that tall, the box has room for all of it. The box is the one
+ * in front, under the middle of the screen, not a page further back (a homepage under a quiz) nor a list or carousel
+ * inside it.
  */
 function pageHeightOf(doc: Document) {
   const win = doc.defaultView!;
   let hidden = 0;
-  for (const element of doc.body?.querySelectorAll("*") ?? []) {
+  for (let element = doc.elementFromPoint(win.innerWidth / 2, win.innerHeight / 2); element && element !== doc.body && element !== doc.documentElement; element = element.parentElement) {
     if (element.clientHeight < win.innerHeight / 2 || element.scrollHeight <= element.clientHeight) continue;
     if (!/auto|scroll/.test(win.getComputedStyle(element).overflowY)) continue;
-    hidden = Math.max(hidden, element.scrollHeight - element.clientHeight);
+    hidden = element.scrollHeight - element.clientHeight;
+    break;
   }
   return Math.max(doc.documentElement.scrollHeight, win.innerHeight + hidden);
 }
