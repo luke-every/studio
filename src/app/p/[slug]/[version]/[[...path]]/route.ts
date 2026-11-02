@@ -60,13 +60,11 @@ export async function GET(
 
   const headers = new Headers({
     "content-type": relativePath === "index.html" ? "text/html; charset=utf-8" : guessContentType(relativePath),
-    // A version's files are only ever replaced by deleting it and pushing the
-    // number again, so a whole file is cached for a minute, not forever: long
-    // enough that a prototype's files load once per visit, short enough that a
-    // re-pushed version shows up. A byte range is kept only by the browser that asked, briefly:
+    // A version's files never change, so a whole file is cached hard and
+    // forever. A byte range is kept only by the browser that asked, briefly:
     // Safari opens a video by asking for its first two bytes, and a shared
     // cache that kept that answer would hand the same two bytes to everyone.
-    "cache-control": upstream.status === 206 ? "private, max-age=3600" : "public, max-age=60",
+    "cache-control": upstream.status === 206 ? "private, max-age=3600" : "public, max-age=31536000, immutable",
     "accept-ranges": "bytes",
     // Nothing here should end up in a search index.
     "x-robots-tag": "noindex",
