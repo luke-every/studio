@@ -12,7 +12,7 @@ const MISSING = "This looks different for you, so it can't be pinned where it wa
 /** How long a comment's element is waited for once its setup is on screen: the prototype may still be moving there, or fetching what it shows. It is pinned the moment it is there. */
 const WAIT_FOR = 4000;
 /** How long a tap that opened it is waited for before it is passed over. */
-const STEP_WAIT = 1500;
+const STEP_WAIT = 600;
 
 /**
  * Comments over a prototype: the pins, the card for the one that is open, and

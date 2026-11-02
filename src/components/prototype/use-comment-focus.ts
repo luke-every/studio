@@ -8,6 +8,17 @@ import type { Flow, FlowScreen } from "@/lib/flow";
 type Ask = { id: string; at: number };
 
 /**
+ * Where a comment was left, as fully as it is known: its setup, with the prototype's own address at the time on top
+ * (every answer of a quiz, say, where the setup may have kept only those that differ from the defaults).
+ */
+function placeOf(comment: Comment) {
+  const params = new URLSearchParams(comment.variant);
+  const own = comment.anchor.state ?? "";
+  new URLSearchParams(own.split("#")[0]).forEach((value, key) => params.set(key, value));
+  return setupOf(params.toString());
+}
+
+/**
  * Which comment is open over the prototype, and going to it: the setup it was left on (its controls, and the place the
  * prototype had put in its address), and its flow screen when it was left on the canvas. `at` counts up with every ask,
  * so asking for the same comment again goes to it again.
@@ -46,11 +57,12 @@ export function useCommentFocus({
     setFocus(id ? { id, at: ++asks.current } : null);
   };
 
-  // Choosing a comment from the list: the setup it was left on, then the flow screen, if it was left on one.
+  // Choosing a comment from the list: the place it was left in, then the flow screen, if it was left on one.
   const goTo = (comment: Comment) => {
     ask(comment.id);
-    if (setup?.onSetup && setupOf(comment.variant) !== setupOf(setup.variant)) {
-      setup.onSetup(comment.variant ?? "");
+    const place = placeOf(comment);
+    if (setup?.onSetup && place !== setupOf(setup.variant)) {
+      setup.onSetup(place ?? "");
       return;
     }
     const known = flow?.screens.find((item) => item.id === comment.anchor.flowScreen);
