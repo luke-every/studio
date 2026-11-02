@@ -28,9 +28,10 @@ export function useLiveControls(address: string | undefined, docKey: string, par
   const heard = useRef<string | null>(null);
 
   const src = live ? live.src : held && held.for === current ? held.src : current;
-  const latest = useRef({ src, docKey, paused });
+  const query = JSON.stringify(params);
+  const latest = useRef({ src, docKey, paused, query });
   useEffect(() => {
-    latest.current = { src, docKey, paused };
+    latest.current = { src, docKey, paused, query };
   });
 
   useEffect(() => {
@@ -49,7 +50,6 @@ export function useLiveControls(address: string | undefined, docKey: string, par
   }, []);
 
   // On becoming live, and on every change after: the prototype is told what the address would have said.
-  const query = JSON.stringify(params);
   useEffect(() => {
     const told = heard.current === query;
     heard.current = null;
@@ -57,7 +57,9 @@ export function useLiveControls(address: string | undefined, docKey: string, par
   }, [live, query]);
 
   const follow = (next: string, nextParams: Record<string, string>) => {
-    heard.current = JSON.stringify(nextParams);
+    // Only a change is posted, so only a change is held back.
+    const told = JSON.stringify(nextParams);
+    heard.current = told === latest.current.query ? null : told;
     setHeld({ for: embedded(next), src: latest.current.src ?? embedded(next) });
   };
 

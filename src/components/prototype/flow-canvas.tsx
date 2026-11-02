@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { FitIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
-import { anchorAt, ownedBy, pageKey, spotOf, type Spot } from "@/lib/anchor";
+import { anchorAt, ownedBy, spotOf, type Spot } from "@/lib/anchor";
 import { setupOf, type Anchor } from "@/lib/comments";
 import { layoutFlow, withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
@@ -177,13 +177,12 @@ export function FlowCanvas({
     for (const screen of flow.screens) {
       const doc = frames.current.get(screen.id)?.contentDocument;
       if (!doc?.body) continue;
-      const page = pageKey(doc);
       for (const comment of list) {
         if (setups && setupOf(comment.variant) !== setupOf(setups[screen.id])) continue;
-        const spot = spotOf(doc, comment.anchor, page);
+        const spot = spotOf(doc, comment.anchor);
         if (spot) next.push({ key: `${comment.id}@${screen.id}`, id: comment.id, screenId: screen.id, spot });
       }
-      const draftSpot = draft?.screenId === screen.id ? spotOf(doc, draft.anchor, page) : null;
+      const draftSpot = draft?.screenId === screen.id ? spotOf(doc, draft.anchor) : null;
       if (draftSpot) next.push({ key: "draft", id: "draft", screenId: screen.id, spot: draftSpot });
     }
     const rect = box.current?.getBoundingClientRect();

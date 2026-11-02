@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 
-import { addressFor, anchorAt, bringIntoView, elementOf, ownedBy, pageKey, spotOf, type Spot } from "@/lib/anchor";
+import { addressFor, anchorAt, bringIntoView, elementOf, ownedBy, spotOf, type Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
 
 import { Card, CommentCard, Composer, DraftPin, Pin, PIN, type CommentsUi } from "./comment-parts";
@@ -68,12 +68,11 @@ export function CommentLayer({
     const doc = frame.current?.contentDocument;
     if (!doc?.body) return;
     const next: Record<string, Spot> = {};
-    const page = pageKey(doc);
     for (const comment of comments) {
-      const spot = spotOf(doc, comment.anchor, page);
+      const spot = spotOf(doc, comment.anchor);
       if (spot) next[comment.id] = spot;
     }
-    const draftSpot = shownDraft ? spotOf(doc, shownDraft, page) : null;
+    const draftSpot = shownDraft ? spotOf(doc, shownDraft) : null;
     if (draftSpot) next.draft = draftSpot;
     const box = root.current?.getBoundingClientRect();
     const moved = { left: box?.left ?? 0, top: box?.top ?? 0 };
@@ -99,19 +98,16 @@ export function CommentLayer({
 
     let timer = 0;
     let since = 0;
+    // Done once it can be pinned: there, in view and uncovered. Until then it is looked at again, and if it never can
+    // be, the card says so rather than nothing showing at all.
     const reveal = () => {
       const doc = element.contentDocument;
       if (!doc) return;
       since ||= Date.now();
-      if (!comment.anchor.selector) {
-        win.scrollTo(0, comment.anchor.fy * doc.documentElement.scrollHeight - win.innerHeight / 2);
-        return;
-      }
-      const target = elementOf(doc, comment.anchor);
-      if (target) {
-        bringIntoView(doc, target, comment.anchor);
-        return;
-      }
+      const target = comment.anchor.selector ? elementOf(doc, comment.anchor) : null;
+      if (target) bringIntoView(doc, target, comment.anchor);
+      else if (!comment.anchor.selector) win.scrollTo(0, comment.anchor.fy * doc.documentElement.scrollHeight - win.innerHeight / 2);
+      if (spotOf(doc, comment.anchor)) return;
       if (Date.now() - since < WAIT_FOR) timer = window.setTimeout(reveal, 100);
       else setMissing(focus.at);
     };

@@ -136,13 +136,12 @@ export function bringIntoView(doc: Document, element: Element, anchor: Anchor) {
 
 /**
  * Where an anchor is in a document, in its own pixels, or null when it isn't
- * on this screen right now. A prototype can swap one step for another without
- * changing page, or draw a step over the one before, so a comment shows only
- * where its element is there, uncovered, and the page reads as it did.
+ * on this screen right now. A prototype can draw a step over the one before,
+ * so a comment shows only where its element is there, uncovered, and still
+ * says what it said. Which step it is, the prototype's address says.
  */
-export function spotOf(doc: Document, anchor: Anchor, page = pageKey(doc)): Spot | null {
+export function spotOf(doc: Document, anchor: Anchor): Spot | null {
   if (anchor.screen !== doc.location.pathname) return null;
-  if (anchor.page && anchor.page !== page) return null;
   if (!anchor.selector) {
     const root = doc.documentElement;
     const win = doc.defaultView!;
