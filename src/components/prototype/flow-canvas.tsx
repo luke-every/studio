@@ -268,8 +268,8 @@ export function FlowCanvas({
 
   // Once it has arrived, the view glides to where it is sent (a page turning out taller, the Fit button) unless somebody is moving it by hand. The first fit is a place, not a move.
   const gliding = revealed && !byHand;
-  // A press on a screen or its name moves that screen (`screen`, from where it was: `origin`). The canvas itself is
-  // panned with Space held (or the middle button), as in Figma, and by scrolling; a plain press on it only lets go.
+  // A press on a screen or its name moves that screen (`screen`, from where it was: `origin`), and only that screen; one
+  // on the canvas around them pans it, as does one anywhere with Space held, as in Figma.
   const drag = useRef<{ x: number; y: number; from: View; moved: boolean; pan: boolean; screen?: string; origin?: { x: number; y: number } } | null>(null);
   const space = useRef(false);
   const [panning, setPanning] = useState(false);
@@ -370,7 +370,7 @@ export function FlowCanvas({
     <div
       ref={box}
       onPointerDown={(event) => {
-        drag.current = { x: event.clientX, y: event.clientY, from: view, moved: false, pan: space.current || event.button === 1 };
+        drag.current = { x: event.clientX, y: event.clientY, from: view, moved: false, pan: true };
       }}
       onPointerMove={(event) => {
         const start = drag.current;
@@ -413,7 +413,7 @@ export function FlowCanvas({
         backgroundPosition: `${view.x}px ${view.y}px`,
         transition: gliding || easing ? `background-position var(--dur-deliberate) var(--curve-standard), background-size var(--dur-deliberate) var(--curve-standard)` : undefined,
       }}
-      className={`absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : ""}`}
+      className={`absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : "active:cursor-grabbing"}`}
     >
       <div
         className="absolute left-0 top-0 origin-top-left"
