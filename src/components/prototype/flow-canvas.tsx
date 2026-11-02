@@ -9,6 +9,7 @@ import { setupOf, type Anchor } from "@/lib/comments";
 import { layoutFlow, withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
 import { applyEmbed } from "@/lib/embed";
+import { PREVIEW_QUERY } from "@/lib/controls";
 import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 
 import { Card, CommentCard, Composer, DraftPin, Pin, type CommentsUi } from "./comment-parts";
@@ -448,7 +449,7 @@ export function FlowCanvas({
               } as React.CSSProperties}
               className={`absolute block overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface text-left ${revealed ? "stagger-in" : "pointer-events-none"}`}
             >
-              <ScreenFrame onReady={() => setReadyIds((now) => (now.has(screen.id) ? now : new Set(now).add(screen.id)))} pageHeight={pageHeight(screen.id)} onMeasured={(found) => setPageHeights((now) => ((now[screen.id] ?? 0) >= found ? now : { ...now, [screen.id]: found }))} wireframe={wireframe} register={(element) => (element ? frames.current.set(screen.id, element) : frames.current.delete(screen.id))} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}preview`} device={device} />
+              <ScreenFrame onReady={() => setReadyIds((now) => (now.has(screen.id) ? now : new Set(now).add(screen.id)))} pageHeight={pageHeight(screen.id)} onMeasured={(found) => setPageHeights((now) => ((now[screen.id] ?? 0) >= found ? now : { ...now, [screen.id]: found }))} wireframe={wireframe} register={(element) => (element ? frames.current.set(screen.id, element) : frames.current.delete(screen.id))} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`} device={device} />
             </button>
           );
         }) : null}

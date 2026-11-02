@@ -89,7 +89,10 @@ export async function GET(
   // own folder fixes every prototype at once, and anything that already sets
   // a base is left alone.
   if (relativePath === "index.html" && path.length === 0 && upstream.status === 200) {
-    const html = withBase(await upstream.text(), `/p/${slug}/${version}/`);
+    const base = withBase(await upstream.text(), `/p/${slug}/${version}/`);
+    // A preview (a canvas screen, a tile) shows what its address says and nothing else: many of them run side by side
+    // in one tab, and what one remembers in storage would change what the next one shows.
+    const html = new URL(request.url).searchParams.has("preview") ? withFirst(base, PRIVATE_STORAGE) : base;
     headers.delete("content-length");
     // A review link (from the studio's QR code) adds the comment script. The address alone never does, so a link
     // shared for testing is the prototype and nothing else, and what is served here is never cached for everyone.
@@ -102,6 +105,15 @@ export async function GET(
   }
 
   return new NextResponse(upstream.body, { status: upstream.status, headers });
+}
+
+/** Storage of its own for a preview, in memory, gone when it closes: before any of the page's scripts can reach the real one. */
+const PRIVATE_STORAGE = `<script>(function(){function m(){var d=new Map();return{get length(){return d.size},key:function(i){return Array.from(d.keys())[i]??null},getItem:function(k){return d.has(String(k))?d.get(String(k)):null},setItem:function(k,v){d.set(String(k),String(v))},removeItem:function(k){d.delete(String(k))},clear:function(){d.clear()}}}try{Object.defineProperty(window,"localStorage",{value:m(),configurable:true});Object.defineProperty(window,"sessionStorage",{value:m(),configurable:true})}catch(e){}})();</script>`;
+
+/** Something to run before anything else in the page: just inside its head, after the base. */
+function withFirst(html: string, tag: string) {
+  const at = html.match(/<base[^>]*>/i) ?? html.match(/<head[^>]*>/i);
+  return at ? html.replace(at[0], `${at[0]}${tag}`) : `${tag}${html}`;
 }
 
 /** `<base href>` as the first thing in the head, unless the page already has one. */

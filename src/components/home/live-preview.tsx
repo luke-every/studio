@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { PREVIEW_QUERY } from "@/lib/controls";
 import { PHONE_HEIGHT, PHONE_WIDTH } from "@/lib/phone";
 
 
@@ -105,7 +106,7 @@ export function LivePreview({ src, title }: { src: string; title: string }) {
       <div aria-hidden className={`absolute inset-0 bg-surface ${loaded ? "" : "pulse-soft"}`} />
       {started && scale ? (
         <iframe
-          src={`${src}?preview`}
+          src={`${src}?${PREVIEW_QUERY}`}
           title={title}
           aria-hidden
           tabIndex={-1}
