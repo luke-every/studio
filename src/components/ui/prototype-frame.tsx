@@ -251,9 +251,12 @@ export function PrototypeFrame({
     },
   });
   const addComment = async (text: string, anchor: Anchor, setup?: string) => !!(await postComment(text, anchor, setup));
+  // The comment asked for is shown wherever it was left: its own setup may say less than the place it puts back.
+  const asked = focus && !comments.some((item) => item.id === focus.id) ? everything.find((item) => item.id === focus.id) : undefined;
+  const withAsked = asked ? [...comments, asked] : comments;
   const commentsUi: CommentsUi | null =
     commentsOf && !dev
-      ? { list: comments, visible: !bare && (showPins || commenting), placing: commenting && !interacting, focus, onFocus: ask, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
+      ? { list: withAsked, visible: !bare && (showPins || commenting), placing: commenting && !interacting, focus, onFocus: ask, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
       : null;
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
