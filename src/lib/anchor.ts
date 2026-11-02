@@ -47,31 +47,19 @@ export function stateOf(location: Pick<Location, "search" | "hash">, studioOwns:
 }
 
 /**
- * Where to send a frame so it shows an anchor's screen: the anchor's path, and
- * its own state when it noted one (comments left before that didn't), keeping
- * what the studio put in the address. Null when the frame is there already;
- * `reload` is false when only the hash changes, which loads nothing.
+ * Where to send a frame so it shows an anchor's screen: its page, and its hash
+ * when it noted one. The query is the comment's setup, which the studio puts
+ * back itself (without loading the page again when the prototype takes its
+ * controls live), so it is left as it is here. Null when the frame is there already.
  */
-export function addressFor(location: Location, anchor: Anchor, studioOwns: StudioOwns) {
+export function addressFor(location: Location, anchor: Anchor) {
   const url = new URL(location.href);
   url.pathname = anchor.screen;
   if (anchor.state !== undefined) {
     const hashAt = anchor.state.indexOf("#");
-    const own = new URLSearchParams(hashAt < 0 ? anchor.state : anchor.state.slice(0, hashAt));
-    // What the prototype had set itself goes; what the comment noted takes its place, over the studio's if they share a key.
-    for (const key of new Set(url.searchParams.keys())) if (!studioOwns(key) || own.has(key)) url.searchParams.delete(key);
-    own.forEach((value, key) => url.searchParams.append(key, value));
     url.hash = hashAt < 0 ? "" : anchor.state.slice(hashAt);
   }
-  // Compared with the keys in order, so the same address written another way isn't a reason to load it again.
-  const query = (search: string) => {
-    const params = new URLSearchParams(search);
-    params.sort();
-    return params.toString();
-  };
-  const reload = url.pathname !== location.pathname || query(url.search) !== query(location.search);
-  if (!reload && url.hash === location.hash) return null;
-  return { href: url.href, reload };
+  return url.pathname === location.pathname && url.hash === location.hash ? null : url.href;
 }
 
 /** For a frame whose address the studio set: every key in that address is the studio's, whatever the prototype adds after. */

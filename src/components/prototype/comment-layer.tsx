@@ -9,8 +9,8 @@ import { Card, CommentCard, Composer, DraftPin, Pin, PIN, type CommentsUi } from
 import { usePinWatch } from "./use-pin-watch";
 
 const MISSING = "This looks different for you, so it can't be pinned where it was left.";
-/** How long a comment's element is waited for once its setup is on screen: the prototype may still be moving there. */
-const WAIT_FOR = 2000;
+/** How long a comment's element is waited for once its setup is on screen: the prototype may still be moving there, or fetching what it shows. It is pinned the moment it is there. */
+const WAIT_FOR = 4000;
 
 /**
  * Comments over a prototype: the pins, the card for the one that is open, and
@@ -112,33 +112,22 @@ export function CommentLayer({
       else setMissing(focus.at);
     };
 
-    // A frame that is still loading has no address to compare yet.
-    // Ready once its markup is in, without waiting for its images: a frame that has only just been given its address is
-    // still on a blank page, or still reading, and is looked at again in a moment.
+    // Looked at as soon as the frame's markup is in, never waiting for its images: a frame that has only just been given
+    // its address is still on a blank page, or still reading, and is looked at again in a moment. Sent to the comment's
+    // page or hash once, if it isn't on it, and looked at again until it has arrived.
+    let sent = 0;
     const start = () => {
-      if (
-        win.location.href === "about:blank" ||
-        element.contentDocument?.readyState === "loading"
-      ) {
-        timer = window.setTimeout(start, 30);
-        return;
+      const to = win.location.href === "about:blank" || element.contentDocument?.readyState === "loading" ? "wait" : addressFor(win.location, comment.anchor);
+      if (to && to !== "wait" && !sent) {
+        sent = Date.now();
+        win.location.assign(to);
       }
-      const to = addressFor(win.location, comment.anchor, ownedBy(element));
-      if (!to) {
-        reveal();
-        return;
-      }
-      // Only the hash changing loads nothing; the prototype's own router takes it, and is given a moment.
-      if (to.reload) element.addEventListener("load", reveal, { once: true });
-      else timer = window.setTimeout(reveal, 100);
-      win.location.assign(to.href);
+      if (to && Date.now() - (sent || Date.now()) < WAIT_FOR) timer = window.setTimeout(start, 30);
+      else reveal();
     };
 
     start();
-    return () => {
-      window.clearTimeout(timer);
-      element.removeEventListener("load", reveal);
-    };
+    return () => window.clearTimeout(timer);
   }, [focus, frame, known]);
 
   // The glass takes clicks, not scrolling: a wheel over it scrolls whatever in the prototype is under the pointer and can
