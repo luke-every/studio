@@ -51,8 +51,8 @@ type StudioContextValue = {
   updatePrototype: (input: Parameters<typeof updatePrototypeAction>[0], keys: string[], message?: string) => void;
   /** Rename a version, as people see it. Same way. */
   renameVersion: (input: Parameters<typeof renameVersionAction>[0], keys: string[], message?: string) => void;
-  /** Take a version out of the history. Same way. */
-  deleteVersion: (input: Parameters<typeof deleteVersionAction>[0], keys: string[], message?: string) => void;
+  /** Take a version out of the history. Resolves when it is done and the screen has been refreshed; a problem comes back as text. */
+  deleteVersion: (input: Parameters<typeof deleteVersionAction>[0], message?: string) => Promise<string | null>;
   /** Which saves are in flight, by the keys they were started with. */
   isSaving: (key: string) => boolean;
   /** Say something short at the top of the screen. */
@@ -184,8 +184,14 @@ export function StudioProvider({
   );
 
   const deleteVersion = useCallback<StudioContextValue["deleteVersion"]>(
-    (input, keys, message = "Deleted") => background(() => deleteVersionAction(input), keys, message),
-    [background],
+    async (input, message = "Deleted") => {
+      const result = await deleteVersionAction(input);
+      if (!result.ok) return result.error;
+      after();
+      notify(message);
+      return null;
+    },
+    [after, notify],
   );
 
   const isSaving = useCallback(

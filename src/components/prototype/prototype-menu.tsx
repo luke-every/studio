@@ -210,9 +210,10 @@ function DeleteVersionDialog({ prototype, version, onClose }: { prototype: Proto
       title={`Delete ${version}?`}
       description={`It comes out of the history for everyone.${next ? ` ${next.version} becomes the latest.` : ""} Its files and comments are deleted from GitHub too. You can push the same number again.`}
       submitLabel="Delete"
+      busyLabel="Deleting…"
       destructive
       onClose={onClose}
-      onSubmit={() => deleteVersion({ slug: prototype.slug, versionId: target.id }, ["prototype"], `Deleted ${version}`)}
+      onSubmit={() => deleteVersion({ slug: prototype.slug, versionId: target.id }, `Deleted ${version}`)}
     />
   );
 }

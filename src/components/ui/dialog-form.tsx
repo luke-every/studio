@@ -24,6 +24,7 @@ export function DialogForm({
   title,
   description,
   submitLabel,
+  busyLabel,
   disabled,
   destructive,
   onSubmit,
@@ -33,17 +34,25 @@ export function DialogForm({
   title: string;
   description?: string;
   submitLabel: string;
+  /** What the button says while the submit is running. */
+  busyLabel?: string;
   disabled?: boolean;
   destructive?: boolean;
-  onSubmit: () => string | null | void;
+  /** A problem to show, or nothing to close. May take a while: the dialog stays open, busy, until it settles. */
+  onSubmit: () => string | null | void | Promise<string | null | void>;
   onClose: () => void;
   children?: ReactNode;
 }) {
   const [problem, setProblem] = useState<string | null>(null);
 
-  const submit = (event: FormEvent) => {
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const found = onSubmit();
+    if (busy) return;
+    setBusy(true);
+    const found = await onSubmit();
+    setBusy(false);
     if (found) return setProblem(found);
     onClose();
   };
@@ -66,9 +75,9 @@ export function DialogForm({
         ) : null}
 
         <div className="flex items-center justify-end gap-2 pt-1">
-          <Button onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant={destructive ? "destructive" : "primary"} disabled={disabled}>
-            {submitLabel}
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" variant={destructive ? "destructive" : "primary"} disabled={disabled} loading={busy}>
+            {busyLabel ?? submitLabel}
           </Button>
         </div>
       </form>
