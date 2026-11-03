@@ -373,17 +373,22 @@ export async function archivePrototypeVersion(slug: string, version: string) {
   }
 
   const repo = `/repos/${cfg.owner}/${cfg.name}`;
-  const tree = await api(`${repo}/git/trees/${cfg.branch}:${prefix}?recursive=1`, cfg).catch((error: { status?: number }) => {
-    if (error.status === 404) return null;
-    throw error;
-  });
-  if (tree?.truncated) throw new Error(`${version} of ${slug} has too many files to archive.`);
-  // A tree entry pointing at the same blob under a new path is a move; the old path is set to null.
-  const moves = ((tree?.tree ?? []) as { path: string; mode: string; type: string; sha: string }[])
-    .filter((entry) => entry.type === "blob")
-    .map((entry) => ({ from: `${prefix}/${entry.path}`, to: `${archived}/${entry.path}`, mode: entry.mode, sha: entry.sha }));
-  const comments = await readRepoFileWithSha(commentsPath);
-  if (comments) moves.push({ from: commentsPath, to: `${archived}/comments.json`, mode: "100644", sha: comments.sha });
+  // A version's folder moves as one tree entry pointing at the same tree, however many files it holds.
+  const entryIn = async (folder: string, name: string) => {
+    const listing = await api(`${repo}/git/trees/${cfg.branch}:${folder}`, cfg).catch((error: { status?: number }) => {
+      if (error.status === 404) return null;
+      throw error;
+    });
+    return ((listing?.tree ?? []) as { path: string; mode: string; type: string; sha: string }[]).find((entry) => entry.path === name);
+  };
+  const [files, comments] = await Promise.all([
+    entryIn(`p/${slug}`, versionSegment(version)),
+    entryIn(`comments/${slug}`, `${versionSegment(version)}.json`),
+  ]);
+  const moves = [
+    files && { from: prefix, to: `${archived}/p`, entry: files },
+    comments && { from: commentsPath, to: `${archived}/comments.json`, entry: comments },
+  ].filter((move) => !!move);
   if (!moves.length) return;
 
   const ref = await api(`${repo}/git/ref/heads/${cfg.branch}`, cfg);
@@ -394,8 +399,8 @@ export async function archivePrototypeVersion(slug: string, version: string) {
     body: JSON.stringify({
       base_tree: baseCommit.tree.sha,
       tree: moves.flatMap((move) => [
-        { path: move.to, mode: move.mode, type: "blob", sha: move.sha },
-        { path: move.from, mode: move.mode, type: "blob", sha: null },
+        { path: move.to, mode: move.entry.mode, type: move.entry.type, sha: move.entry.sha },
+        { path: move.from, mode: move.entry.mode, type: move.entry.type, sha: null },
       ]),
     }),
   });
