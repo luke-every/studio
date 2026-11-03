@@ -8,7 +8,8 @@ import { useCommentFocus } from "@/components/prototype/use-comment-focus";
 import { reviewPrompt, setupOf, type Anchor, type Comment } from "@/lib/comments";
 import { useStudio } from "@/lib/data/studio-store";
 import { useEditSession } from "@/components/prototype/use-edit-session";
-import { useComments, useShowComments } from "@/components/prototype/use-comments";
+import type { CommentGroup } from "@/components/prototype/comments-panel";
+import { useComments, useOtherComments, useShowComments } from "@/components/prototype/use-comments";
 import { MotionSheet } from "@/components/motion";
 import { ShareMenu } from "@/components/prototype/share-menu";
 
@@ -126,6 +127,10 @@ export function PrototypeFrame({
   comments?: {
     slug: string;
     version: string;
+    /** Every version of the prototype, newest first, so the list can show the comments left on the others. */
+    versions?: { key: string; version: string }[];
+    /** Opens another version, by its key. */
+    onVersion?: (key: string) => void;
     /** The setup on screen (see `Comment`); pins show only the comments left on it. */
     variant?: string;
     /** Puts the prototype in the setup a comment was left on. An empty one is the version as it is. */
@@ -210,6 +215,14 @@ export function PrototypeFrame({
   // The setup on screen: the page's, and a flow screen's own parameters on top while one is open, so a comment left there goes back there.
   const setupOnScreen = setupOf(withParams(`?${commentsOf?.variant ?? ""}`, screen?.params ?? {}).split("?")[1]);
   const { comments, everything, replies, error: commentsError, add: postComment, reply: replyToComment, resolve: resolveComment, like: likeComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, setupOnScreen, showPins || mode === "comment");
+  const others = useOtherComments(commentsOf?.slug, (commentsOf?.versions ?? []).map((item) => item.key).filter((key) => key !== commentsOf?.version), !dev && (showPins || mode === "comment"));
+  const groups: CommentGroup[] = (commentsOf?.versions ?? []).map((item) => ({
+    key: item.key,
+    version: item.version,
+    comments: (item.key === commentsOf?.version ? everything : others[item.key]?.filter((comment) => !comment.parentId)) ?? [],
+  }));
+  const allReplies = { ...replies };
+  for (const list of Object.values(others)) for (const item of list) if (item.parentId) (allReplies[item.parentId] ??= []).push(item);
   const { notify } = useStudio();
   // Asked before leaving edit mode with changes that would be lost.
   const [leaving, setLeaving] = useState(false);
@@ -250,6 +263,14 @@ export function PrototypeFrame({
       setListing(!narrow);
     },
   });
+  // Choosing a comment on another version opens that version, where it is then asked for like any other.
+  const choose = (comment: Comment, key: string) => {
+    if (key === commentsOf?.version) goTo(comment);
+    else {
+      commentsOf?.onVersion?.(key);
+      ask(comment.id);
+    }
+  };
   const addComment = async (text: string, anchor: Anchor, setup?: string) => !!(await postComment(text, anchor, setup));
   // The comment asked for is shown wherever it was left: its own setup may say less than the place it puts back.
   const asked = focus && !comments.some((item) => item.id === focus.id) ? everything.find((item) => item.id === focus.id) : undefined;
@@ -708,7 +729,7 @@ export function PrototypeFrame({
         {panelKind === "edit" && edit ? (
           <EditPanel element={target?.isConnected ? target : null} session={session} />
         ) : panelKind === "comments" ? (
-          <CommentsPanel comments={everything} setupLabel={commentsOf?.setupLabel} replies={replies} selectedId={focus?.id ?? null} error={commentsError} onSelect={goTo} onResolve={resolveComment} onDelete={deleteComment} onCopy={copyForClaude} />
+          <CommentsPanel groups={groups} currentKey={commentsOf?.version ?? ""} setupLabel={commentsOf?.setupLabel} replies={allReplies} selectedId={focus?.id ?? null} error={commentsError} onSelect={choose} onResolve={resolveComment} onDelete={deleteComment} onCopy={copyForClaude} />
         ) : (
           <div className="p-4">
             <DevPanel picked={here.picked} motion={here.motion} />
@@ -722,13 +743,14 @@ export function PrototypeFrame({
     <MotionSheet open={narrow && listOpen} onClose={() => setListOpen(false)} label="Comments">
       <div className="flex flex-col gap-2 pb-4">
         <CommentsPanel
-          comments={everything}
+          groups={groups}
+          currentKey={commentsOf?.version ?? ""}
           setupLabel={commentsOf?.setupLabel}
-          replies={replies}
+          replies={allReplies}
           selectedId={focus?.id ?? null}
           error={commentsError}
-          onSelect={(comment) => {
-            goTo(comment);
+          onSelect={(comment, key) => {
+            choose(comment, key);
             setListOpen(false);
           }}
           onResolve={resolveComment}

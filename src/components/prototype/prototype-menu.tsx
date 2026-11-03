@@ -208,7 +208,7 @@ function DeleteVersionDialog({ prototype, version, onClose }: { prototype: Proto
   return (
     <DialogForm
       title={`Delete ${version}?`}
-      description={`It comes out of the history for everyone.${next ? ` ${next.version} becomes the latest.` : ""} Its comments and files are kept safe, so it can be restored if needed.`}
+      description={`It comes out of the history for everyone.${next ? ` ${next.version} becomes the latest.` : ""} Its files and comments move to the archive folder on GitHub, so nothing is lost, and you can push the same number again.`}
       submitLabel="Delete"
       destructive
       onClose={onClose}

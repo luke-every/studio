@@ -22,9 +22,15 @@ const SHOWS: { id: Show; label: string }[] = [
   { id: "all", label: "All" },
 ];
 
+/** The comments left on one version. */
+export type CommentGroup = { key: string; version: string; comments: Comment[] };
+
 /**
- * Every comment on this version, newest first. Choosing one takes you to
- * exactly where it was left.
+ * Every comment on every version, in a group for each version that has any,
+ * newest version first and newest comment first. Choosing one takes you to
+ * exactly where it was left. Only the version on screen can be resolved,
+ * deleted or copied by default; the rest are there to be read, and choosing
+ * one opens its version.
  *
  * Select turns each row into something to tick, the way a list in iOS does:
  * the rows narrow to make room for a circle on the left, and the button at
@@ -32,7 +38,8 @@ const SHOWS: { id: Show; label: string }[] = [
  * the list is showing.
  */
 export function CommentsPanel({
-  comments,
+  groups,
+  currentKey,
   replies,
   selectedId,
   error,
@@ -42,11 +49,13 @@ export function CommentsPanel({
   onCopy,
   setupLabel,
 }: {
-  comments: Comment[];
+  groups: CommentGroup[];
+  /** The version on screen. */
+  currentKey: string;
   replies: Record<string, Comment[]>;
   selectedId: string | null;
   error: string | null;
-  onSelect: (comment: Comment) => void;
+  onSelect: (comment: Comment, versionKey: string) => void;
   onResolve: (comment: Comment, resolved: boolean) => void;
   onDelete: (comment: Comment) => void;
   /** Copies these, as a prompt for Claude Code. */
@@ -60,12 +69,13 @@ export function CommentsPanel({
   const [selecting, setSelecting] = useState(false);
   const [ticked, setTicked] = useState<Set<string>>(new Set());
 
+  const matches = (comment: Comment) => (show === "all" ? true : show === "resolved" ? !!comment.resolvedAt : !comment.resolvedAt);
   // Oldest first is how a prompt reads; the list shows newest first.
-  const showing = comments.filter((comment) =>
-    show === "all" ? true : show === "resolved" ? comment.resolvedAt : !comment.resolvedAt,
-  );
-  const shown = showing.toReversed();
-  const toCopy = selecting ? showing.filter((comment) => ticked.has(comment.id)) : showing;
+  const sections = groups.map((group) => ({ ...group, shown: group.comments.filter(matches).toReversed() })).filter((group) => group.shown.length);
+  const shown = sections.flatMap((group) => group.shown);
+  const showing = (groups.find((group) => group.key === currentKey)?.comments ?? []).filter(matches);
+  const everyShown = groups.toReversed().flatMap((group) => group.comments.filter(matches));
+  const toCopy = selecting ? everyShown.filter((comment) => ticked.has(comment.id)) : showing;
 
   const toggleSelecting = () => {
     setSelecting((now) => !now);
@@ -133,10 +143,15 @@ export function CommentsPanel({
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       {shown.length ? (
+        <div className="flex flex-col gap-4">
+          {sections.map((group) => (
+        <section key={group.key}>
+        <p className="px-2 pb-1 text-ui text-foreground-subtle">{group.version}</p>
         <ul className="flex flex-col">
-          {shown.map((comment) => {
+          {group.shown.map((comment) => {
             const isTicked = ticked.has(comment.id);
-            const choose = () => (selecting ? tick(comment.id) : onSelect(comment));
+            const own = group.key === currentKey;
+            const choose = () => (selecting ? tick(comment.id) : onSelect(comment, group.key));
 
             return (
               <li key={comment.id} className="border-t border-divider first:border-t-0">
@@ -169,7 +184,7 @@ export function CommentsPanel({
                     role="button"
                     tabIndex={0}
                     aria-pressed={selecting ? isTicked : undefined}
-                    onClick={selecting ? undefined : () => onSelect(comment)}
+                    onClick={selecting ? undefined : () => onSelect(comment, group.key)}
                     onKeyDown={(event) => {
                       if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                         event.preventDefault();
@@ -184,8 +199,9 @@ export function CommentsPanel({
                       <span className="shrink-0 text-sm">
                         <Stamp iso={comment.at} relative />
                       </span>
+                      <span className="shrink-0 text-sm">{group.version}</span>
                       {/* Far right, and only while the row is hovered (or on a touch screen, which cannot hover). */}
-                      {readOnly ? null : (
+                      {readOnly || !own ? null : (
                       <span className="ml-auto flex shrink-0 items-center gap-1 opacity-0 transition-opacity duration-[var(--dur-fast)] focus-within:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
                         <ResolveToggle resolved={!!comment.resolvedAt} onToggle={() => onResolve(comment, !comment.resolvedAt)} />
                         <CommentMenu comment={comment} onDelete={onDelete} onCopy={(one) => onCopy([one])} />
@@ -212,9 +228,12 @@ export function CommentsPanel({
             );
           })}
         </ul>
+        </section>
+          ))}
+        </div>
       ) : (
         <PanelEmpty icon={<CommentIcon />}>
-          {comments.length
+          {groups.some((group) => group.comments.length)
             ? `Nothing ${show === "open" ? "open" : "resolved"}.`
             : "Tip: press C to leave a comment."}
         </PanelEmpty>

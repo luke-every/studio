@@ -315,7 +315,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               : undefined
           }
           edit={{ slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
-          comments={{ slug: prototype.slug, version: selected.key, variant: address?.split("?")[1] || undefined, onSetup: showSetup, canShow, setupLabel }}
+          comments={{ slug: prototype.slug, version: selected.key, versions: prototype.versions.map(({ key, version }) => ({ key, version })), onVersion: (key) => { const next = prototype.versions.find((item) => item.key === key); if (next) choose(next); }, variant: address?.split("?")[1] || undefined, onSetup: showSetup, canShow, setupLabel }}
           onPlace={followPlace}
           flow={flow}
           variants={variantsCanvas}

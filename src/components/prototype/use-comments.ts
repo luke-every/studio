@@ -72,6 +72,37 @@ const track = <T,>(save: Promise<T>) => {
 const POLL_MS = 20_000;
 
 /**
+ * The comments on the other versions of a prototype, by version key, read when the panel is opened and whenever the
+ * window is come back to. Read only: they are somebody else's history, and changing one happens on its own version.
+ */
+export function useOtherComments(slug: string | undefined, keys: string[], active: boolean) {
+  const sharedAs = useSharedComments();
+  const wanted = keys.join(" ");
+  const [found, setFound] = useState<Record<string, Comment[]>>({});
+
+  useEffect(() => {
+    if (!slug || !wanted || !active || sharedAs) return;
+    let current = true;
+    const read = () => {
+      if (document.visibilityState === "hidden") return;
+      for (const key of wanted.split(" ")) {
+        void listComments(slug, key).then((result) => {
+          if (current && result.ok) setFound((now) => (JSON.stringify(now[key]) === JSON.stringify(result.value) ? now : { ...now, [key]: result.value }));
+        });
+      }
+    };
+    read();
+    window.addEventListener("focus", read);
+    return () => {
+      current = false;
+      window.removeEventListener("focus", read);
+    };
+  }, [slug, wanted, active, sharedAs]);
+
+  return found;
+}
+
+/**
  * The comments on one version. Read when it is opened, again whenever the
  * window is come back to, and every twenty seconds while it is in view, which is
  * how somebody else's comments and likes show up without a refresh. (The

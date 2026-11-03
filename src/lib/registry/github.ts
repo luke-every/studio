@@ -350,6 +350,63 @@ export async function commitPrototypeVersion(
 }
 
 /**
+ * Move a version's files, and the comments left on it, to `archive/<slug>/` in
+ * the content repository in one commit, so the number can be pushed again and
+ * nothing is lost. The folder is stamped with the time, so a number archived
+ * twice keeps both. A version that is already gone is not an error.
+ */
+export async function archivePrototypeVersion(slug: string, version: string) {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("That isn't a prototype.");
+  const prefix = versionPrefix(slug, version);
+  const commentsPath = `comments/${slug}/${versionSegment(version)}.json`;
+  const archived = `archive/${slug}/${versionSegment(version)}-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}`;
+  const cfg = config();
+  if (!cfg) {
+    if (process.env.NODE_ENV === "production") requireConfig();
+    const { rename, mkdir } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const local = join(process.cwd(), ".local");
+    await mkdir(join(local, archived), { recursive: true });
+    await rename(join(local, "p", slug, versionSegment(version)), join(local, archived, "p")).catch(() => undefined);
+    await rename(join(local, commentsPath), join(local, archived, "comments.json")).catch(() => undefined);
+    return;
+  }
+
+  const repo = `/repos/${cfg.owner}/${cfg.name}`;
+  const tree = await api(`${repo}/git/trees/${cfg.branch}:${prefix}?recursive=1`, cfg).catch((error: { status?: number }) => {
+    if (error.status === 404) return null;
+    throw error;
+  });
+  if (tree?.truncated) throw new Error(`${version} of ${slug} has too many files to archive.`);
+  // A tree entry pointing at the same blob under a new path is a move; the old path is set to null.
+  const moves = ((tree?.tree ?? []) as { path: string; mode: string; type: string; sha: string }[])
+    .filter((entry) => entry.type === "blob")
+    .map((entry) => ({ from: `${prefix}/${entry.path}`, to: `${archived}/${entry.path}`, mode: entry.mode, sha: entry.sha }));
+  const comments = await readRepoFileWithSha(commentsPath);
+  if (comments) moves.push({ from: commentsPath, to: `${archived}/comments.json`, mode: "100644", sha: comments.sha });
+  if (!moves.length) return;
+
+  const ref = await api(`${repo}/git/ref/heads/${cfg.branch}`, cfg);
+  const baseCommitSha = ref.object.sha as string;
+  const baseCommit = await api(`${repo}/git/commits/${baseCommitSha}`, cfg);
+  const newTree = await api(`${repo}/git/trees`, cfg, {
+    method: "POST",
+    body: JSON.stringify({
+      base_tree: baseCommit.tree.sha,
+      tree: moves.flatMap((move) => [
+        { path: move.to, mode: move.mode, type: "blob", sha: move.sha },
+        { path: move.from, mode: move.mode, type: "blob", sha: null },
+      ]),
+    }),
+  });
+  const commit = await api(`${repo}/git/commits`, cfg, {
+    method: "POST",
+    body: JSON.stringify({ message: `Archive ${slug} ${version}`, tree: newTree.sha, parents: [baseCommitSha] }),
+  });
+  await api(`${repo}/git/refs/heads/${cfg.branch}`, cfg, { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
+}
+
+/**
  * Without a repository, `next dev` keeps a version's files in
  * `.local/p/<slug>/<version>/`, copying the version it starts from.
  */
