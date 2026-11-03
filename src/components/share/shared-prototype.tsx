@@ -19,7 +19,7 @@ import { ControlsPanel, VariantPicker } from "@/components/prototype/controls-pa
 import { useVersionVariants } from "@/components/prototype/use-version-variants";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { AvatarStack } from "@/components/shell/user-avatar";
-import { barControl, IconButton } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
 import { applyControls, controlParams, defaultValues, splitQuery, type ControlValues } from "@/lib/controls";
@@ -135,7 +135,10 @@ function Shared({
     <>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2.5">
-            <h1 className="text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">{name}</h1>
+            <div className="flex items-baseline justify-between gap-3">
+              <h1 className="min-w-0 text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">{name}</h1>
+              <span className="shrink-0 text-ui text-foreground-subtle">{version.label}</span>
+            </div>
             <p className="flex items-center gap-1.5 text-ui text-foreground-subtle">
               <AvatarStack people={people} className="size-5" overlap="-ml-1.5" ring="ring-tile" />
               <span className="text-foreground-muted">{people.length > 2 ? `${people[0].name} +${people.length - 1}` : people.map((person) => person.name).join(", ")}</span>
@@ -208,7 +211,7 @@ function Shared({
         <PrototypeFrame
           url={frameUrl}
           title={`${name} ${version.label}`}
-          leading={full ? null : <div className={barControl}>{version.label}</div>}
+          leading={null}
           center={({ scale }) => (
             <ViewMenu device={device} zoom={zoom} fit={fit} fitted={scale} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
           )}
