@@ -350,63 +350,51 @@ export async function commitPrototypeVersion(
 }
 
 /**
- * Move a version's files, and the comments left on it, to `archive/<slug>/` in
- * the content repository in one commit, so the number can be pushed again and
- * nothing is lost. The folder is stamped with the time, so a number archived
- * twice keeps both. A version that is already gone is not an error.
+ * Delete a version's files, and the comments left on it, from the content
+ * repository in one commit, so the number can be pushed again. A version that
+ * is already gone is not an error.
  */
-export async function archivePrototypeVersion(slug: string, version: string) {
+export async function removePrototypeVersion(slug: string, version: string) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("That isn't a prototype.");
   const prefix = versionPrefix(slug, version);
   const commentsPath = `comments/${slug}/${versionSegment(version)}.json`;
-  const archived = `archive/${slug}/${versionSegment(version)}-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}`;
   const cfg = config();
   if (!cfg) {
     if (process.env.NODE_ENV === "production") requireConfig();
-    const { rename, mkdir } = await import("node:fs/promises");
+    const { rm } = await import("node:fs/promises");
     const { join } = await import("node:path");
     const local = join(process.cwd(), ".local");
-    await mkdir(join(local, archived), { recursive: true });
-    await rename(join(local, "p", slug, versionSegment(version)), join(local, archived, "p")).catch(() => undefined);
-    await rename(join(local, commentsPath), join(local, archived, "comments.json")).catch(() => undefined);
+    await rm(join(local, "p", slug, versionSegment(version)), { recursive: true, force: true });
+    await rm(join(local, commentsPath), { force: true });
     return;
   }
 
   const repo = `/repos/${cfg.owner}/${cfg.name}`;
-  // A version's folder moves as one tree entry pointing at the same tree, however many files it holds.
+  // A folder goes as one tree entry set to null, however many files it holds.
   const entryIn = async (folder: string, name: string) => {
     const listing = await api(`${repo}/git/trees/${cfg.branch}:${folder}`, cfg).catch((error: { status?: number }) => {
       if (error.status === 404) return null;
       throw error;
     });
-    return ((listing?.tree ?? []) as { path: string; mode: string; type: string; sha: string }[]).find((entry) => entry.path === name);
+    return ((listing?.tree ?? []) as { path: string; mode: string; type: string }[]).find((entry) => entry.path === name);
   };
   const [files, comments] = await Promise.all([
     entryIn(`p/${slug}`, versionSegment(version)),
     entryIn(`comments/${slug}`, `${versionSegment(version)}.json`),
   ]);
-  const moves = [
-    files && { from: prefix, to: `${archived}/p`, entry: files },
-    comments && { from: commentsPath, to: `${archived}/comments.json`, entry: comments },
-  ].filter((move) => !!move);
-  if (!moves.length) return;
+  const gone = [files && { ...files, path: prefix }, comments && { ...comments, path: commentsPath }].filter((entry) => !!entry);
+  if (!gone.length) return;
 
   const ref = await api(`${repo}/git/ref/heads/${cfg.branch}`, cfg);
   const baseCommitSha = ref.object.sha as string;
   const baseCommit = await api(`${repo}/git/commits/${baseCommitSha}`, cfg);
   const newTree = await api(`${repo}/git/trees`, cfg, {
     method: "POST",
-    body: JSON.stringify({
-      base_tree: baseCommit.tree.sha,
-      tree: moves.flatMap((move) => [
-        { path: move.to, mode: move.entry.mode, type: move.entry.type, sha: move.entry.sha },
-        { path: move.from, mode: move.entry.mode, type: move.entry.type, sha: null },
-      ]),
-    }),
+    body: JSON.stringify({ base_tree: baseCommit.tree.sha, tree: gone.map((entry) => ({ path: entry.path, mode: entry.mode, type: entry.type, sha: null })) }),
   });
   const commit = await api(`${repo}/git/commits`, cfg, {
     method: "POST",
-    body: JSON.stringify({ message: `Archive ${slug} ${version}`, tree: newTree.sha, parents: [baseCommitSha] }),
+    body: JSON.stringify({ message: `Remove ${slug} ${version}`, tree: newTree.sha, parents: [baseCommitSha] }),
   });
   await api(`${repo}/git/refs/heads/${cfg.branch}`, cfg, { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
 }

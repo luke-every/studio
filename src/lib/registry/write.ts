@@ -6,7 +6,7 @@ import { linkProblem, type LinkKind } from "@/lib/links";
 
 import { isStoreConfigured, readRegistryDocument, updateRegistryDocument, type RegistryDocument } from "./store";
 import { aliased } from "./people";
-import { commitPrototypeVersion, fetchPrototypeFile, prototypeVersionExists, archivePrototypeVersion, verifyPrototypeVersion, versionPrefix } from "./github";
+import { commitPrototypeVersion, fetchPrototypeFile, prototypeVersionExists, removePrototypeVersion, verifyPrototypeVersion, versionPrefix } from "./github";
 import { applierScript, describeEdits, mergeEdits, variantIdPattern, type Edit, type EditsFile, type EditVariant } from "@/lib/edits";
 import { compareVersions, readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
@@ -601,9 +601,9 @@ export async function renameVersion(input: { slug: string; versionId: string; la
 }
 
 /**
- * Take a version out, for when an update was a mistake. Its record goes and its
- * files and comments move to `archive/` in the content repository, so the same
- * number can be pushed again and nothing is lost. If it was the current version, the newest one left takes over.
+ * Take a version out, for when an update was a mistake. Its record goes and so
+ * do its files and comments in the content repository, so the same number can
+ * be pushed again. If it was the current version, the newest one left takes over.
  */
 export async function deleteVersion(input: { slug: string; versionId: string }) {
   // Checked against the record first, so nothing is removed for a version that can't be.
@@ -613,7 +613,7 @@ export async function deleteVersion(input: { slug: string; versionId: string }) 
   if (document.versions.filter((version) => version.prototypeSlug === input.slug).length < 2) {
     throw new StoreError("This is the only version, so there is nothing to go back to.");
   }
-  await archivePrototypeVersion(input.slug, found.version);
+  await removePrototypeVersion(input.slug, found.version);
   return mutate((document) => {
     const prototype = document.prototypes.find((item) => item.slug === input.slug);
     const target = document.versions.find((version) => version.id === input.versionId && version.prototypeSlug === input.slug);
