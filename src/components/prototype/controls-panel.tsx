@@ -57,7 +57,7 @@ export function ControlsPanel({
               className="flex w-full items-center justify-between gap-3 text-left text-base text-foreground"
             >
               <span className="shrink-0">{control.label}</span>
-              <span className="flex min-w-0 items-center gap-1.5 text-ui text-foreground-subtle">
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-foreground-subtle">
                 <span className="min-w-0 truncate">{summary(control, values)}</span>
                 <ChevronDownIcon className={`size-3.5 shrink-0 transition-transform duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${open ? "rotate-180" : ""}`} />
               </span>
