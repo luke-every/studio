@@ -4,6 +4,7 @@ import { guessContentType } from "@/lib/registry/content-type";
 import { checkReviewToken } from "@/lib/review";
 import { fetchPrototypeFile, prototypeVersionExists } from "@/lib/registry/github";
 import { getPrototype } from "@/lib/registry";
+import { liveOrigin, WORKING_SEGMENT } from "@/lib/registry/local-prototypes";
 
 /**
  * Serving a prototype.
@@ -37,6 +38,17 @@ export async function GET(
   const { slug, version, path = [] } = await params;
   let relativePath = path.join("/") || "index.html";
   const range = request.headers.get("range");
+
+  // A prototype being worked on here is its running dev server. The page itself is that server's own address, so its
+  // scripts and assets load as they do in development; what the studio reads beside it (studio.json, flow.json) is passed through.
+  const live = version === WORKING_SEGMENT ? await liveOrigin(slug) : null;
+  if (live) {
+    const { search } = new URL(request.url);
+    if (!path.length) return NextResponse.redirect(`${live}/${search}`);
+    const response = await fetch(`${live}/${path.map(encodeURIComponent).join("/")}`, { headers: range ? { range } : {}, cache: "no-store" }).catch(() => null);
+    if (!response?.ok) return new NextResponse("Not found.", { status: 404 });
+    return new NextResponse(response.body, { status: response.status, headers: { "content-type": response.headers.get("content-type") ?? guessContentType(path.join("/")), "cache-control": "no-store" } });
+  }
 
   let upstream = await fetchPrototypeFile(slug, version, path, range);
   // A page of an exported app: /about is about/index.html (or about.html).

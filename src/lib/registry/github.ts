@@ -1,5 +1,6 @@
 import "server-only";
 
+import { WORKING_SEGMENT, workingFile } from "./local-prototypes";
 import { versionSegment } from "./version";
 
 /**
@@ -114,7 +115,10 @@ export async function fetchPrototypeFile(
   if (path.some((segment) => !segment || segment === "." || segment === "..")) return null;
 
   const cfg = config();
-  if (!cfg) return process.env.NODE_ENV === "production" ? null : readLocalFile(slug, versionSegment, path);
+  if (!cfg) {
+    if (process.env.NODE_ENV === "production") return null;
+    return (versionSegment === WORKING_SEGMENT ? await workingFile(slug, path) : null) ?? readLocalFile(slug, versionSegment, path);
+  }
 
   const file = (path.length ? path : ["index.html"]).map(encodeURIComponent).join("/");
   const response = await fetch(

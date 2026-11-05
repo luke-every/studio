@@ -1,8 +1,9 @@
 import "server-only";
 
 import { isStoreConfigured, readRegistryDocument, type RegistryDocument } from "./store";
-import { contentRepoUrl } from "./github";
+import { contentRepoUrl, isContentRepoConfigured } from "./github";
 import { versionSegment } from "./version";
+import { WORKING_VERSION, workingCopies } from "./local-prototypes";
 import { aliased } from "./people";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
 import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
@@ -71,6 +72,8 @@ export async function loadRegistry(): Promise<RegistryDocument> {
     versions: raw.versions.map((version) => versionSchema.parse(version)),
   };
 
+  await addWorkingCopies(document);
+
   const problems = checkRelationships(document);
   if (problems.length > 0) {
     throw new Error(
@@ -79,6 +82,54 @@ export async function loadRegistry(): Promise<RegistryDocument> {
   }
 
   return document;
+}
+
+/** On this machine, the built folders in ~/Claude/prototypes, as prototypes of their own (see `local-prototypes.ts`). A prototype the registry already has gets the working copy as one more version, `v0.0`, which opens by default while its dev server is running. */
+async function addWorkingCopies(document: RegistryDocument) {
+  const team = document.teams.find((item) => !item.archived);
+  if (!team) return;
+  for (const { slug, builtAt, live, port } of await workingCopies()) {
+    // With the content repository connected, what isn't running is read from there: the latest push, not a stale build.
+    if (!live && isContentRepoConfigured()) continue;
+    const id = `${slug}-${WORKING_VERSION}`;
+    const at = builtAt.toISOString();
+    const known = document.prototypes.some((item) => item.slug === slug);
+    if (known && document.versions.some((item) => item.id === id || (item.prototypeSlug === slug && item.version === WORKING_VERSION))) continue;
+    if (!known) document.prototypes.push(
+      prototypeSchema.parse({
+        slug,
+        teamSlug: team.slug,
+        name: slug.replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase()),
+        description: live
+          ? `Running from ~/Claude/prototypes/${slug}, so a change shows as soon as you save it.`
+          : `Served from ~/Claude/prototypes/${slug}/out, so a rebuild is all it takes to see a change.`,
+        owner: team.lead,
+        preview: { tint: ["#e8e6e1", "#8b8880"], caption: slug },
+        currentVersion: id,
+        created: { by: team.lead, at: at.slice(0, 10) },
+        updatedAt: at,
+      }),
+    );
+    document.versions.push(
+      versionSchema.parse({
+        id,
+        prototypeSlug: slug,
+        version: WORKING_VERSION,
+        title: live ? "Live" : "Working copy",
+        changes: live ? "The dev server running in the folder, as it is now." : "What is in the folder's last build.",
+        author: team.lead,
+        createdAt: at,
+        url: `/p/${slug}/v0-0`,
+        live: live || undefined,
+        liveUrl: live && port ? `http://localhost:${port}` : undefined,
+      }),
+    );
+    // A dev server that is running is what is being worked on, so it is what opens.
+    if (live) {
+      const prototype = document.prototypes.find((item) => item.slug === slug);
+      if (prototype) prototype.currentVersion = id;
+    }
+  }
 }
 
 /** Relationships the schemas cannot express. */
@@ -163,6 +214,8 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
         url: version.url ? servedPath(record.slug, version.version) : undefined,
         fileUrl: version.url,
         source: version.source,
+        live: version.live,
+        liveUrl: version.liveUrl,
       }));
 
     const current = versions.find((version) => version.id === record.currentVersion) ?? versions[0];

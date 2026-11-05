@@ -795,9 +795,13 @@ function watchPlace(win: Window, told: (search: string) => void) {
   };
   win.addEventListener("popstate", check);
   return () => {
-    history.pushState = pushState;
-    history.replaceState = replaceState;
-    win.removeEventListener("popstate", check);
+    try {
+      history.pushState = pushState;
+      history.replaceState = replaceState;
+      win.removeEventListener("popstate", check);
+    } catch {
+      // The frame has since gone to another origin (Safari, a dev server); there is nothing left to undo.
+    }
   };
 }
 
@@ -865,7 +869,12 @@ function FrameBody({
   });
   useEffect(() => {
     const win = frame.current?.contentWindow;
-    return win ? watchPlace(win, (search) => placed.current?.(search)) : undefined;
+    try {
+      return win ? watchPlace(win, (search) => placed.current?.(search)) : undefined;
+    } catch {
+      // A prototype on another address (a dev server) can't be watched from here.
+      return undefined;
+    }
   }, [documents]);
   // And what the person taps that the address doesn't remember, for a comment left on a sheet or a menu it opened.
   useEffect(() => {

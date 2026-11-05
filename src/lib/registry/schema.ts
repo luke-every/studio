@@ -112,6 +112,10 @@ export const versionSchema = z.object({
   url: location.optional(),
   /** The app's source is saved beside the built site, in `_source/`, for engineers. */
   source: z.boolean().optional(),
+  /** A running dev server on this machine, shown as it is (see `local-prototypes.ts`). Never stored. */
+  live: z.boolean().optional(),
+  /** Its address on this machine, to copy. */
+  liveUrl: z.string().optional(),
 });
 
 export const prototypeSchema = z.object({

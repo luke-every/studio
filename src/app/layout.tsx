@@ -10,7 +10,14 @@ export const metadata: Metadata = {
 };
 
 /** Tells the browser both schemes exist, so the blank page before the stylesheet arrives is dark for someone on dark, not white. */
-export const viewport: Viewport = { colorScheme: "light dark" };
+// Pinned so Safari doesn't tint its toolbar from whatever colour a prototype puts at the top of the page.
+export const viewport: Viewport = {
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#121211" },
+  ],
+};
 
 /**
  * The document, and nothing else.

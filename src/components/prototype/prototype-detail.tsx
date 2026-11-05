@@ -201,6 +201,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
   const versionMenu = (
     <VersionMenu
+      slug={prototype.slug}
       versions={prototype.versions}
       selectedId={selected.id}
       onSelect={choose}
@@ -264,7 +265,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               <h1 className="min-w-0 flex-1 text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">{prototype.name}</h1>
               <PrototypeMenu
                 prototype={prototype}
-                version={selected.version}
+                version={selected.live ? "Live" : selected.version}
                 githubUrl={githubUrl}
                 onEdit={selected.url && !showingFlow ? () => (setListing(false), setMode("edit")) : undefined}
               />
@@ -314,8 +315,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               ? `${selected.url}/studio-preview.jpg`
               : undefined
           }
-          edit={{ slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
-          comments={{ slug: prototype.slug, version: selected.key, versions: prototype.versions.map(({ key, version }) => ({ key, version })), onVersion: (key) => { const next = prototype.versions.find((item) => item.key === key); if (next) choose(next); }, variant: address?.split("?")[1] || undefined, onSetup: showSetup, canShow, setupLabel }}
+          edit={selected.live ? undefined : { slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
+          comments={selected.live ? undefined : { slug: prototype.slug, version: selected.key, versions: prototype.versions.map(({ key, version }) => ({ key, version })), onVersion: (key) => { const next = prototype.versions.find((item) => item.key === key); if (next) choose(next); }, variant: address?.split("?")[1] || undefined, onSetup: showSetup, canShow, setupLabel }}
           onPlace={followPlace}
           flow={flow}
           variants={variantsCanvas}

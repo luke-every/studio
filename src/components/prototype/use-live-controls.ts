@@ -43,7 +43,7 @@ export function useLiveControls(address: string | undefined, docKey: string, par
       // Only the frame on screen counts, not a canvas screen or a tile.
       const frame = [...document.querySelectorAll("iframe")].find((item) => item.contentWindow === source);
       if (!frame || frame.getAttribute("src") !== src) return;
-      setLive({ docKey, src, window: source, origin: new URL(src, window.location.href).origin });
+      setLive({ docKey, src, window: source, origin: event.origin });
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

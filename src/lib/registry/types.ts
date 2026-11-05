@@ -35,6 +35,10 @@ export type PrototypeVersion = {
   fileUrl?: string;
   /** The app's source is saved in `_source/` beside the built site. */
   source?: boolean;
+  /** The dev server running on this machine, in a frame of its own: no comments or editing, which need the page's own document. */
+  live?: boolean;
+  /** The dev server's address on this machine, to copy. */
+  liveUrl?: string;
 };
 
 export type Prototype = {
