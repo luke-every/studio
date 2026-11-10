@@ -679,7 +679,15 @@ export function PrototypeFrame({
 
 
       {corner && mode === "view" && !showingFlow && !bare ? (
-        <div className="absolute bottom-10 right-10 z-[var(--z-raised)] hidden sm:block">{corner}</div>
+        // Only for a phone: it slides slightly right and fades as the frame becomes a tablet or desktop, and back again, as part of the same change.
+        <div
+          inert={device.kind !== "phone"}
+          className={`absolute bottom-10 right-10 z-[var(--z-raised)] hidden transition-[translate,opacity] duration-[var(--dur-standard)] ease-[var(--curve-spatial)] sm:block ${
+            device.kind === "phone" ? "" : "translate-x-3 opacity-0"
+          }`}
+        >
+          {corner}
+        </div>
       ) : null}
 
       {/* On a phone, how it is looked at and the comments sit under the prototype, centred. */}
