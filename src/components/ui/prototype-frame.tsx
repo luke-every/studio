@@ -416,6 +416,8 @@ export function PrototypeFrame({
 
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
+  // The stage with its padding: the window's size for a desktop in full screen, which doesn't change when the padding does.
+  const [whole, setWhole] = useState<{ width: number; height: number } | null>(null);
   // On a phone it is a preview, not a place to work: always scaled to fit the
   // screen, with no picking a size. It is sized once, when it loads, and left:
   // Safari resizes the window as the address bar slides away while scrolling,
@@ -438,13 +440,21 @@ export function PrototypeFrame({
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       setSpace((now) => (narrow && now ? now : { width, height }));
+      const box = entry.borderBoxSize?.[0];
+      setWhole({ width: box?.inlineSize ?? element.offsetWidth, height: box?.blockSize ?? element.offsetHeight });
     });
     observer.observe(element);
 
     return () => observer.disconnect();
   }, [narrow]);
   // Measured on the client only, so no frame is drawn on the server.
-  const scale = space
+  // A desktop, or a window made narrow, in full screen is the whole window: the page laid out at the window's own size,
+  // filling the stage, which is already animating to fill the screen. A phone or tablet frame keeps its shape.
+  const fill = bare && (device.kind === "desktop" || narrow) && !showingFlow && !!whole;
+  const shown = fill ? { ...device, width: whole.width, height: whole.height } : device;
+  const scale = fill
+    ? 1
+    : space
     ? fit || narrow
       ? Math.min(space.width / device.width, space.height / device.height)
       : zoom
@@ -508,11 +518,11 @@ export function PrototypeFrame({
 
   // A set height, the window's on a wide screen: a bigger phone scrolls inside the tile instead of stretching the page.
   return (
-    <div className="flex h-[var(--frame-height)] w-full gap-4 lg:h-full">
+    <div className={`flex w-full gap-4 lg:h-full ${bare ? "h-dvh" : "h-[var(--frame-height)]"}`}>
     <div
       // Clicking the tile around the phone lets go of what was picked, unless it was a button that was pressed. A click inside the prototype never reaches here.
       onClick={(event) => dev && !(event.target as Element).closest("button, a") && deselect()}
-      className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none max-sm:px-6 max-sm:pb-14 max-sm:pt-8 ${fullscreen ? "lg:rounded-none" : ""}`}
+      className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${bare ? "" : "max-sm:px-6 max-sm:pb-14 max-sm:pt-8"} ${fullscreen ? "lg:rounded-none" : ""}`}
     >
       <div key={dev || commenting ? "mode" : "view"} style={bare ? { display: "none" } : undefined} className="bar-in relative z-[var(--z-raised)] grid min-h-16 items-center gap-3 max-sm:mb-2 max-sm:grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] sm:px-8 sm:py-8">
         {dev || commenting ? (
@@ -632,10 +642,10 @@ export function PrototypeFrame({
 
       <div
         ref={stage}
-        className={`flex min-h-0 flex-1 overflow-auto px-0 [scrollbar-width:thin] sm:px-4 sm:pb-10 ${bare ? "pt-10" : ""} pb-0 ${showingFlow ? "invisible" : ""}`}>
+        className={`flex min-h-0 flex-1 overflow-auto px-0 [scrollbar-width:thin] sm:px-8 sm:pb-10 ${fill ? "!p-0" : bare ? "pt-10" : ""} pb-0 ${showingFlow ? "invisible" : ""}`}>
         {/* Clipped, not hidden: below 100% the frame's full-size layout box sticks out of this one, and a hidden box can still be scrolled by the prototype (a modal taking focus), which slid the whole phone sideways in Safari. A clipped box can't be scrolled at all. */}
         <div
-          style={scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
+          style={fill ? { width: "100%", height: "100%" } : scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
           className={`relative m-auto shrink-0 ${scale ? "" : "h-full"} ${sizing ? SIZING : ""}`}
         >
         {onDevice && !narrow && !showingFlow && !bare ? (
@@ -646,7 +656,7 @@ export function PrototypeFrame({
         ) : null}
         <div
           className={`relative isolate size-full overflow-clip bg-surface [transform:translateZ(0)] ${
-            device.kind === "phone" ? "rounded-[var(--r-device)]" : "rounded-[var(--r-lg)]"
+            device.kind === "phone" ? "rounded-[var(--r-device)]" : fill ? "" : "rounded-[var(--r-lg)]"
           }`}
         >
           {url ? (
@@ -657,7 +667,7 @@ export function PrototypeFrame({
               title={title}
               poster={screen ? undefined : poster}
               scale={scale}
-              device={device}
+              device={shown}
               sizing={sizing}
               wireframe={wireframe}
               inspect={dev ? { ...inspect, picking: !interacting } : null}
@@ -691,7 +701,7 @@ export function PrototypeFrame({
       ) : null}
 
       {/* On a phone, how it is looked at and the comments sit under the prototype, centred. */}
-      {mode === "view" && url && !showingFlow ? (
+      {mode === "view" && url && !showingFlow && !bare ? (
         <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2 sm:hidden">
           {lookControl}
           {pinButtons}

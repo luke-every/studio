@@ -33,7 +33,7 @@ export function TopNav({ feed, onSwitchUser }: { feed: ActivityFeed; onSwitchUse
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-[var(--z-sticky)] bg-background lg:transition-[translate,margin] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] lg:in-data-fullscreen:-mt-[var(--nav-height)] lg:in-data-fullscreen:-translate-y-full">
+    <header className="sticky top-0 z-[var(--z-sticky)] bg-background max-lg:in-data-fullscreen:hidden lg:transition-[translate,margin] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] lg:in-data-fullscreen:-mt-[var(--nav-height)] lg:in-data-fullscreen:-translate-y-full">
       <div className="flex h-[var(--nav-height)] items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-4 justify-self-start">
           <Link href="/" className="shrink-0 text-md font-medium tracking-[var(--tracking-tight)] text-foreground">

@@ -45,6 +45,8 @@ const ICONS: [RegExp, typeof CheckIcon][] = [
 
 function toastIcon(message: string, error: boolean) {
   if (error) return <AlertIcon />;
+  // A hint, not a confirmation: nothing was saved.
+  if (/^press/i.test(message)) return null;
   const Match = ICONS.find(([pattern]) => pattern.test(message))?.[1] ?? CheckIcon;
   return <Match />;
 }

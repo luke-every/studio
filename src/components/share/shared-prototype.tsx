@@ -7,7 +7,8 @@ import { ColumnHandle, RevealTab } from "@/components/prototype/column-handle";
 import { ViewMenu } from "@/components/prototype/view-menu";
 import { NewUserModal } from "@/components/shell/profile-modal";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
-import { StudioProvider } from "@/lib/data/studio-store";
+import { StudioProvider, useStudio } from "@/lib/data/studio-store";
+import { hintFullscreen } from "@/lib/fullscreen-hint";
 import { useAboutCorner, useDevice, useFit, useZoom } from "@/lib/use-device";
 import { Toggle } from "@/components/ui/toggle";
 import { useUser } from "@/lib/use-user";
@@ -120,9 +121,8 @@ function Shared({
   const [hidden, setHidden] = useState(false);
   const [drag, setDrag] = useState(0);
   const [full, setFull] = useState(false);
-  // In full screen the column comes back over the prototype while the pointer is at the left edge, as it does on the prototype's own page.
-  const [peek, setPeek] = useState(false);
-  const away = full && !peek;
+  // Full screen is the prototype alone: nothing of the studio comes back over it.
+  const { notify } = useStudio();
   const columnOpen = !((hidden || full) && wide);
   // Somebody has to say who they are before commenting, once, on this browser.
   const changeMode = (next: "view" | "dev" | "edit" | "comment") => {
@@ -204,17 +204,13 @@ function Shared({
   }
 
   return (
-    <div className={`flex w-full flex-col gap-6 overflow-x-clip py-4 sm:px-8 lg:h-dvh lg:flex-row lg:gap-4 lg:transition-[padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${full ? "lg:p-0" : "lg:p-4"}`}>
-      {full ? (
-        <div aria-hidden onPointerEnter={() => setPeek(true)} className="fixed inset-y-0 left-0 z-[var(--z-focus-mode)] w-3 max-lg:hidden" />
-      ) : null}
+    <div className={`flex w-full flex-col gap-6 overflow-x-clip py-4 sm:px-8 ${full ? "max-lg:!p-0" : ""} lg:h-dvh lg:flex-row lg:gap-4 lg:transition-[padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${full ? "lg:p-0" : "lg:p-4"}`}>
       {columnOpen && !full ? <ColumnHandle offset={drag} onDrag={setDrag} onHide={() => setHidden(true)} edge="1rem" vertical="inset-y-4" /> : null}
       {hidden && !full && wide ? <RevealTab onShow={() => setHidden(false)} /> : null}
       <aside
-        inert={full ? away : !columnOpen}
+        inert={!columnOpen}
         style={drag ? { width: `max(0px, calc(var(--detail-side-width) + ${drag}px))`, transition: "none" } : undefined}
-        onPointerLeave={() => setPeek(false)}
-        className={`stagger-in min-w-0 px-5 sm:px-0 lg:flex lg:shrink-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+        className={`stagger-in ${full ? "max-lg:hidden" : ""} min-w-0 px-5 sm:px-0 lg:flex lg:shrink-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
           columnOpen
             ? "lg:w-[var(--detail-side-width)] lg:overflow-hidden"
             : full
@@ -226,7 +222,7 @@ function Shared({
         {/* It travels left and fades as the column closes, at the same pace as the room opens for the prototype. */}
         <div
           style={drag ? { translate: `${drag}px 0`, transition: "none" } : undefined}
-          className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:overflow-y-auto lg:rounded-[var(--r-tile)] lg:bg-tile lg:p-8 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${(full ? !away : columnOpen) ? "" : "lg:-translate-x-full lg:opacity-0"}`}
+          className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:overflow-y-auto lg:rounded-[var(--r-tile)] lg:bg-tile lg:p-8 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${columnOpen ? "" : "lg:-translate-x-full lg:opacity-0"}`}
         >
           {info}
         </div>
@@ -254,10 +250,11 @@ function Shared({
           listing={listing}
           onListing={setListing}
           fullscreen={full}
+          bare={full}
           onFullscreen={(next) => {
             setFull(next);
-            setPeek(false);
-            // Full screen keeps only the view controls and the way out: no commenting, so nothing half-open is left behind.
+            if (next) hintFullscreen(notify);
+            // Nothing is half-open when the studio's controls go.
             if (next) {
               setMode("view");
               setListing(false);

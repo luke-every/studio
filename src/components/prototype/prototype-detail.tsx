@@ -10,6 +10,7 @@ import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
 import { ColumnHandle, RevealTab } from "@/components/prototype/column-handle";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
+import { hintFullscreen } from "@/lib/fullscreen-hint";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
 import { applyControls, controlParams, defaultValues, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
@@ -37,7 +38,7 @@ import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
  * else can open.
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
-  const { markOpened, repoUrl } = useStudio();
+  const { markOpened, repoUrl, notify } = useStudio();
   const people = collaborators(prototype);
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
@@ -189,6 +190,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // Command-period, as in Figma: everything but the prototype goes, and comes back the same way.
   const [bare, setBare] = useState(false);
   const focus = focusChoice || showingFlow || bare;
+  // Full screen is the prototype alone: no bar, no column, no pins. Command-period is the same without leaving the window.
+  const hideAll = bare || focusChoice;
   const [peek, setPeek] = useState(false);
   const away = focus && !peek;
   // The nav is the shell's, so it is told through the document: it slides up out of the way while the page below grows into its place.
@@ -228,11 +231,11 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // Two columns that always fit the window; whatever is bigger scrolls inside its own column.
   return (
     <div
-      className={`flex w-full flex-col gap-6 pb-6 pt-2 sm:px-8 lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:flex-row lg:items-stretch ${
+      className={`flex w-full flex-col gap-6 pb-6 pt-2 sm:px-8 ${hideAll ? "max-lg:!p-0" : ""} lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:flex-row lg:items-stretch ${
         focus ? "lg:h-dvh lg:p-0" : "lg:h-[calc(100dvh-var(--nav-height))]"
       }`}
     >
-      {focus && !bare ? (
+      {focus && !hideAll ? (
         <div aria-hidden onPointerEnter={() => setPeek(true)} className="fixed inset-y-0 left-0 z-[var(--z-focus-mode)] w-3 max-lg:hidden" />
       ) : null}
       {side && !focus && !hidden ? <ColumnHandle offset={drag} onDrag={setDrag} onHide={() => setHidden(true)} /> : null}
@@ -243,7 +246,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
         // While the column is being pulled, the room it leaves goes to the prototype as it goes.
         style={drag ? { width: `max(0px, calc(var(--detail-side-width) + ${drag}px))`, transition: "none" } : undefined}
         onPointerLeave={() => setPeek(false)}
-        className={`stagger-in [--i:0] sm:[--i:1] lg:[--i:0] order-1 min-w-0 px-5 sm:order-2 sm:px-0 lg:relative lg:order-1 lg:flex lg:shrink-0 lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+        className={`stagger-in [--i:0] sm:[--i:1] lg:[--i:0] ${hideAll ? "max-lg:hidden" : ""} order-1 min-w-0 px-5 sm:order-2 sm:px-0 lg:relative lg:order-1 lg:flex lg:shrink-0 lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
           columnOpen && !focus
             ? "lg:w-[var(--detail-side-width)] lg:overflow-hidden"
             : focus
@@ -327,9 +330,13 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           listing={listing}
           onListing={setListing}
           fullscreen={focus}
-          bare={bare}
+          bare={hideAll}
           onBare={(next) => {
             setBare(next);
+            // Leaving the bare view (Escape, command-period) leaves full screen too, which hides the same things.
+            if (!next) {
+              setFocus(false);
+            }
             setPeek(false);
           }}
           onFullscreen={(next) => {
@@ -337,6 +344,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
             if (showingFlow) return;
             setFocus(next);
             setPeek(false);
+            if (next) hintFullscreen(notify);
           }}
           title={`${prototype.name} ${selected.version}`}
           leading={versionMenu}
