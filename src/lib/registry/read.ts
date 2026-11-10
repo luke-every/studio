@@ -93,7 +93,10 @@ async function addWorkingCopies(document: RegistryDocument) {
     if (!live && isContentRepoConfigured()) continue;
     const id = `${slug}-${WORKING_VERSION}`;
     const at = builtAt.toISOString();
-    const known = document.prototypes.some((item) => item.slug === slug);
+    const existing = document.prototypes.find((item) => item.slug === slug);
+    const known = !!existing;
+    // The working copy is the prototype's own owner's, not the team lead's: otherwise one person shows up twice, under two logins.
+    const author = existing?.owner ?? team.lead;
     if (known && document.versions.some((item) => item.id === id || (item.prototypeSlug === slug && item.version === WORKING_VERSION))) continue;
     if (!known) document.prototypes.push(
       prototypeSchema.parse({
@@ -117,7 +120,7 @@ async function addWorkingCopies(document: RegistryDocument) {
         version: WORKING_VERSION,
         title: live ? "Live" : "Working copy",
         changes: live ? "The dev server running in the folder, as it is now." : "What is in the folder's last build.",
-        author: team.lead,
+        author,
         createdAt: at,
         url: `/p/${slug}/v0-0`,
         live: live || undefined,
