@@ -906,6 +906,18 @@ function FrameBody({
     doc.addEventListener("keydown", forward);
     return () => doc.removeEventListener("keydown", forward);
   }, [inspecting, documents]);
+  // The same, from a page the studio can't read (a dev server on its own address): it passes its keys up as messages.
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (data?.type !== "studio:key" || typeof data.key !== "string" || event.source !== frame.current?.contentWindow) return;
+      // A page the studio can read already has its keys listened to directly: taking them twice would undo each press.
+      if (frame.current?.contentDocument) return;
+      keys.current(new KeyboardEvent("keydown", { key: data.key, metaKey: !!data.metaKey, ctrlKey: !!data.ctrlKey, altKey: !!data.altKey, shiftKey: !!data.shiftKey }));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
   const picking = inspect?.picking ?? false;
   useEffect(() => {
     const doc = frame.current?.contentDocument;
