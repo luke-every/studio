@@ -67,3 +67,13 @@ export function useZoom() {
   const zoom = Number(stored);
   return [Number.isFinite(zoom) && zoom > 0 ? zoom : DEFAULT_ZOOM, (next: number) => set(String(next))] as const;
 }
+
+/** Which corner of a shared prototype, opened on a phone, the About button sits in: the prototype's own menu can be under it. */
+export type Corner = { edge: "top" | "bottom"; side: "left" | "right" };
+
+export function useAboutCorner() {
+  const [stored, set] = useStored("proto.about-corner");
+  const [edge, side] = (stored ?? "").split("-");
+  const corner: Corner = { edge: edge === "bottom" ? "bottom" : "top", side: side === "left" ? "left" : "right" };
+  return [corner, (next: Corner) => set(`${next.edge}-${next.side}`)] as const;
+}

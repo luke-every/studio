@@ -39,6 +39,9 @@
   /* hover-lift: tune its timing here, once, for every place it is used. */
   --lift-duration: var(--dur-standard);
   --lift-curve: var(--curve-standard);
+  /* tab-slide: the pill under the current tab moving to the next. */
+  --tab-slide-duration: var(--dur-standard);
+  --tab-slide-curve: var(--curve-spatial);
   /* A layer (a modal) arriving, and leaving: it leaves in half the time it took to
    * arrive, so when one closes as another opens both are seen moving.
    * Mirrored for JS as `layerEnter` / `layerExit` in tokens.ts. */
@@ -107,9 +110,25 @@
   transition:
     background-color var(--lift-duration) var(--lift-curve);
 
-  &:hover {
-    background-color: var(--tile-hover);
+  /* Only where there is a real pointer: on a touch screen iOS treats a tap on something that changes on :hover as the hover, and opens it on the second. */
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--tile-hover);
+    }
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * tab-slide — the pill behind the current tab travelling to the one tapped: one
+ * object moving between places, the `spatial` register's meaning, as plain CSS.
+ * Set `--tabs` (how many) and `--tab-index` (which is current) on the bar.
+ * Animated while MOTION_ENABLED is off, like hover-lift; reduced motion zeroes
+ * the duration, so the pill jumps.
+ * ------------------------------------------------------------------------- */
+@utility tab-slide {
+  width: calc(100% / var(--tabs));
+  transform: translateX(calc(var(--tab-index) * 100%));
+  transition: transform var(--tab-slide-duration) var(--tab-slide-curve);
 }
 
 /* ---------------------------------------------------------------------------

@@ -117,6 +117,15 @@
 
   /* --- Layout ------------------------------------------------------------- */
   --nav-height: 4rem;
+  /* The tab bar floating at the bottom of a phone: its height, and how far it sits in from the edges. */
+  --tab-height: 3.75rem;
+  --tab-inset: 0.75rem;
+  /* How far it sits in from the left and right edges. */
+  --tab-side: 1.5rem;
+  /* How far the bar floats above the bottom edge: just the inset in a browser; in a home-screen app, low enough to sit beside the home indicator rather than a whole safe area above it. */
+  --tab-bottom: max(var(--tab-inset), calc(env(safe-area-inset-bottom) - var(--tab-inset)));
+  /* The bar's padding around its tabs. */
+  --tab-pad: 0.25rem;
   --tile-height: 37.5rem;
   /* The phone in a feed tile: 85% of the tile's height, at phone proportions. */
   --tile-device-width: calc(var(--tile-height) * 0.85 * 9 / 19.5);

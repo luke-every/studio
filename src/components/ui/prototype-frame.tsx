@@ -651,7 +651,8 @@ export function PrototypeFrame({
         >
           {url ? (
             <FrameBody
-              key={`${url}#${restarts}`}
+              // Keyed by path, not query: a changed setup reloads the frame in place under the picture already there, rather than starting over at the skeleton.
+              key={`${url.split("?")[0]}#${restarts}`}
               url={url}
               title={title}
               poster={screen ? undefined : poster}

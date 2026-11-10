@@ -8,7 +8,8 @@ import { ViewMenu } from "@/components/prototype/view-menu";
 import { NewUserModal } from "@/components/shell/profile-modal";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { StudioProvider } from "@/lib/data/studio-store";
-import { useDevice, useFit, useZoom } from "@/lib/use-device";
+import { useAboutCorner, useDevice, useFit, useZoom } from "@/lib/use-device";
+import { Toggle } from "@/components/ui/toggle";
 import { useUser } from "@/lib/use-user";
 
 import { ShareQr } from "./share-qr";
@@ -104,6 +105,7 @@ function Shared({
   };
   const wide = useMediaQuery("(min-width: 64rem)");
   const [about, setAbout] = useState(false);
+  const [corner, chooseCorner] = useAboutCorner();
 
   // Comments are the studio's own; nothing else of its toolbar comes with them.
   const user = useUser();
@@ -165,13 +167,36 @@ function Shared({
     return (
       <>
         <GrowingFrame src={frameUrl ?? address} title={`${name} ${version.label}`} />
-        <IconButton onClick={() => setAbout(true)} className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[var(--z-raised)] shadow-floating">
+        <IconButton onClick={() => setAbout(true)} className={`fixed z-[var(--z-raised)] shadow-floating ${corner.side === "left" ? "left-3" : "right-3"} ${corner.edge === "bottom" ? "bottom-[max(0.75rem,env(safe-area-inset-bottom))]" : "top-[max(0.75rem,env(safe-area-inset-top))]"}`}>
           About
         </IconButton>
         <AboutSheet open={about} onClose={() => setAbout(false)} label={`About ${name}`}>
           <div className="flex flex-col gap-6">
             {info}
             <p className="text-ui text-foreground-subtle">Press and hold anywhere on the prototype to leave a comment.</p>
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-foreground-muted">Where this button sits, if it covers the prototype&rsquo;s own menu</p>
+              <div className="flex gap-2">
+                <Toggle
+                  label="Top or bottom"
+                  value={corner.edge}
+                  onChange={(edge) => chooseCorner({ ...corner, edge })}
+                  options={[
+                    { id: "top", label: "Top", showLabel: true },
+                    { id: "bottom", label: "Bottom", showLabel: true },
+                  ]}
+                />
+                <Toggle
+                  label="Left or right"
+                  value={corner.side}
+                  onChange={(side) => chooseCorner({ ...corner, side })}
+                  options={[
+                    { id: "left", label: "Left", showLabel: true },
+                    { id: "right", label: "Right", showLabel: true },
+                  ]}
+                />
+              </div>
+            </div>
           </div>
         </AboutSheet>
       </>

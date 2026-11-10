@@ -7,6 +7,11 @@ import type { NextConfig } from "next";
 const repo = process.env.VERCEL_GIT_REPO_OWNER && process.env.VERCEL_GIT_REPO_SLUG ? `${process.env.VERCEL_GIT_REPO_OWNER}/${process.env.VERCEL_GIT_REPO_SLUG}` : "";
 
 const nextConfig: NextConfig = {
+  // Dev only: lets a phone on the same wifi use the local studio at <this-mac>.local. Without it Next blocks the
+  // dev resources (hot reload and the rest) for any host but localhost.
+  allowedDevOrigins: ["*.local"],
+  // The Next.js dev tools badge, hidden everywhere in the local studio.
+  devIndicators: false,
   env: {
     NEXT_PUBLIC_STUDIO_COMMIT: process.env.VERCEL_GIT_COMMIT_SHA ?? "",
     NEXT_PUBLIC_STUDIO_CHANGE: (process.env.VERCEL_GIT_COMMIT_MESSAGE ?? "").split("\n")[0],

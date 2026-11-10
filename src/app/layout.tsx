@@ -13,6 +13,8 @@ export const metadata: Metadata = {
 // Pinned so Safari doesn't tint its toolbar from whatever colour a prototype puts at the top of the page.
 export const viewport: Viewport = {
   colorScheme: "light dark",
+  // So the tab bar can sit above the home indicator.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#121211" },

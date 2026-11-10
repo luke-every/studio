@@ -330,6 +330,15 @@ export function SearchIcon(props: IconProps) {
   );
 }
 
+export function LiveIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <circle cx="8" cy="8" r="1.75" />
+      <path d="M4.6 4.6a4.8 4.8 0 0 0 0 6.8M11.4 4.6a4.8 4.8 0 0 1 0 6.8" />
+    </Frame>
+  );
+}
+
 export function UserIcon(props: IconProps) {
   return (
     <Frame {...props}>

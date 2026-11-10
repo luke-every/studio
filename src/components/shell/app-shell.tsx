@@ -4,8 +4,10 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { RouteTransition } from "@/components/motion";
 import { useStudio } from "@/lib/data/studio-store";
+import { useActivity } from "@/lib/use-activity";
 import { useUser } from "@/lib/use-user";
 
+import { TabBar } from "./tab-bar";
 import { TopNav } from "./top-nav";
 import { UserPicker } from "./user-picker";
 
@@ -19,6 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { error, dismissError } = useStudio();
   const { ready, current } = useUser();
   const [switching, setSwitching] = useState(false);
+  const feed = useActivity();
 
   // A tapped notification can ask this page to go to a comment (see public/sw.js).
   useEffect(() => {
@@ -33,7 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <TopNav onSwitchUser={() => setSwitching(true)} />
+      <TopNav feed={feed} onSwitchUser={() => setSwitching(true)} />
 
       {error ? (
         <button
@@ -48,6 +51,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="min-w-0 flex-1">
         <RouteTransition>{children}</RouteTransition>
       </main>
+
+      <TabBar unread={feed.unread} />
 
       <UserPicker open={ready && (current === null || switching)} onClose={() => setSwitching(false)} />
     </div>

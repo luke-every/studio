@@ -44,7 +44,9 @@ export async function GET(
   const live = version === WORKING_SEGMENT ? await liveOrigin(slug) : null;
   if (live) {
     const { search } = new URL(request.url);
-    if (!path.length) return NextResponse.redirect(`${live}/${search}`);
+    // Opened from a phone, "localhost" is the phone: send it to the host it used to reach the studio. That is the Host header: Next reports request.url as localhost.
+    const host = request.headers.get("host")?.replace(/:\d+$/, "") || "localhost";
+    if (!path.length) return NextResponse.redirect(`${live.replace("localhost", host)}/${search}`);
     const response = await fetch(`${live}/${path.map(encodeURIComponent).join("/")}`, { headers: range ? { range } : {}, cache: "no-store" }).catch(() => null);
     if (!response?.ok) return new NextResponse("Not found.", { status: 404 });
     return new NextResponse(response.body, { status: response.status, headers: { "content-type": response.headers.get("content-type") ?? guessContentType(path.join("/")), "cache-control": "no-store" } });
