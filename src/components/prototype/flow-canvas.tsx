@@ -19,7 +19,7 @@ const SCREEN_SCALE = 0.5;
 const GAP = { x: 140, y: 90 };
 const LABEL_HEIGHT = 26;
 const MIN_ZOOM = 0.08;
-const MAX_ZOOM = 2;
+const MAX_ZOOM = 4;
 /** Room kept clear around what is fitted: the top is where the toolbar sits over the canvas. */
 const INSET = { top: 104, side: 56 };
 /** How much a double-click zooms in. */
@@ -757,12 +757,17 @@ export function FlowCanvas({
                 onDoubleClick={(event) => event.stopPropagation()}
                 className={`absolute inset-0 z-[var(--z-raised)] ${interact ? "" : "pointer-events-none invisible"}`}
               >
-                <div onClick={closeInteract} style={fade} className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-sm" />
-                <div style={{ height: INTERACT.top, ...fade }} className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-end px-4">
-                  <IconButton className="pointer-events-auto" onClick={closeInteract}>
-                    Done
-                  </IconButton>
-                </div>
+                {/* Only while it is open: a blurred layer left over the canvas is one more layer for the browser to composite, which is what makes scaled pages soft in Safari. */}
+                {interact ? (
+                  <>
+                    <div onClick={closeInteract} style={fade} className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-sm" />
+                    <div style={{ height: INTERACT.top, ...fade }} className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-end px-4">
+                      <IconButton className="pointer-events-auto" onClick={closeInteract}>
+                        Done
+                      </IconButton>
+                    </div>
+                  </>
+                ) : null}
                 <div
                   style={{ ...shell, ...(interact ? { transitionProperty: "left, top, width, height" } : {}), ...motion }}
                   className={`absolute overflow-hidden rounded-[var(--r-device)] ${ready ? "bg-surface shadow-[var(--elev-overlay)]" : ""}`}
