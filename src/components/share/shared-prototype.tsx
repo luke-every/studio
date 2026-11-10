@@ -19,14 +19,15 @@ import { MotionProvider, useOverlayBehaviour } from "@/lib/motion";
 import { MotionScrim } from "@/components/motion";
 import { ControlsPanel, VariantPicker } from "@/components/prototype/controls-panel";
 import { useVersionVariants } from "@/components/prototype/use-version-variants";
+import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { AvatarStack } from "@/components/shell/user-avatar";
 import { IconButton } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
-import { applyControls, controlParams, defaultValues, splitQuery, type ControlValues } from "@/lib/controls";
+import { applyControls, controlParams, defaultValues, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
 import { VARIANT_PARAM } from "@/lib/edits";
-import { withParams } from "@/lib/flow";
+import { withParams, type Flow } from "@/lib/flow";
 import type { Person } from "@/lib/registry/types";
 import { useMediaQuery } from "@/lib/use-media-query";
 
@@ -93,7 +94,8 @@ function Shared({
 
   const phone = useMediaQuery("(max-width: 639px)");
   // What the iframe is given: `studio=1` added, held still once the prototype can take control changes as messages.
-  const live = useLiveControls(phone ? address : chosenAddress, `${version.url}|${variant ?? ""}|${phone}`, { ...controlParams(offered, values), ...extra }, false);
+  const [flowOpen, setFlowOpen] = useState(false);
+  const live = useLiveControls(phone ? address : chosenAddress, `${version.url}|${variant ?? ""}|${phone}`, { ...controlParams(offered, values), ...extra }, flowOpen);
   const frameUrl = live.src;
   // The prototype moved itself: the controls and the setup comments are left on follow it.
   const followPlace = (search: string) => {
@@ -104,6 +106,18 @@ function Shared({
     setPicked(next);
     setExtra(rest);
   };
+  // The canvas, as on the prototype's own page: the flow if it has one, the variants if it has some. Opening it takes the column's room.
+  const flow = usePrototypeFlow(version.url);
+  const variantsCanvas = (() => {
+    const control = variantControl(offered);
+    if (!control) return null;
+    const setups: Record<string, string> = {};
+    const screens = control.options.map((option) => {
+      setups[option.value] = applyControls(version.url, offered, { ...defaultValues(offered), ...picked, [control.id]: option.value }).split("?")[1] ?? "";
+      return { id: option.value, name: option.label, params: option.value === control.default ? {} : { [control.param ?? control.id]: option.value } };
+    });
+    return { flow: { screens, edges: [] } satisfies Flow, setups };
+  })();
   const wide = useMediaQuery("(min-width: 64rem)");
   const [about, setAbout] = useState(false);
   const [corner, chooseCorner] = useAboutCorner();
@@ -123,7 +137,7 @@ function Shared({
   const [full, setFull] = useState(false);
   // Full screen is the prototype alone: nothing of the studio comes back over it.
   const { notify } = useStudio();
-  const columnOpen = !((hidden || full) && wide);
+  const columnOpen = !((hidden || full || flowOpen) && wide);
   // Somebody has to say who they are before commenting, once, on this browser.
   const changeMode = (next: "view" | "dev" | "edit" | "comment") => {
     if (next === "comment" && !user.name) {
@@ -210,7 +224,7 @@ function Shared({
       <aside
         inert={!columnOpen}
         style={drag ? { width: `max(0px, calc(var(--detail-side-width) + ${drag}px))`, transition: "none" } : undefined}
-        className={`stagger-in ${full ? "max-lg:hidden" : ""} min-w-0 px-5 sm:px-0 lg:flex lg:shrink-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
+        className={`stagger-in ${full || flowOpen ? "max-lg:hidden" : ""} min-w-0 px-5 sm:px-0 lg:flex lg:shrink-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
           columnOpen
             ? "lg:w-[var(--detail-side-width)] lg:overflow-hidden"
             : full
@@ -242,9 +256,10 @@ function Shared({
           fit={fit}
           comments={full ? undefined : { slug, version: versionKey, variant: chosenAddress.split("?")[1] || undefined }}
           onPlace={followPlace}
-          flow={null}
-          flowOpen={false}
-          onFlowOpen={() => {}}
+          flow={flow}
+          variants={variantsCanvas}
+          flowOpen={flowOpen}
+          onFlowOpen={setFlowOpen}
           mode={mode}
           onMode={changeMode}
           listing={listing}
@@ -252,6 +267,8 @@ function Shared({
           fullscreen={full}
           bare={full}
           onFullscreen={(next) => {
+            // The canvas is full screen itself, and its way out is in the bar that full screen takes away.
+            if (flowOpen) return;
             setFull(next);
             if (next) hintFullscreen(notify);
             // Nothing is half-open when the studio's controls go.

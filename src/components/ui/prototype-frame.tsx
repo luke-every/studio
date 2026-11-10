@@ -13,20 +13,20 @@ import { useComments, useOtherComments, useShowComments } from "@/components/pro
 import { MotionSheet } from "@/components/motion";
 import { ShareMenu } from "@/components/prototype/share-menu";
 
-import { CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, GithubIcon, SparkleIcon, WireframeIcon } from "@/components/shell/nav-icons";
+import { CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, GithubIcon } from "@/components/shell/nav-icons";
 
 import { controlOn, IconButton } from "./button";
 import { DialogForm } from "./dialog-form";
 import { Toggle } from "./toggle";
 import { withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import { DEFAULT_DEVICE, DEVICES, type Device } from "@/lib/phone";
+import { useFlag } from "@/lib/use-flag";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
 import { watchTaps } from "@/lib/anchor";
 import { applyEmbed } from "@/lib/embed";
-import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
 
 // Loaded when their mode is opened, not with the page. Until then (or while the chunk arrives) they render nothing.
 const DevPanel = dynamic(() => import("@/components/prototype/dev-panel").then((m) => m.DevPanel), { ssr: false });
@@ -51,15 +51,11 @@ const SIZING = "transition-[width,height,transform] duration-[var(--dur-standard
 /**
  * A prototype on a tile, the same grey tile the feed uses, 90% of the
  * window tall so all of it is in view. The prototype sits in the middle as
- * a phone, centered on the tile. The tile is a set height, so a phone drawn bigger than it scrolls inside. Along the top: on the left the version, design or
- * wireframe, and the flow; in the middle `center` (which phone, how big); on the
+ * a phone, centered on the tile. The tile is a set height, so a phone drawn bigger than it scrolls inside. Along the top: on the left the version and the flow; in the middle `center` (which phone, how big); on the
  * right dev mode and open in a new window.
  *
  * The prototype is laid out at the phone's own size and then scaled to fit the
  * tile, so it looks the same on a laptop as on a big screen.
- *
- * The wireframe toggle shows the same prototype with its visual design
- * stripped back (see `@/lib/wireframe`); it lasts until the page is left.
  *
  * The prototype loads behind a skeleton, which comes back whenever the url
  * changes, so choosing another version reads as the thing refreshing.
@@ -193,10 +189,7 @@ export function PrototypeFrame({
   }, [showingFlow, warmKey]);
   // Dev mode: the same preview, with its code beside it. What was picked and
   // what moved belong to the document on screen, so a new url starts them over.
-  const [look, setLook] = useState<"design" | "wireframe">("design");
-  // Editing and dev mode both look at the design or the wireframe, so the look is kept while either is on.
   const editing = mode === "edit" && !!edit;
-  const wireframe = look === "wireframe";
   const dev = mode === "dev" || editing;
   // Comment mode, like editing, takes the page over: the next click on the prototype leaves a comment there, and the panel lists them all.
   // On a phone the list is a sheet instead, opened from the bar.
@@ -209,6 +202,7 @@ export function PrototypeFrame({
     const id = window.setTimeout(preloadComments, 1000);
     return () => window.clearTimeout(id);
   }, []);
+  const [canvasHintSeen, markCanvasHintSeen] = useFlag("proto.canvas-hint");
   const [pinsChosen, setShowPins] = useShowComments();
   // A share page shows comments only while commenting, so the show and hide switch is not offered there.
   const showPins = pinsChosen && !minimal;
@@ -410,9 +404,7 @@ export function PrototypeFrame({
     onMotion: (entry: MotionSeen) => setSeen((now) => ({ ...(now.url === url ? now : { url, picked: null, motion: [] }), url, motion: [...(now.url === url ? now.motion : []), entry].slice(-30) })),
   };
 
-  // The wireframe view is the studio's own, so a new tab only keeps it by opening the prototype through the studio.
-  const outside = openUrl && screen ? withParams(openUrl, screen.params) : (openUrl ?? url);
-  const newTab = outside && wireframe ? `/view/${outside.replace(/^\/p\//, "")}${outside.includes("?") ? "&" : "?"}wireframe` : outside;
+  const newTab = openUrl && screen ? withParams(openUrl, screen.params) : (openUrl ?? url);
 
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
@@ -490,18 +482,7 @@ export function PrototypeFrame({
     if (next) onDevice?.(next);
   };
 
-  // The look toggle and the comment buttons: in the bar on a wider screen, under the prototype on a phone.
-  const lookControl = url ? (
-    <Toggle
-      label="Look"
-      value={look}
-      onChange={setLook}
-      options={[
-        { id: "design", label: "Design", icon: <SparkleIcon /> },
-        { id: "wireframe", label: "Wireframe", icon: <WireframeIcon /> },
-      ]}
-    />
-  ) : null;
+  // The comment buttons: in the bar on a wider screen, under the prototype on a phone.
   const pinButtons = commentsOf ? (
     <>
       {comments.length && !minimal ? (
@@ -567,14 +548,38 @@ export function PrototypeFrame({
             {/* On the left, the version and how it is looked at; in the middle, the phone it is shown on; on the right, what to do with it. */}
             <div className="flex min-w-0 items-center gap-2 justify-self-start max-sm:contents">
               <div className="max-sm:[grid-area:1/1]">{leading}</div>
-              {lookControl && !minimal ? <div className="max-sm:hidden">{lookControl}</div> : null}
-              {url && addressed && !minimal ? (
+              {minimal && githubUrl && url && !showingFlow ? (
+                <span className="hidden lg:block">
+                  <IconButton label="Open in GitHub" href={githubUrl} external>
+                    <GithubIcon />
+                  </IconButton>
+                </span>
+              ) : null}
+              {url && addressed ? (
                 showingFlow ? (
                   <IconButton onClick={() => onFlowOpen(false)}>Close canvas</IconButton>
                 ) : (
-                  <IconButton label="Canvas" onClick={() => onFlowOpen(true)} className="max-sm:hidden">
-                    <FlowIcon />
-                  </IconButton>
+                  <div className="relative max-sm:hidden">
+                    <IconButton
+                      label="Canvas"
+                      onClick={() => {
+                        markCanvasHintSeen();
+                        onFlowOpen(true);
+                      }}
+                    >
+                      <FlowIcon />
+                    </IconButton>
+                    {/* Once per person, on a share page, where the canvas is easy to miss. */}
+                    {minimal && !bare && !canvasHintSeen ? (
+                      <button
+                        type="button"
+                        onClick={markCanvasHintSeen}
+                        className="fade-enter absolute left-0 top-[calc(100%+0.5rem)] z-[var(--z-popover)] w-max max-w-64 rounded-[var(--r-control)] bg-accent px-3 py-2 text-left text-sm text-accent-foreground shadow-floating"
+                      >
+                        <span className="font-medium">New!</span> See all screens on the canvas
+                      </button>
+                    ) : null}
+                  </div>
                 )
               ) : null}
             </div>
@@ -599,13 +604,6 @@ export function PrototypeFrame({
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end max-sm:contents">
                 {pinButtons ? <div className="flex items-center gap-2 max-sm:hidden">{pinButtons}</div> : null}
-                {minimal && githubUrl ? (
-                  <span className="hidden lg:block">
-                    <IconButton label="Open in GitHub" tooltipAlign="end" href={githubUrl} external>
-                      <GithubIcon />
-                    </IconButton>
-                  </span>
-                ) : null}
                 {minimal && onOpenPrototype && !fullscreen ? (
                   <span className="hidden lg:block">
                     <IconButton label="Open the prototype" tooltipAlign="end" onClick={onOpenPrototype}>
@@ -669,7 +667,6 @@ export function PrototypeFrame({
               scale={scale}
               device={shown}
               sizing={sizing}
-              wireframe={wireframe}
               inspect={dev ? { ...inspect, picking: !interacting } : null}
               onKey={(event) => hotkeyRef.current(event)}
               comments={showingFlow ? null : commentsUi}
@@ -703,7 +700,6 @@ export function PrototypeFrame({
       {/* On a phone, how it is looked at and the comments sit under the prototype, centred. */}
       {mode === "view" && url && !showingFlow && !bare ? (
         <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2 sm:hidden">
-          {lookControl}
           {pinButtons}
         </div>
       ) : null}
@@ -718,14 +714,8 @@ export function PrototypeFrame({
             base={addressed.split("?")[0]}
             device={device}
             // Closed, it isn't looking for pins.
-            comments={showingFlow && commentsUi ? (canvas.setups ? { ...commentsUi, list: everything } : commentsUi) : undefined}
-            wireframe={wireframe}
-            onOpen={(next) => {
-              // A variant opens as the prototype put in that setup; a step of the flow, as the prototype on that screen.
-              if (canvas.setups) commentsOf?.onSetup?.(canvas.setups[next.id]);
-              else setOpened({ address: addressed, screen: next });
-              onFlowOpen(false);
-            }}
+            // The pins are on the canvas whenever it is open, not only while commenting: the eye switch is for the prototype itself.
+            comments={showingFlow && commentsUi ? { ...commentsUi, visible: true, ...(canvas.setups ? { list: everything } : {}) } : undefined}
           />
         </div>
       ) : null}
@@ -832,7 +822,6 @@ function FrameBody({
   scale,
   device,
   sizing,
-  wireframe,
   inspect,
   onKey,
   comments,
@@ -845,7 +834,6 @@ function FrameBody({
   device: Device;
   /** The device has just changed: the prototype is resized with its frame rather than at once. */
   sizing: boolean;
-  wireframe: boolean;
   inspect: { picking: boolean; onPick: (picked: Picked, element: Element) => void; onMotion: (seen: MotionSeen) => void; onEdit: (element: Element) => void; onKey: (event: KeyboardEvent) => void } | null;
   /** Keys pressed inside the prototype, for the studio's own shortcuts. Dev mode takes them through `inspect` instead. */
   onKey: (event: KeyboardEvent) => void;
@@ -874,11 +862,6 @@ function FrameBody({
     const doc = frame.current?.contentDocument;
     return doc ? applyEmbed(doc) : undefined;
   }, [documents]);
-
-  useEffect(() => {
-    const doc = frame.current?.contentDocument;
-    return doc ? applyWireframe(doc, wireframe) : undefined;
-  }, [wireframe, documents]);
 
   // A prototype keeps its place in its own address (docs/controls.md): each time it writes another one there, or the
   // person goes back, the page is told, so the studio's controls, links and comments follow what is on screen.
@@ -947,7 +930,6 @@ function FrameBody({
           width: device.width,
           height: device.height,
           transform: `scale(${scale})`,
-          filter: wireframe ? WIREFRAME_FRAME_FILTER : undefined,
         }}
         className={`origin-top-left border-0 ${sizing ? SIZING : ""}`}
         // Same-origin now that the studio serves these, so the frame is

@@ -215,22 +215,6 @@ export function FitIcon(props: IconProps) {
   );
 }
 
-export function WireframeIcon(props: IconProps) {
-  return (
-    <Frame {...props}>
-      <rect
-        x="2.75"
-        y="2.75"
-        width="10.5"
-        height="10.5"
-        rx="1.25"
-        strokeDasharray="2 2"
-      />
-      <path d="m2.75 11 3-3 2.5 2.5L10 8.5l3.25 3.25" />
-    </Frame>
-  );
-}
-
 export function CodeIcon(props: IconProps) {
   return (
     <Frame {...props}>

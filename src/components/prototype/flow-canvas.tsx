@@ -6,11 +6,10 @@ import { FitIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { anchorAt, ownedBy, spotOf, type Spot } from "@/lib/anchor";
 import { setupOf, type Anchor } from "@/lib/comments";
-import { layoutFlow, withParams, type Flow, type FlowScreen } from "@/lib/flow";
+import { layoutFlow, withParams, type Flow } from "@/lib/flow";
 import type { Device } from "@/lib/phone";
 import { applyEmbed } from "@/lib/embed";
-import { PREVIEW_QUERY } from "@/lib/controls";
-import { applyWireframe, WIREFRAME_FRAME_FILTER } from "@/lib/wireframe";
+import { embedded, PREVIEW_QUERY } from "@/lib/controls";
 
 import { Card, CommentCard, Composer, DraftPin, Pin, type CommentsUi } from "./comment-parts";
 import { usePinWatch } from "./use-pin-watch";
@@ -27,8 +26,17 @@ const INSET = { top: 104, side: 56 };
 const DOUBLE_CLICK_ZOOM = 1.6;
 /** How long the room has to stay the same size to count as settled. */
 const SETTLE_MS = 80;
+/** The room an opened screen keeps clear: a strip along the top for its buttons, and a margin elsewhere (none on a phone, where it fills the view). */
+const INTERACT = { top: 52, margin: 24 };
+/** How long a screen takes to grow into the middle and back, matching `--dur-deliberate`. */
+const INTERACT_MS = 460;
+type Box = { left: number; top: number; width: number; height: number };
+/** A screen moved by hand: where it was, and where it was put. */
+type Move = { id: string; from: { x: number; y: number }; to: { x: number; y: number } };
 /** A page is measured this long after it loads, and again later, since it may still be settling. */
 const MEASURE_AT_MS = [600, 1800];
+/** Two taps on one screen within this long are a double tap. */
+const DOUBLE_TAP_MS = 320;
 /** A page counts as ready this long after it loads: measured, and its own entrance animations played out of sight. */
 const READY_AFTER_LOAD_MS = 700;
 /** What the loader says while the pages load; one is picked each time the canvas opens. */
@@ -66,21 +74,16 @@ export function FlowCanvas({
   flow,
   base,
   device,
-  onOpen,
   comments,
   setups,
-  wireframe = false,
 }: {
   flow: Flow;
   /** The prototype's address, without any screen's parameters. */
   base: string;
   device: Device;
-  onOpen: (screen: FlowScreen) => void;
   comments?: CommentsUi;
   /** When the screens are variants of the prototype rather than steps of a flow: the setup (see `Comment`) each one shows. A comment shows only on the screen of its setup, and is left on it. */
   setups?: Record<string, string>;
-  /** The same wireframe look the prototype is shown in. */
-  wireframe?: boolean;
 }) {
   const node = { width: device.width * SCREEN_SCALE, height: device.height * SCREEN_SCALE };
   const cell = { width: node.width + GAP.x, height: node.height + GAP.y + LABEL_HEIGHT };
@@ -100,6 +103,21 @@ export function FlowCanvas({
   const { placed, width, height } = layoutFlow(flow, cell, Infinity, (id) => heightOf(id) + GAP.y + LABEL_HEIGHT);
   // How far each screen has been dragged from where the layout put it, in the canvas's own units.
   const [offsets, setOffsets] = useState<Record<string, { x: number; y: number }>>({});
+  // Each finished move, so ⌘Z puts a screen back where it was and ⇧⌘Z (or ⌘Y) moves it again.
+  const offsetsNow = useRef(offsets);
+  useEffect(() => {
+    offsetsNow.current = offsets;
+  });
+  const moves = useRef<{ past: Move[]; future: Move[] }>({ past: [], future: [] });
+  // A screen opened to be used where it is: grown into the middle of the canvas over a scrim, rather than the canvas being left.
+  const [interact, setInteract] = useState<{ id: string; open: boolean } | null>(null);
+  // The page that opening a screen shows is loaded as soon as the screen is selected, so it is there when it is asked for; this is which one has arrived.
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  const interactNow = useRef(false);
+  useEffect(() => {
+    interactNow.current = !!interact;
+  });
+  const lastTap = useRef<{ id: string; at: number } | null>(null);
   // The screens sit below their names, where the layout put them or where they were dragged to.
   const at = (id: string) => {
     const spot = placed.get(id)!;
@@ -236,6 +254,8 @@ export function FlowCanvas({
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
+      // Over an opened screen the canvas stays where it is, and the browser isn't zoomed instead.
+      if (interactNow.current) return;
       if (event.ctrlKey || event.metaKey) {
         const rect = element.getBoundingClientRect();
         zoomAt(event.clientX - rect.left, event.clientY - rect.top, Math.exp(-event.deltaY * 0.01));
@@ -245,7 +265,30 @@ export function FlowCanvas({
       }
     };
     element.addEventListener("wheel", onWheel, { passive: false });
-    return () => element.removeEventListener("wheel", onWheel);
+    // Safari sends a pinch as gesture events, not as ctrl-wheel, and zooms the whole page unless they are taken.
+    let pinched = 1;
+    const onGestureStart = (event: Event) => {
+      event.preventDefault();
+      pinched = 1;
+    };
+    const onGestureChange = (event: Event) => {
+      event.preventDefault();
+      if (interactNow.current) return;
+      const gesture = event as Event & { scale: number; clientX?: number; clientY?: number };
+      const rect = element.getBoundingClientRect();
+      zoomAt((gesture.clientX ?? rect.left + rect.width / 2) - rect.left, (gesture.clientY ?? rect.top + rect.height / 2) - rect.top, gesture.scale / pinched);
+      pinched = gesture.scale;
+    };
+    const onGestureEnd = (event: Event) => event.preventDefault();
+    element.addEventListener("gesturestart", onGestureStart);
+    element.addEventListener("gesturechange", onGestureChange);
+    element.addEventListener("gestureend", onGestureEnd);
+    return () => {
+      element.removeEventListener("wheel", onWheel);
+      element.removeEventListener("gesturestart", onGestureStart);
+      element.removeEventListener("gesturechange", onGestureChange);
+      element.removeEventListener("gestureend", onGestureEnd);
+    };
     // Set up once: what it calls only sets state and a ref, which don't change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -257,13 +300,41 @@ export function FlowCanvas({
   });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !selectedNow.current) return;
+      if (event.key !== "Escape") return;
+      // An opened screen goes back first, then a selection lets go, then the page closes the canvas.
+      if (interactNow.current) {
+        event.stopPropagation();
+        closeInteract();
+        return;
+      }
+      if (!selectedNow.current) return;
       event.stopPropagation();
       setSelected(null);
     };
     // Before the page's own, which listens after this in the same pass.
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA"].includes(target?.tagName ?? "")) return;
+      // A canvas that is closed stays loaded out of sight: its keys are not for it then.
+      if (box.current?.closest("[inert]")) return;
+      const redo = key === "y" || event.shiftKey;
+      const { past, future } = moves.current;
+      const move = redo ? future.pop() : past.pop();
+      if (!move) return;
+      event.preventDefault();
+      (redo ? past : future).push(move);
+      setOffsets((now) => ({ ...now, [move.id]: redo ? move.to : move.from }));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   // Once it has arrived, the view glides to where it is sent (a page turning out taller, the Fit button) unless somebody is moving it by hand. The first fit is a place, not a move.
@@ -295,6 +366,25 @@ export function FlowCanvas({
       window.removeEventListener("blur", away);
     };
   }, []);
+  const shownId = interact?.id ?? (selected && placed.has(selected) && !placing ? selected : null);
+  // Where a screen stands on the canvas now, in the canvas's own window: what an opened one grows from and shrinks back to.
+  const standing = (id: string): Box => {
+    const spot = at(id);
+    return { left: view.x + spot.x * view.scale, top: view.y + spot.y * view.scale, width: node.width * view.scale, height: heightOf(id) * view.scale };
+  };
+  const openInteract = (id: string) => {
+    // The press that opened it is over. A tap on a screen leaves it recorded as a drag begun (nothing clears it, as the
+    // screen keeps the release to itself), and the next pointer movement over the canvas would carry the screen along.
+    drag.current = null;
+    setSelected(id);
+    setInteract({ id, open: false });
+    // Painted where it stood first, so growing is seen.
+    requestAnimationFrame(() => requestAnimationFrame(() => setInteract((now) => (now && now.id === id ? { ...now, open: true } : now))));
+  };
+  function closeInteract() {
+    setInteract((now) => (now ? { ...now, open: false } : now));
+    window.setTimeout(() => setInteract((now) => (now && !now.open ? null : now)), INTERACT_MS + 40);
+  }
   const grab = (event: React.PointerEvent, id: string) => {
     // With Space held, a press on a screen pans like anywhere else.
     if (placing || space.current) return;
@@ -373,6 +463,8 @@ export function FlowCanvas({
         drag.current = { x: event.clientX, y: event.clientY, from: view, moved: false, pan: true };
       }}
       onPointerMove={(event) => {
+        // An opened screen holds still: nothing under it is being moved.
+        if (interactNow.current) return;
         const start = drag.current;
         if (!start || !(event.buttons & (start.pan ? 5 : 1))) return;
         const dx = event.clientX - start.x;
@@ -398,11 +490,16 @@ export function FlowCanvas({
       }}
       onDoubleClick={(event) => {
         // A screen opens on a double-click, and while placing a comment a click is a comment.
-        if (placing || (event.target as Element).closest("button, [data-screen-name]") || !box.current) return;
+        if (placing || interactNow.current || (event.target as Element).closest("button, [data-screen-name]") || !box.current) return;
         const rect = box.current.getBoundingClientRect();
         zoomAt(event.clientX - rect.left, event.clientY - rect.top, DOUBLE_CLICK_ZOOM, true);
       }}
       onPointerUp={() => {
+        const done = drag.current;
+        if (done?.moved && done.screen && done.origin) {
+          moves.current.past.push({ id: done.screen, from: done.origin, to: offsetsNow.current[done.screen] ?? { x: 0, y: 0 } });
+          moves.current.future = [];
+        }
         // Letting go of a drag isn't a click on anything; a tap on a screen's name selects it.
         if (!drag.current?.moved) setSelected(drag.current?.screen ?? null);
         window.setTimeout(() => (drag.current = null), 0);
@@ -430,10 +527,17 @@ export function FlowCanvas({
               onPointerUp={(event) => {
                 if (drag.current?.moved) return;
                 event.stopPropagation();
+                // A tap is over: left recorded as a drag begun (this keeps the release from the canvas, which would clear it), the next movement over the canvas would carry the screen along.
+                drag.current = null;
                 setSelected(screen.id);
+                // A second tap on the same screen, soon after, opens it (a double-click, a double-tap): there is no double-click event on every touch screen.
+                const now = performance.now();
+                if (lastTap.current?.id === screen.id && now - lastTap.current.at < DOUBLE_TAP_MS) {
+                  lastTap.current = null;
+                  openInteract(screen.id);
+                } else lastTap.current = { id: screen.id, at: now };
               }}
-              onDoubleClick={() => onOpen(screen)}
-              aria-label={`${screen.name}. Double-click to open.`}
+              aria-label={`${screen.name}. Double-click to use it here.`}
               aria-pressed={selected === screen.id}
               style={{
                 left: spot.x,
@@ -444,12 +548,13 @@ export function FlowCanvas({
                 outline: selected === screen.id ? `${2 / view.scale}px solid var(--focus-ring)` : undefined,
                 outlineOffset: 3 / view.scale,
                 "--i": Math.min(index, 8),
-                // Out of sight, and out of reach, until the whole canvas arrives.
+                // Out of sight, and out of reach, until the whole canvas arrives; and while it is opened, since that is it.
                 opacity: revealed ? undefined : 0,
+                visibility: interact?.id === screen.id && loadedId === screen.id ? "hidden" : undefined,
               } as React.CSSProperties}
               className={`absolute block overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface text-left ${revealed ? "stagger-in" : "pointer-events-none"}`}
             >
-              <ScreenFrame onReady={() => setReadyIds((now) => (now.has(screen.id) ? now : new Set(now).add(screen.id)))} pageHeight={pageHeight(screen.id)} onMeasured={(found) => setPageHeights((now) => (now[screen.id] === found ? now : { ...now, [screen.id]: found }))} wireframe={wireframe} register={(element) => (element ? frames.current.set(screen.id, element) : frames.current.delete(screen.id))} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`} device={device} />
+              <ScreenFrame onReady={() => setReadyIds((now) => (now.has(screen.id) ? now : new Set(now).add(screen.id)))} pageHeight={pageHeight(screen.id)} onMeasured={(found) => setPageHeights((now) => (now[screen.id] === found ? now : { ...now, [screen.id]: found }))} register={(element) => (element ? frames.current.set(screen.id, element) : frames.current.delete(screen.id))} src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`} device={device} />
             </button>
           );
         }) : null}
@@ -515,7 +620,7 @@ export function FlowCanvas({
                 key={`${screen.id}-name`}
                 data-screen-name
                 onPointerDown={(event) => grab(event, screen.id)}
-                onDoubleClick={() => onOpen(screen)}
+                onDoubleClick={() => openInteract(screen.id)}
                 style={{ left: spot.x, top: spot.y - 22, maxWidth: Math.max(60, node.width * view.scale) }}
                 className={`absolute truncate text-xs font-medium ${placing ? "pointer-events-none" : "pointer-events-auto cursor-grab"} ${selected === screen.id ? "text-foreground" : "text-foreground-muted"}`}
               >
@@ -523,6 +628,19 @@ export function FlowCanvas({
               </span>
             );
           })}
+          {/* A tap on a screen offers to use it here, above its name. */}
+          {selected && placed.has(selected) && !placing && !interact ? (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+              onClick={() => openInteract(selected)}
+              style={{ left: toScreen(at(selected).x, at(selected).y).x + (node.width * view.scale) / 2, top: toScreen(at(selected).x, at(selected).y).y - 30 }}
+              className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-[var(--r-full)] bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground shadow-floating hover:bg-accent-hover"
+            >
+              Interact
+            </button>
+          ) : null}
         </>
       ) : null}
 
@@ -610,6 +728,68 @@ export function FlowCanvas({
           <FitIcon className="size-[1.125rem]" />
         </IconButton>
       </div>
+
+      {/* A screen opened to be used: it grows from where it stood into the middle of the canvas, over a blurred scrim, with Done above it. The selected screen's page is kept ready here, out of sight, so opening it shows no loading. */}
+      {shownId && size
+        ? (() => {
+            const screen = flow.screens.find((item) => item.id === shownId);
+            if (!screen) return null;
+            const open = interact?.open ?? false;
+            const ready = loadedId === shownId;
+            // On a phone it fills the view; elsewhere it is the device's width (or the room there is) and as tall as the room, in the middle.
+            const margin = size.width < 640 ? 0 : INTERACT.margin;
+            const width = Math.min(device.width, size.width - margin * 2);
+            const to: Box = { left: (size.width - width) / 2, top: INTERACT.top, width, height: size.height - INTERACT.top - margin };
+            const standingNow = standing(shownId);
+            // Closed, it is back where it stood on the canvas, wherever the canvas has got to.
+            const shell = open ? to : standingNow;
+            // Only while it is open (or opening, or closing) does it travel: kept ready, it follows the canvas exactly.
+            const motion = interact ? { transitionDuration: "var(--dur-deliberate)", transitionTimingFunction: "var(--curve-spatial)" } : { transitionProperty: "none" };
+            const fade = { opacity: open ? 1 : 0, transition: "opacity var(--dur-deliberate) var(--curve-standard)" };
+            return (
+              <div
+                key={shownId}
+                data-interacting
+                // Nothing here is the canvas's: a press or a double-click on the scrim must not pan it or zoom it to where it landed.
+                onPointerDown={(event) => event.stopPropagation()}
+                onPointerUp={(event) => event.stopPropagation()}
+                onPointerMove={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => event.stopPropagation()}
+                className={`absolute inset-0 z-[var(--z-raised)] ${interact ? "" : "pointer-events-none invisible"}`}
+              >
+                <div onClick={closeInteract} style={fade} className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-sm" />
+                <div style={{ height: INTERACT.top, ...fade }} className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-end px-4">
+                  <IconButton className="pointer-events-auto" onClick={closeInteract}>
+                    Done
+                  </IconButton>
+                </div>
+                <div
+                  style={{ ...shell, ...(interact ? { transitionProperty: "left, top, width, height" } : {}), ...motion }}
+                  className={`absolute overflow-hidden rounded-[var(--r-device)] ${ready ? "bg-surface shadow-[var(--elev-overlay)]" : ""}`}
+                >
+                  <iframe
+                    src={embedded(withParams(base, screen.params))}
+                    title={screen.name}
+                    onLoad={() => setLoadedId(shownId)}
+                    style={{
+                      width: to.width,
+                      height: to.height,
+                      // Drawn as small as the screen on the canvas, and growing to its own size with the box around it.
+                      transform: `scale(${open ? 1 : standingNow.width / to.width})`,
+                      transformOrigin: "0 0",
+                      ...(interact ? { transitionProperty: "transform, opacity" } : { transitionProperty: "none" }),
+                      transitionDuration: interact ? "var(--dur-deliberate)" : undefined,
+                      transitionTimingFunction: interact ? "var(--curve-spatial)" : undefined,
+                      opacity: ready ? 1 : 0,
+                    }}
+                    className="absolute left-0 top-0 block border-0 bg-surface"
+                    sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
+                  />
+                </div>
+              </div>
+            );
+          })()
+        : null}
     </div>
   );
 }
@@ -624,7 +804,6 @@ function ScreenFrame({
   pageHeight,
   onMeasured,
   onReady,
-  wireframe,
   register,
 }: {
   src: string;
@@ -635,7 +814,6 @@ function ScreenFrame({
   onMeasured?: (height: number) => void;
   /** Told once the page has loaded and settled, which is when it is fit to be seen. */
   onReady: () => void;
-  wireframe: boolean;
   register: (element: HTMLIFrameElement | null) => void;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -655,8 +833,10 @@ function ScreenFrame({
   useEffect(() => {
     if (!loaded || !onMeasured) return undefined;
     const timers = MEASURE_AT_MS.map((ms) =>
-      window.setTimeout(() => {
-        const found = frame.current ? measurePage(frame.current, device.height) : 0;
+      window.setTimeout(async () => {
+        const element = frame.current;
+        // A page on a dev server of its own can't be looked into from here, so it is asked (see `measureAcross`).
+        const found = element ? (element.contentDocument ? measurePage(element, device.height) : await measureAcross(element, device.height)) : 0;
         if (found) onMeasured(Math.min(MAX_PAGE, found));
       }, ms),
     );
@@ -671,12 +851,6 @@ function ScreenFrame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
-  // The wireframe look is the studio's own stylesheet in the screen's document, put back each time a document loads.
-  useEffect(() => {
-    const doc = frame.current?.contentDocument;
-    return loaded && doc ? applyWireframe(doc, wireframe) : undefined;
-  }, [wireframe, loaded]);
-
   return (
     <iframe
       ref={frame}
@@ -684,11 +858,36 @@ function ScreenFrame({
       title="Screen"
       tabIndex={-1}
       onLoad={() => setLoaded((count) => count + 1)}
-      style={{ width: device.width, height: pageHeight, transform: `scale(${SCREEN_SCALE})`, filter: wireframe ? WIREFRAME_FRAME_FILTER : undefined }}
+      style={{ width: device.width, height: pageHeight, transform: `scale(${SCREEN_SCALE})` }}
       className="pointer-events-none block origin-top-left border-0"
       sandbox="allow-scripts allow-forms allow-same-origin"
     />
   );
+}
+
+/**
+ * The same, for a page on another address: the frame is set to a phone's height and the page is asked, with a message,
+ * how tall it is (the prototype answers; see studio-measure.ts in its `src/lib`). A page that doesn't answer is left at a phone's height.
+ */
+function measureAcross(frame: HTMLIFrameElement, phone: number) {
+  return new Promise<number>((resolve) => {
+    const page = frame.contentWindow;
+    if (!page) return resolve(0);
+    const was = frame.style.height;
+    frame.style.height = `${phone}px`;
+    const done = (height: number) => {
+      window.removeEventListener("message", onMessage);
+      window.clearTimeout(timer);
+      frame.style.height = was;
+      resolve(height);
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (event.source === page && event.data?.type === "studio:size" && typeof event.data.height === "number") done(event.data.height);
+    };
+    const timer = window.setTimeout(() => done(0), 800);
+    window.addEventListener("message", onMessage);
+    page.postMessage({ type: "studio:measure" }, "*");
+  });
 }
 
 /**
