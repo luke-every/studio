@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 
 import { Welcome } from "@/components/welcome/welcome";
 import { isUnlocked } from "@/lib/gate";
+import { getPrototypes } from "@/lib/registry";
+import { latestPictures } from "@/lib/registry/select";
 
 /**
  * The door, and the welcome that follows it.
@@ -21,5 +23,5 @@ export default async function UnlockPage({ searchParams }: PageProps<"/unlock">)
   const to = destination(next);
   if (await isUnlocked()) redirect(to);
 
-  return <Welcome next={to} />;
+  return <Welcome next={to} pictures={latestPictures(15, await getPrototypes())} />;
 }

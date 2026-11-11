@@ -17,6 +17,9 @@
 :root {
   --background: var(--paper-50);
   --background-sunken: var(--paper-300);
+  /* The welcome's backdrop: lit in the middle, falling away at the edges. */
+  --backdrop-near: var(--background);
+  --backdrop-far: var(--background-sunken);
   --foreground: var(--ink-900);
   --foreground-muted: var(--ink-500);
   --foreground-subtle: var(--ink-400);
@@ -88,6 +91,7 @@
   :root:not([data-theme="light"]) {
     --background: var(--ink-900);
     --background-sunken: #100e0a;
+    --backdrop-far: var(--ink-1000);
     --foreground: var(--paper-100);
     --foreground-muted: color-mix(in oklab, var(--paper-100) 62%, transparent);
     --foreground-subtle: color-mix(in oklab, var(--paper-100) 42%, transparent);
@@ -137,6 +141,7 @@
 :root[data-theme="dark"] {
   --background: var(--ink-900);
   --background-sunken: #100e0a;
+  --backdrop-far: var(--ink-1000);
   --foreground: var(--paper-100);
   --foreground-muted: color-mix(in oklab, var(--paper-100) 62%, transparent);
   --foreground-subtle: color-mix(in oklab, var(--paper-100) 42%, transparent);

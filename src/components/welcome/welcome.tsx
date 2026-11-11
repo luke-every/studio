@@ -5,8 +5,8 @@ import { useEffect, useState, type AnimationEvent, type FormEvent } from "react"
 
 import { NewUserModal } from "@/components/shell/profile-modal";
 import { UserAvatar } from "@/components/shell/user-avatar";
-import { Button } from "@/components/ui/button";
-import { welcomeHold } from "@/lib/motion";
+import { SplashCarousel } from "@/components/welcome/splash-carousel";
+import { welcomeCheck, welcomeHold } from "@/lib/motion";
 import { GUEST, useUser } from "@/lib/use-user";
 
 /**
@@ -18,7 +18,7 @@ import { GUEST, useUser } from "@/lib/use-user";
  * leaves for the studio. Someone this browser already knows skips the
  * choosing.
  */
-export function Welcome({ next }: { next: string }) {
+export function Welcome({ next, pictures }: { next: string; pictures: string[] }) {
   const router = useRouter();
   const { people, current, choose } = useUser();
   const [step, setStep] = useState<"password" | "who">("password");
@@ -41,11 +41,15 @@ export function Welcome({ next }: { next: string }) {
     setBusy(true);
     setProblem(null);
     try {
-      const response = await fetch("/api/unlock", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
+      // The answer is held until the spinner has had its moment.
+      const [response] = await Promise.all([
+        fetch("/api/unlock", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ password }),
+        }),
+        new Promise((resolve) => window.setTimeout(resolve, welcomeCheck * 1000)),
+      ]);
       if (response.ok) {
         setLeaving(true);
         return;
@@ -75,19 +79,35 @@ export function Welcome({ next }: { next: string }) {
   };
 
   return (
-    <div className="grid min-h-dvh place-items-center overflow-hidden px-5">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-12 overflow-hidden bg-[radial-gradient(circle_at_center,var(--backdrop-near),var(--backdrop-far))] px-5 py-16">
+      {/* The ring belongs to the door: it leaves with it, and the choosing of who is here stands alone. */}
+      {step === "password" ? (
+        <div
+          style={{ "--welcome-wait": "var(--splash-start)" } as React.CSSProperties}
+          className={`flex w-full justify-center ${leaving ? "welcome-out" : "welcome-in"}`}
+        >
+          <SplashCarousel pictures={pictures} />
+        </div>
+      ) : null}
+
       <div
         key={step}
         onAnimationEnd={left}
+        // The door lets the ring above it get under way first; the step after it does not wait.
+        style={step === "password" ? ({ "--welcome-wait": "calc(var(--splash-start) + var(--splash-door-delay))" } as React.CSSProperties) : undefined}
         className={`w-full ${step === "password" ? "max-w-[22rem]" : "max-w-[40rem] text-center"} ${leaving ? "welcome-out pointer-events-none" : ""}`}
       >
         {step === "password" ? (
           <>
-            <p style={{ "--i": 0 } as React.CSSProperties} className="welcome-in text-center text-md font-medium tracking-[var(--tracking-tight)] text-foreground">
-              Test Kitchen
+            <h1 style={{ "--i": 1 } as React.CSSProperties} className="welcome-in text-center text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
+              Welcome to TestKitchen
+            </h1>
+            <p style={{ "--i": 2 } as React.CSSProperties} className="welcome-in mt-2 text-center text-sm text-foreground-muted">
+              Where our work in progress lives.
             </p>
 
-            <form onSubmit={submit} className="mt-8 flex flex-col gap-3">
+            {/* The way on appears once the field is in use: nothing to press until there is something to send. */}
+            <form onSubmit={submit} style={{ "--i": 3 } as React.CSSProperties} className="welcome-in group relative mx-auto mt-8 max-w-56">
               <input
                 name="password"
                 type="password"
@@ -95,12 +115,19 @@ export function Welcome({ next }: { next: string }) {
                 autoComplete="off"
                 placeholder="Password"
                 aria-label="Password"
-                style={{ "--i": 1 } as React.CSSProperties}
-                className="welcome-in w-full rounded-[var(--r-sm)] border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:border-border-strong focus:outline-none"
+                className="h-11 w-full rounded-[var(--r-full)] border border-border bg-surface pl-4 pr-11 text-sm text-foreground focus:border-border-strong focus:outline-none"
               />
-              <Button type="submit" variant="primary" loading={busy} disabled={busy} style={{ "--i": 2 } as React.CSSProperties} className="welcome-in">
-                Continue
-              </Button>
+              <button
+                type="submit"
+                aria-label="Continue"
+                disabled={busy}
+                aria-busy={busy || undefined}
+                className="absolute right-1.5 top-1.5 grid size-8 scale-90 place-items-center rounded-[var(--r-full)] bg-accent text-accent-foreground opacity-0 transition-[opacity,transform,background-color] duration-[var(--dur-standard)] ease-[var(--curve-standard)] hover:bg-accent-hover group-focus-within:scale-100 group-focus-within:opacity-100 aria-busy:scale-100 aria-busy:opacity-100"
+              >
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`size-4 ${busy ? "spin" : ""}`}>
+                  {busy ? <path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5" /> : <path d="M3 8h10M9 4l4 4-4 4" />}
+                </svg>
+              </button>
             </form>
 
             {problem ? (

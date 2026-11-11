@@ -23,6 +23,8 @@
   --graphite-200: #eeeeee;
 
   /* --- Palette: ink -------------------------------------------------------- */
+  /* True black: only the far edge of the welcome, behind everything. */
+  --ink-1000: #000;
   --ink-900: #121211;
   --ink-800: #1b1b19;
   --ink-700: #252523;
@@ -131,6 +133,13 @@
   --tile-device-width: calc(var(--tile-height) * 0.85 * 9 / 19.5);
   /* The prototype on its own page: never taller than the window, so all of it is in view. */
   --frame-height: 90svh;
+  /* A phone in the welcome's carousel: shrinks with the window's width and height, so the ring and the door below it both fit. */
+  --splash-device-width: clamp(5.5rem, min(13vw, 18dvh), 9rem);
+  /* The ring the carousel's phones stand on: twelve phones 30° apart with a
+   * fifth of a phone between neighbours (1.2 / (2 · sin 15°)). */
+  --splash-radius: calc(var(--splash-device-width) * 2.32);
+  /* How deep the carousel reads: smaller is more dramatic. */
+  --splash-perspective: calc(var(--splash-radius) * 2.6);
   /* The column beside a prototype: its name, description, variants and links. */
   --detail-side-width: 21.75rem;
   /* What is written under a prototype: narrow enough to read. */

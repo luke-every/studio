@@ -69,8 +69,28 @@
   --welcome-stagger: 110ms;
   --welcome-blur: 14px;
   --welcome-in-scale: 1.08;
+  /* How far below its place each line starts. */
+  --welcome-rise: var(--motion-travel-lg);
   --welcome-out-scale: 0.92;
   --welcome-hold: 500ms;
+  /* The least time the door spends checking a password, so the spinner is
+   * seen rather than flashed. Mirrored for JS as `welcomeCheck`. */
+  --welcome-check: 1000ms;
+  /* splash-orbit: one full turn of the ring of phones above the door, and
+   * how out of focus a phone is as it goes round the side. */
+  --splash-turn: 84s;
+  --splash-blur: 6px;
+  /* A breath after the page loads before any of the welcome moves. */
+  --splash-start: 500ms;
+  /* How long the ring takes to open, and how far into that the door beneath
+   * it starts to arrive (`--welcome-wait`). */
+  --splash-fan-duration: 1400ms;
+  --splash-door-delay: 450ms;
+  /* The ring starts from rest and takes this long to reach its speed. In that
+   * time it falls behind by half of what it would have turned, which is
+   * `--splash-ramp-turn`: 180deg × ramp ÷ turn. Change the three together. */
+  --splash-ramp: 2s;
+  --splash-ramp-turn: 4.3deg;
 }
 
 /* Reduced motion collapses distance and shortens duration, but never removes
@@ -338,7 +358,7 @@
 @keyframes welcome-in {
   from {
     opacity: 0;
-    transform: scale(var(--welcome-in-scale));
+    transform: translateY(var(--welcome-rise)) scale(var(--welcome-in-scale));
     filter: blur(var(--welcome-blur));
   }
 }
@@ -353,11 +373,153 @@
 
 @utility welcome-in {
   animation: welcome-in var(--dur-immersive) var(--curve-entrance) backwards;
-  animation-delay: calc(var(--i, 0) * var(--welcome-stagger));
+  animation-delay: calc(var(--welcome-wait, 0s) + var(--i, 0) * var(--welcome-stagger));
 }
 
 @utility welcome-out {
   animation: welcome-out var(--dur-deliberate) var(--curve-exit) both;
+}
+
+/* ---------------------------------------------------------------------------
+ * splash — the ring of phones above the door. The front phone arrives with
+ * the welcome while the rest fan out left and right from behind it
+ * (`splash-fan`), and the ring turns from the start, easing up to speed. Twelve phones stand 30° apart, so five
+ * face the viewer at once: sharp in front, softening as they turn away, and
+ * blurred to nothing by the time they are side-on (`splash-focus`, on the
+ * face inside each phone, because a filter on a 3D-placed element is
+ * unreliable in Safari). Reduced motion shows the ring open and still.
+ * ------------------------------------------------------------------------- */
+/* How far the ring has opened: 0 with every phone stacked behind the front
+ * one, 1 with each at its own place. Registered so it can be animated. */
+@property --splash-spread {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+
+@keyframes splash-fan {
+  from {
+    --splash-spread: 0;
+  }
+}
+
+@keyframes splash-emerge {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes splash-turn {
+  0% {
+    transform: rotateY(0turn);
+  }
+  25% {
+    transform: rotateY(-0.25turn);
+  }
+  50% {
+    transform: rotateY(-0.5turn);
+  }
+  75% {
+    transform: rotateY(-0.75turn);
+  }
+  100% {
+    transform: rotateY(-1turn);
+  }
+}
+
+/* The ring getting up to speed: a turn the other way that exactly cancels
+ * the wheel's speed at the start and eases to nothing. */
+@keyframes splash-ramp {
+  to {
+    rotate: y var(--splash-ramp-turn);
+  }
+}
+
+@keyframes splash-focus {
+  0% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  6% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  12% {
+    opacity: 1;
+    filter: blur(calc(var(--splash-blur) * 0.2));
+  }
+  17% {
+    opacity: 0.85;
+    filter: blur(calc(var(--splash-blur) * 0.5));
+  }
+  22% {
+    opacity: 0;
+    filter: blur(var(--splash-blur));
+  }
+  78% {
+    opacity: 0;
+    filter: blur(var(--splash-blur));
+  }
+  83% {
+    opacity: 0.85;
+    filter: blur(calc(var(--splash-blur) * 0.5));
+  }
+  88% {
+    opacity: 1;
+    filter: blur(calc(var(--splash-blur) * 0.2));
+  }
+  94% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+
+/* The ring: pushed back by its radius so the front phone sits at the screen's
+ * plane. It opens (`splash-fan`) as the front phone arrives, and turns from
+ * the first frame, starting from rest (`splash-ramp`, a quadratic ease-out). */
+@utility splash-ring {
+  transform-style: preserve-3d;
+  translate: 0 0 calc(var(--splash-radius) * -1);
+  animation:
+    splash-fan var(--splash-fan-duration) var(--curve-spatial) var(--splash-start) backwards,
+    splash-turn var(--splash-turn) linear var(--splash-start) infinite,
+    splash-ramp var(--splash-ramp) cubic-bezier(0.33, 0.67, 0.67, 1) var(--splash-start) forwards;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* One phone: `--s` is its place on the ring in 30° steps either side of the
+ * front (0, -1, 1, …), `--d` how many steps that is, `--i` its turn in the
+ * focus cycle. Until the ring has opened each phone is tucked in towards
+ * the axis, 6% of the radius per step: neighbours less than about 24° apart
+ * would otherwise cut through each other, the inner edge of one in front of
+ * the next, and the front phone has to stay on top. It fades in as it
+ * slides out. */
+@utility splash-phone {
+  backface-visibility: hidden;
+  transform: rotateY(calc(var(--s) * 30deg * var(--splash-spread)))
+    translateZ(calc(var(--splash-radius) * (1 - (1 - var(--splash-spread)) * var(--d) * 0.06)));
+  &:not(:first-child) {
+    animation: splash-emerge calc(var(--splash-fan-duration) / 2) linear var(--splash-start) backwards;
+  }
+  & > * {
+    /* Half the ramp late, to match where the ring is once it is up to speed. */
+    animation: splash-focus var(--splash-turn) linear infinite backwards;
+    animation-delay: calc(var(--splash-start) + var(--splash-ramp) / 2 - var(--i, 0) * var(--splash-turn) / 12);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:not(:first-child) {
+      animation: none;
+    }
+    & > * {
+      animation-play-state: paused;
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------------

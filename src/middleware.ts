@@ -37,6 +37,8 @@ export async function middleware(request: NextRequest) {
 
   const exempt =
     pathname === "/unlock" ||
+    // The same welcome, to look at without leaving the studio.
+    pathname === "/splash" ||
     // Prototypes are deliberately outside the door, and the API carries
     // the password itself rather than a cookie.
     pathname.startsWith("/p/") ||

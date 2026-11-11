@@ -57,6 +57,13 @@ export function latestPrototypes(limit: number, prototypes: Prototype[]) {
     .slice(0, limit);
 }
 
+/** Where the feed's pictures of the newest prototypes would be, newest first. Not all exist: the welcome tries them and shows those that do. */
+export function latestPictures(limit: number, prototypes: Prototype[]) {
+  return latestPrototypes(prototypes.length, prototypes)
+    .flatMap((prototype) => (prototype.current.url ? [`${prototype.current.url}/studio-preview.jpg`] : []))
+    .slice(0, limit);
+}
+
 export type TeamSummary = Team & {
   prototypeCount: number;
   /** Most recent change inside the team, or its creation date if empty. */
