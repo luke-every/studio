@@ -47,6 +47,11 @@ const CANVAS_WARM_MS = 2 * 60 * 1000;
 /** How long a change of device takes to play, matching `--dur-standard`; and the transition that plays it. */
 const SIZING_MS = 280;
 const SIZING = "transition-[width,height,transform] duration-[var(--dur-standard)] ease-[var(--curve-spatial)]";
+// Into and out of full screen the frame is sized as a share of the stage, which is itself growing or shrinking: the
+// same duration and curve as the page's own, so the two move as one and arrive together.
+const FILLING = "transition-[width,height,transform] duration-[var(--dur-standard)] ease-[var(--curve-standard)]";
+type Sizing = false | "device" | "fill";
+const sizingClass = (sizing: Sizing) => (sizing === "fill" ? FILLING : sizing ? SIZING : "");
 
 /**
  * A prototype on a tile, the same grey tile the feed uses, 90% of the
@@ -408,7 +413,7 @@ export function PrototypeFrame({
 
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
-  // The stage with its padding: the window's size for a desktop in full screen, which doesn't change when the padding does.
+  // The stage with its padding: the window's size in full screen, which doesn't change when the padding does.
   const [whole, setWhole] = useState<{ width: number; height: number } | null>(null);
   // On a phone it is a preview, not a place to work: always scaled to fit the
   // screen, with no picking a size. It is sized once, when it loads, and left:
@@ -440,11 +445,11 @@ export function PrototypeFrame({
     return () => observer.disconnect();
   }, [narrow]);
   // Measured on the client only, so no frame is drawn on the server.
-  // A desktop, or a window made narrow, in full screen is the whole window: the page laid out at the window's own size,
-  // filling the stage, which is already animating to fill the screen. A phone or tablet frame keeps its shape.
-  const fill = bare && (device.kind === "desktop" || narrow) && !showingFlow && !!whole;
+  // Full screen is the whole window, whichever device was being looked at: the page laid out at the window's own size,
+  // filling the stage. A phone or tablet frame grows into it and shrinks back on the way out (see `sizing`).
+  const fill = bare && !showingFlow && !!whole;
   const shown = fill ? { ...device, width: whole.width, height: whole.height } : device;
-  const scale = fill
+  const live = fill
     ? 1
     : space
     ? fit || narrow
@@ -454,14 +459,22 @@ export function PrototypeFrame({
 
   // Dragging an edge of the frame picks the device whose frame is nearest the width the pointer has reached, so the
   // size jumps between mobile, tablet and desktop rather than following the pointer anywhere. It is drawn as it would be.
-  // A change of device is animated: the frame's box and the prototype in it change size together, so it is seen being
-  // resized. Only then; the window being resized, or a zoom step, follows at once.
-  const [sizedFor, setSizedFor] = useState(device.id);
-  const [sizing, setSizing] = useState(false);
-  if (sizedFor !== device.id) {
-    setSizedFor(device.id);
-    setSizing(true);
+  // A change of device, or into or out of full screen, is animated: the frame's box and the prototype in it change size
+  // together, so it is seen being resized. Only then; the window being resized, or a zoom step, follows at once.
+  const sized = `${device.id}:${fill}`;
+  const [sizedFor, setSizedFor] = useState(sized);
+  const [sizing, setSizing] = useState<Sizing>(false);
+  const changing = sizedFor !== sized;
+  if (changing) {
+    setSizedFor(sized);
+    setSizing(sizedFor.startsWith(`${device.id}:`) ? "fill" : "device");
   }
+  // Leaving full screen, the stage shrinks back over the same moment, and a scale fitted to it would be a different
+  // number every frame: the frame would chase it and arrive late, off to one side of its box. So it heads straight for
+  // the scale it had before, which is where the stage is going, and follows the stage again once it has landed.
+  const [rest, setRest] = useState<number | null>(null);
+  if (!fill && !sizing && !changing && live && rest !== live) setRest(live);
+  const scale = !fill && sizing === "fill" && rest ? rest : live;
   useEffect(() => {
     if (!sizing) return undefined;
     const timer = window.setTimeout(() => setSizing(false), SIZING_MS);
@@ -644,7 +657,7 @@ export function PrototypeFrame({
         {/* Clipped, not hidden: below 100% the frame's full-size layout box sticks out of this one, and a hidden box can still be scrolled by the prototype (a modal taking focus), which slid the whole phone sideways in Safari. A clipped box can't be scrolled at all. */}
         <div
           style={fill ? { width: "100%", height: "100%" } : scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
-          className={`relative m-auto shrink-0 ${scale ? "" : "h-full"} ${sizing ? SIZING : ""}`}
+          className={`relative m-auto shrink-0 ${scale ? "" : "h-full"} ${sizingClass(sizing)}`}
         >
         {onDevice && !narrow && !showingFlow && !bare ? (
           <>
@@ -654,7 +667,7 @@ export function PrototypeFrame({
         ) : null}
         <div
           className={`relative isolate size-full overflow-clip bg-surface [transform:translateZ(0)] ${
-            device.kind === "phone" ? "rounded-[var(--r-device)]" : fill ? "" : "rounded-[var(--r-lg)]"
+            fill ? "" : device.kind === "phone" ? "rounded-[var(--r-device)]" : "rounded-[var(--r-lg)]"
           }`}
         >
           {url ? (
@@ -666,6 +679,7 @@ export function PrototypeFrame({
               poster={screen ? undefined : poster}
               scale={scale}
               device={shown}
+              fill={fill}
               sizing={sizing}
               inspect={dev ? { ...inspect, picking: !interacting } : null}
               onKey={(event) => hotkeyRef.current(event)}
@@ -821,6 +835,7 @@ function FrameBody({
   poster,
   scale,
   device,
+  fill,
   sizing,
   inspect,
   onKey,
@@ -832,8 +847,10 @@ function FrameBody({
   poster?: string;
   scale: number | null;
   device: Device;
-  /** The device has just changed: the prototype is resized with its frame rather than at once. */
-  sizing: boolean;
+  /** Full screen: the prototype is the size of its frame, whatever that is at the moment, rather than a measured one. */
+  fill: boolean;
+  /** The device has just changed, or full screen has: the prototype is resized with its frame rather than at once. */
+  sizing: Sizing;
   inspect: { picking: boolean; onPick: (picked: Picked, element: Element) => void; onMotion: (seen: MotionSeen) => void; onEdit: (element: Element) => void; onKey: (event: KeyboardEvent) => void } | null;
   /** Keys pressed inside the prototype, for the studio's own shortcuts. Dev mode takes them through `inspect` instead. */
   onKey: (event: KeyboardEvent) => void;
@@ -939,11 +956,11 @@ function FrameBody({
         title={title}
         onLoad={arrived}
         style={{
-          width: device.width,
-          height: device.height,
+          width: fill ? "100%" : device.width,
+          height: fill ? "100%" : device.height,
           transform: `scale(${scale})`,
         }}
-        className={`origin-top-left border-0 ${sizing ? SIZING : ""}`}
+        className={`origin-top-left border-0 ${sizingClass(sizing)}`}
         // Same-origin now that the studio serves these, so the frame is
         // sandboxed: a prototype can do everything it needs and cannot reach
         // out into the page around it.
