@@ -13,7 +13,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { MotionPopover } from "@/components/motion";
-import { CheckIcon, CloseIcon, EllipsisIcon, ReplyIcon, SendIcon } from "@/components/shell/nav-icons";
+import { CheckIcon, CloseIcon, EllipsisIcon, RedoIcon, ReplyIcon, SendIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { UserAvatar } from "@/components/shell/user-avatar";
 import { useUser } from "@/lib/use-user";
 import { controlOn, IconButton } from "@/components/ui/button";
@@ -45,6 +45,8 @@ export type CommentsUi = {
   onDelete: (comment: Comment) => void;
   /** Copies it, as a prompt for Claude Code. */
   onCopy: (comment: Comment) => void;
+  /** Puts back what Claude changed for one of its replies (a live version), or with `redo` makes the change again. */
+  onUndo: (reply: Comment, redo: boolean) => void;
 };
 
 /** The pin is 2rem square; an opened pin or card is 16rem wide. Both are drawn from the pin's point. */
@@ -253,6 +255,39 @@ export function DraftPin({ left, top }: { left: number; top: number }) {
 }
 
 /**
+ * The element a comment would be pinned to, marked while somebody chooses where to leave one: a dark edge with
+ * rounded corners around a faint dark fill, so what is under it stays readable. It never takes a click.
+ */
+export function PinTarget({ left, top, width, height }: { left: number; top: number; width: number; height: number }) {
+  return (
+    <span
+      aria-hidden
+      style={{ left, top, width, height }}
+      className="pointer-events-none absolute rounded-[var(--r-lg)] border border-[var(--pin-target-edge)] bg-[var(--pin-target-fill)]"
+    />
+  );
+}
+
+/**
+ * A card that has just closed goes back into its pin the way it came out. The card itself is gone by then (whatever
+ * showed it has stopped), so a still copy of it is left in its place for the moment that takes, out of reach.
+ */
+function leave(card: HTMLElement) {
+  const copy = card.cloneNode(true) as HTMLElement;
+  // What was typed isn't part of the markup, so it is carried over: the box doesn't empty as it goes.
+  const typed = card.querySelectorAll("textarea");
+  copy.querySelectorAll("textarea").forEach((box, index) => (box.value = typed[index]?.value ?? ""));
+  copy.classList.replace("popover-in", "popover-out");
+  copy.inert = true;
+  copy.setAttribute("aria-hidden", "true");
+  const gone = () => copy.remove();
+  copy.addEventListener("animationend", (event) => event.target === copy && gone());
+  // In case the animation never runs (the tab is hidden), it still goes.
+  window.setTimeout(gone, 1000);
+  document.body.appendChild(copy);
+}
+
+/**
  * An open comment, or the box for a new one: where the pin opens out to, from
  * its point (see `cornerOf`). It is drawn on the page, at a position in the
  * window, rather than inside whatever holds the pin, which would clip it at its edge.
@@ -281,7 +316,11 @@ export function Card({
     setHeight(element.offsetHeight);
     const watch = new ResizeObserver(() => setHeight(element.offsetHeight));
     watch.observe(element);
-    return () => watch.disconnect();
+    return () => {
+      watch.disconnect();
+      // Only once it has really gone: in development React runs this once on arrival too, with the card still there.
+      queueMicrotask(() => !element.isConnected && leave(element));
+    };
   }, []);
   const outside = useRef(onOutside);
   useEffect(() => {
@@ -310,8 +349,9 @@ export function Card({
   return createPortal(
     <div
       ref={box}
-      style={corner.style}
-      className={`fixed flex flex-col ${roomy ? "w-80 gap-4 rounded-3xl p-4" : "w-64 gap-2 rounded-2xl p-3"} ${corner.square} border border-border bg-surface shadow-floating ${busy ? "pulse-soft pointer-events-none" : ""}`}
+      // It grows out of its pin, as a menu does out of its control: from whichever corner of it is at the pin.
+      style={{ ...corner.style, transformOrigin: `${corner.left ? "right" : "left"} ${corner.down ? "top" : "bottom"}` }}
+      className={`popover-in fixed flex flex-col ${roomy ? "w-80 gap-4 rounded-3xl p-4" : "w-64 gap-2 rounded-2xl p-3"} ${corner.square} border border-border bg-surface shadow-floating ${busy ? "pulse-soft pointer-events-none" : ""}`}
       aria-busy={busy || undefined}
     >
       {children}
@@ -373,10 +413,13 @@ export function ResolveToggle({
 export function Replies({
   replies,
   onReply,
+  onUndo,
   startWriting = false,
   onEscape,
 }: {
   replies: Comment[];
+  /** Puts back the change Claude made for a reply of its, or makes it again. */
+  onUndo: (reply: Comment, redo: boolean) => void;
   onReply: (text: string) => Promise<boolean>;
   /** Open with the reply box ready, cursor in it. */
   startWriting?: boolean;
@@ -415,7 +458,18 @@ export function Replies({
                 <Stamp iso={reply.at} relative />
               </span>
             </p>
-            <p className="whitespace-pre-wrap text-base leading-[var(--leading-relaxed)] text-foreground">{reply.text}</p>
+            {/* Claude's word while it is still at it (a live version) is quiet, and breathes like anything else on its way; its answer takes its place. */}
+            <p className={`whitespace-pre-wrap text-base leading-[var(--leading-relaxed)] ${reply.claude ? "pulse-soft text-foreground-muted" : "text-foreground"}`}>{reply.text}</p>
+            {/* Claude's change, while the studio can still put it back itself: said so once it has been, with the way to make it again. */}
+            {reply.undo ? (
+              <div className="flex items-center gap-2 pt-1">
+                {reply.undo === "undone" ? <span className="text-ui text-foreground-subtle">Undone.</span> : null}
+                <IconButton size="sm" onClick={() => onUndo(reply, reply.undo === "undone")}>
+                  {reply.undo === "undone" ? <RedoIcon /> : <UndoIcon />}
+                  {reply.undo === "undone" ? "Redo" : "Undo"}
+                </IconButton>
+              </div>
+            ) : null}
           </div>
         </div>
       ))}
@@ -559,6 +613,7 @@ export function CommentCard({
   onLike,
   onDelete,
   onCopy,
+  onUndo,
   note,
 }: {
   comment: Comment;
@@ -572,6 +627,7 @@ export function CommentCard({
   onLike: (comment: Comment, liked: boolean) => void;
   onDelete: (comment: Comment) => void;
   onCopy: (comment: Comment) => void;
+  onUndo: (reply: Comment, redo: boolean) => void;
 }) {
   const working = useWorking(comment.id);
   // Somebody with a share link can read and answer, not resolve or delete.
@@ -610,7 +666,7 @@ export function CommentCard({
           </div>
         </div>
       </div>
-      <Replies replies={replies} onReply={(text) => onReply(comment, text)} startWriting onEscape={onClose} />
+      <Replies replies={replies} onReply={(text) => onReply(comment, text)} onUndo={onUndo} startWriting onEscape={onClose} />
     </Card>
   );
 }

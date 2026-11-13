@@ -5,13 +5,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 
 import type { CommentsUi } from "@/components/prototype/comment-parts";
 import { useCommentFocus } from "@/components/prototype/use-comment-focus";
-import { reviewPrompt, setupOf, type Anchor, type Comment } from "@/lib/comments";
+import { CLAUDE_AUTHOR, reviewPrompt, setupOf, type Anchor, type Comment } from "@/lib/comments";
 import { useStudio } from "@/lib/data/studio-store";
 import { useEditSession } from "@/components/prototype/use-edit-session";
 import type { CommentGroup } from "@/components/prototype/comments-panel";
 import { useComments, useOtherComments, useShowComments } from "@/components/prototype/use-comments";
 import { MotionSheet } from "@/components/motion";
 import { ShareMenu } from "@/components/prototype/share-menu";
+import { deviceIcons } from "@/components/prototype/view-menu";
 
 import { CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, GithubIcon } from "@/components/shell/nav-icons";
 
@@ -24,6 +25,9 @@ import { useFlag } from "@/lib/use-flag";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
+import { describePart, partIn, type Part } from "@/lib/edit-part";
+import { EditLayer } from "@/components/prototype/edit-layer";
+import { followPart } from "@/components/prototype/frame-page";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
 import { watchTaps } from "@/lib/anchor";
 import { applyEmbed } from "@/lib/embed";
@@ -110,8 +114,8 @@ export function PrototypeFrame({
   share?: { slug: string; versionKey: string; version: string };
   /** On a phone only: a control in the middle of the first row of the bar. */
   bottom?: ReactNode;
-  /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at. */
-  center?: (info: { scale: number | null }) => ReactNode;
+  /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at, and above a screen opened on the canvas the device that copy of it is on. */
+  center?: (info: { scale: number | null; device?: Device }) => ReactNode;
   /** The phone it is laid out for. */
   device: Device;
   /** Dragging an edge of the frame snaps between devices; this is told which. */
@@ -123,7 +127,7 @@ export function PrototypeFrame({
   /** A picture of the prototype, shown while the real one loads. */
   poster?: string;
   /** Which version edits are made on. Without it there is no Edit mode. */
-  edit?: { slug: string; versionId: string; variantId?: string };
+  edit?: { slug: string; versionId: string; variantId?: string; /** A live version: there is no version to save, and the edits are given to Claude to make in its code. */ live?: boolean };
   /** Which version comments are left on. Without it there are no comments. */
   comments?: {
     slug: string;
@@ -181,6 +185,15 @@ export function PrototypeFrame({
   const canvas = (canvasKind === "variants" ? variants : flowCanvas) ?? flowCanvas ?? variants ?? null;
   const showingFlow = flowOpen && !!canvas && !!addressed;
   const showingVariants = showingFlow && !!canvas?.setups;
+  // The devices on the canvas: every screen is shown on each, side by side. It opens with the main view's alone, and
+  // they are switched on and off from the bar; closed, it goes back to that one. When the main view's device is changed
+  // while it is open (the menu above an opened screen), that device takes the place of the one it was, and the others stay.
+  const [canvasOn, setCanvasOn] = useState({ open: showingFlow, main: device.id, ids: [device.id] });
+  if (canvasOn.open !== showingFlow || canvasOn.main !== device.id) {
+    const swapped = canvasOn.ids.includes(canvasOn.main) ? canvasOn.ids.map((id) => (id === canvasOn.main ? device.id : id)) : [...canvasOn.ids, device.id];
+    setCanvasOn({ open: showingFlow, main: device.id, ids: showingFlow && canvasOn.open ? [...new Set(swapped)] : [device.id] });
+  }
+  const canvasDevices = DEVICES.filter((candidate) => canvasOn.ids.includes(candidate.id));
   // A canvas that was just closed stays loaded (out of sight, and not looking at anything) for a couple of minutes, so
   // going back to it is instant rather than a dozen pages loading again. Only the one that was opened, and only for the
   // version it was opened on.
@@ -213,7 +226,10 @@ export function PrototypeFrame({
   const showPins = pinsChosen && !minimal;
   // The setup on screen: the page's, and a flow screen's own parameters on top while one is open, so a comment left there goes back there.
   const setupOnScreen = setupOf(withParams(`?${commentsOf?.variant ?? ""}`, screen?.params ?? {}).split("?")[1]);
-  const { comments, everything, replies, error: commentsError, add: postComment, reply: replyToComment, resolve: resolveComment, like: likeComment, remove: deleteComment } = useComments(commentsOf?.slug, commentsOf?.version, user.name, setupOnScreen, showPins || mode === "comment");
+  // A live version's edits, given to Claude to make in the code: the comment that stands for them, and which reply of
+  // Claude's to it has been said something about. They stay on screen until Claude has made them.
+  const [given, setGiven] = useState<{ id: string; noted?: string } | null>(null);
+  const { comments, everything, replies, error: commentsError, add: postComment, reply: replyToComment, resolve: resolveComment, like: likeComment, remove: deleteComment, undo: undoChange, changed, refresh: refreshComments } = useComments(commentsOf?.slug, commentsOf?.version, user.name, setupOnScreen, showPins || mode === "comment" || !!given);
   const others = useOtherComments(commentsOf?.slug, (commentsOf?.versions ?? []).map((item) => item.key).filter((key) => key !== commentsOf?.version), !dev && (showPins || mode === "comment"));
   const groups: CommentGroup[] = (commentsOf?.versions ?? []).map((item) => ({
     key: item.key,
@@ -223,6 +239,20 @@ export function PrototypeFrame({
   const allReplies = { ...replies };
   for (const list of Object.values(others)) for (const item of list) if (item.parentId) (allReplies[item.parentId] ??= []).push(item);
   const { notify } = useStudio();
+  // Claude's change put back by the studio itself, or made again; said in a toast, as is why when it couldn't be.
+  const undoClaude = async (reply: Comment, redo = false) => {
+    const stopped = await undoChange(reply, redo);
+    notify(stopped ?? (redo ? "Redone" : "Undone"), !!stopped);
+  };
+  // A change of Claude's that arrived while this page watched it work is said once, with the way to undo it.
+  // Once per change, whatever else is drawn again meanwhile: what says it is read as it is at that moment.
+  const saying = useRef({ notify, undoClaude });
+  useEffect(() => {
+    saying.current = { notify, undoClaude };
+  });
+  useEffect(() => {
+    if (changed) saying.current.notify("Claude made the change.", false, { label: "Undo", onPress: () => void saying.current.undoClaude(changed) });
+  }, [changed]);
   // Asked before leaving edit mode with changes that would be lost.
   const [leaving, setLeaving] = useState(false);
   const copyForClaude = async (list: Comment[]) => {
@@ -237,12 +267,28 @@ export function PrototypeFrame({
   const [listOpen, setListOpen] = useState(false);
   const openCount = everything.filter((comment) => !comment.resolvedAt).length;
   // The panel keeps showing what it held while it closes.
-  const panelOpen = (dev && !showingFlow) || (commenting && listing);
+  // The part picked: the element itself on a page the studio can read, or on one it can't (a live version, on another
+  // address) the frame it is in and that page's own description of it, kept up to date by the page. Either way the
+  // panel is given a description.
+  const [target, setTarget] = useState<Element | null>(null);
+  const [remote, setRemote] = useState<{ frame: HTMLIFrameElement; part: Part } | null>(null);
+  const part = editing && target?.isConnected ? describePart(target) : editing ? (remote?.part ?? null) : null;
+  const remoteFrame = remote?.frame;
+  const remoteSelector = remote?.part.selector;
+  useEffect(() => {
+    if (!remoteFrame || !remoteSelector) return undefined;
+    const still = (now: { frame: HTMLIFrameElement; part: Part } | null) => now?.frame === remoteFrame && now.part.selector === remoteSelector;
+    return followPart(remoteFrame, remoteSelector, (heard) => setRemote((now) => (still(now) ? (heard ? { frame: remoteFrame, part: heard } : null) : now)));
+  }, [remoteFrame, remoteSelector]);
+  // On the canvas it opens for an element selected there, and closes when that is let go of.
+  const panelOpen = (dev && !showingFlow) || (editing && showingFlow && !!part) || (commenting && listing);
   const [panelKind, setPanelKind] = useState<"dev" | "edit" | "comments">("dev");
   const wantedKind = editing ? "edit" : dev ? "dev" : "comments";
   if (panelOpen && panelKind !== wantedKind) setPanelKind(wantedKind);
-  const session = useEditSession(url);
-  const [target, setTarget] = useState<Element | null>(null);
+  // The frames the version is on screen in: the prototype's own, or on the canvas one a screen, and an edit is drawn in all of them (see `useEditSession`).
+  const canvasBox = useRef<HTMLDivElement>(null);
+  const editFrames = () => [...((showingFlow ? canvasBox.current : stage.current)?.querySelectorAll("iframe") ?? [])];
+  const session = useEditSession(url, editFrames);
   // While Selecting, clicks pick a part; while Interacting they go to the prototype, to move between screens.
   const [interacting, setInteracting] = useState(false);
   const show = (screen: FlowScreen) => {
@@ -276,13 +322,14 @@ export function PrototypeFrame({
   const withAsked = asked ? [...comments, asked] : comments;
   const commentsUi: CommentsUi | null =
     commentsOf && !dev
-      ? { list: withAsked, visible: !bare && (showPins || commenting), placing: commenting && !interacting, focus, onFocus: ask, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]) }
+      ? { list: withAsked, visible: !bare && (showPins || commenting), placing: commenting && !interacting, focus, onFocus: ask, replies, onAdd: addComment, onReply: replyToComment, onResolve: resolveComment, onLike: likeComment, onDelete: deleteComment, onCopy: (comment) => void copyForClaude([comment]), onUndo: (reply, redo) => void undoClaude(reply, redo) }
       : null;
   const [seen, setSeen] = useState<{ url?: string; picked: Picked | null; motion: MotionSeen[] }>({ picked: null, motion: [] });
   const here = seen.url === url ? seen : { url, picked: null, motion: [] as MotionSeen[] };
   // ⌘Z undoes, ⇧⌘Z and ⌘Y redo, whether the focus is in the studio or in the prototype.
   const deselect = () => {
     setTarget(null);
+    setRemote(null);
     setSeen((now) => ({ ...now, picked: null }));
   };
   // Counts restarts: a new key remounts the frame, which loads the same address afresh.
@@ -294,14 +341,67 @@ export function PrototypeFrame({
   };
 
   const leaveMode = () => {
+    deselect();
+    setGiven(null);
     session.discard();
     setInteracting(false);
     changeMode("view");
   };
   const exitMode = () => {
-    if (editing && session.edits.length) setLeaving(true);
+    // Edits not saved are asked about whichever mode is being left: a live version's stay on while Claude's question about them is answered.
+    if (session.edits.length) setLeaving(true);
     else leaveMode();
   };
+
+  // On the canvas nobody chooses to edit: selecting an element there is what starts it, and letting go of it with
+  // nothing changed is what ends it. With edits made, the mode stays until they are saved or cancelled.
+  const letGo = () => {
+    if (showingFlow && editing && !session.edits.length) leaveMode();
+    else deselect();
+  };
+  // A part picked through a frame's page (the canvas; a live version): held as the element where the page can be read.
+  const pickPart = (frame: HTMLIFrameElement | null, found: Part | null) => {
+    const element = found && frame?.contentDocument ? partIn(frame.contentDocument, found.selector) : null;
+    if (!frame || !found || (frame.contentDocument && !element)) return letGo();
+    setTarget(element);
+    setRemote(element ? null : { frame, part: found });
+    if (!editing) changeMode("edit");
+  };
+
+  // Claude's last word on the edits it was given (see `given`), and whether it is still at them.
+  const answer = given ? (replies[given.id] ?? []).filter((reply) => reply.author.login === CLAUDE_AUTHOR.login).at(-1) : undefined;
+  const waiting = !!given && (!answer || !!answer.claude);
+  // While Claude has the edits nothing more is added to them: what it was given is what it makes, and the rest would be lost.
+  const typeOver = (over: Part, text: string) => {
+    if (!waiting) session.setText(over, text);
+  };
+  const settleGiven = () => {
+    if (!given || !answer || answer.claude || answer.id === given.noted) return;
+    if (answer.undo === "offered") {
+      // In the code now, and the page has reloaded with it: the preview is dropped, and each page loaded again so only the real change shows.
+      session.forget();
+      for (const frame of editFrames()) if (!frame.contentDocument && frame.getAttribute("src")) frame.setAttribute("src", frame.getAttribute("src")!);
+      deselect();
+      setGiven(null);
+      if (editing) changeMode("view");
+    } else {
+      // A question, or it couldn't: nothing of the person's is lost, and it says so.
+      setGiven({ ...given, noted: answer.id });
+      notify("Not in the code yet. Claude replied in the thread.", true, {
+        label: "Open",
+        onPress: () => {
+          changeMode("comment");
+          ask(given.id);
+        },
+      });
+    }
+  };
+  // Looked at each time Claude's answer changes, as things are at that moment.
+  const settling = useRef(settleGiven);
+  useEffect(() => {
+    settling.current = settleGiven;
+  });
+  useEffect(() => settling.current(), [given?.id, answer?.id, answer?.claude, answer?.undo]);
 
   const hotkey = (event: KeyboardEvent) => {
     // A dialog is asking something: its keys are its own.
@@ -321,11 +421,8 @@ export function PrototypeFrame({
       if (event.key.toLowerCase() === "c" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         if (commenting) changeMode("view");
-        else {
-          // The same as the comment button: commenting, with the list beside the prototype.
-          changeMode("comment");
-          setListing(true);
-        }
+        // Commenting only: the list beside the prototype is opened from the comment button, not from the key.
+        else changeMode("comment");
         return;
       }
       if (event.key === "Escape" && commenting) {
@@ -358,10 +455,10 @@ export function PrototypeFrame({
     }
     if (event.key === "Escape" && dev) {
       // With a part picked, Escape only lets go of it; the prototype never sees the key.
-      if (target || here.picked) {
+      if (part || here.picked) {
         event.preventDefault();
         event.stopPropagation();
-        deselect();
+        letGo();
       } else {
         // Nothing picked: Escape leaves the mode, asking first if there are edits that would be lost.
         exitMode();
@@ -400,7 +497,7 @@ export function PrototypeFrame({
   const inspect = {
     onKey: hotkey,
     onEdit: (element: Element) => {
-      if (editing) editInPlace(element as HTMLElement, (text) => session.setText(element, text));
+      if (editing) editInPlace(element as HTMLElement, (text) => typeOver(describePart(element), text));
     },
     onPick: (picked: Picked, element: Element) => {
       setSeen({ ...here, url, picked });
@@ -515,17 +612,20 @@ export function PrototypeFrame({
     <div className={`flex w-full gap-4 lg:h-full ${bare ? "h-dvh" : "h-[var(--frame-height)]"}`}>
     <div
       // Clicking the tile around the phone lets go of what was picked, unless it was a button that was pressed. A click inside the prototype never reaches here.
-      onClick={(event) => dev && !(event.target as Element).closest("button, a") && deselect()}
+      // On the canvas that is the canvas's own to decide: a click there may be the picking itself.
+      onClick={(event) => dev && !showingFlow && !(event.target as Element).closest("button, a") && deselect()}
       className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${bare ? "" : "max-sm:px-6 max-sm:pb-14 max-sm:pt-8"} ${fullscreen ? "lg:rounded-none" : ""}`}
     >
-      <div key={dev || commenting ? "mode" : "view"} style={bare ? { display: "none" } : undefined} className="bar-in relative z-[var(--z-raised)] grid min-h-16 items-center gap-3 max-sm:mb-2 max-sm:grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] sm:px-8 sm:py-8">
+      {/* The bar lies over the top of the canvas: only its controls take a press, so a screen or button under the gaps between them can still be used. */}
+      <div key={dev || commenting ? "mode" : "view"} style={bare ? { display: "none" } : undefined} className="bar-in pointer-events-none relative z-[var(--z-raised)] grid *:pointer-events-auto min-h-16 items-center gap-3 max-sm:mb-2 max-sm:grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] sm:px-8 sm:py-8">
         {dev || commenting ? (
           // Editing, dev or comment mode is the only thing going on: a way out, how clicks behave, and (editing) undo, redo and Save.
           <>
             <IconButton onClick={exitMode} className="justify-self-start">
               {editing || commenting ? "Cancel" : "Exit"}
             </IconButton>
-            <div className={`justify-self-center ${commenting ? "" : "hidden sm:block"}`}>
+            {/* Not while editing on the canvas: a screen there is selected in, never used. */}
+            <div className={`justify-self-center ${commenting ? "" : dev && showingFlow ? "hidden" : "hidden sm:block"}`}>
               <Toggle
                 label="Clicking"
                 value={interacting ? "interact" : "select"}
@@ -537,7 +637,27 @@ export function PrototypeFrame({
               />
             </div>
             <div className="[grid-column:3] justify-self-end">
-              {editing && edit ? <EditBar session={session} slug={edit.slug} baseVersionId={edit.versionId} variantId={edit.variantId} /> : null}
+              {editing && edit ? <EditBar
+                  session={session}
+                  slug={edit.slug}
+                  baseVersionId={edit.versionId}
+                  variantId={edit.variantId}
+                  versionOnly={showingFlow}
+                  live={
+                    edit.live
+                      ? {
+                          setup: setupOnScreen,
+                          frames: editFrames,
+                          waiting,
+                          note: given?.noted && answer?.id === given.noted ? "Not in the code yet: Claude replied in the thread. Your edits are still here." : undefined,
+                          onGiven: (comment) => {
+                            setGiven({ id: comment.id });
+                            refreshComments();
+                          },
+                        }
+                      : undefined
+                  }
+                /> : null}
               {commenting ? (
                 <>
                   <span className="sm:hidden">
@@ -599,15 +719,37 @@ export function PrototypeFrame({
             {/* Picking a phone makes no sense on a phone. */}
             <div className="hidden justify-self-center sm:block">
               {showingFlow ? (
-                flow && variants ? (
-                  <div className="flex items-center gap-2" role="group" aria-label="Canvas">
-                    {(["flow", "variants"] as const).map((kind) => (
-                      <IconButton key={kind} aria-pressed={(showingVariants ? "variants" : "flow") === kind} onClick={() => setCanvasKind(kind)} className={(showingVariants ? "variants" : "flow") === kind ? controlOn : ""}>
-                        {kind === "flow" ? "Flow" : "Variants"}
-                      </IconButton>
-                    ))}
+                <div className="flex items-center gap-6">
+                  {flow && variants ? (
+                    <div className="flex items-center gap-2" role="group" aria-label="Canvas">
+                      {(["flow", "variants"] as const).map((kind) => (
+                        <IconButton key={kind} aria-pressed={(showingVariants ? "variants" : "flow") === kind} onClick={() => setCanvasKind(kind)} className={(showingVariants ? "variants" : "flow") === kind ? controlOn : ""}>
+                          {kind === "flow" ? "Flow" : "Variants"}
+                        </IconButton>
+                      ))}
+                    </div>
+                  ) : null}
+                  {/* The devices the screens are shown on, each switched on or off on its own: one always stays on. */}
+                  <div className="flex items-center gap-2" role="group" aria-label="Devices">
+                    {DEVICES.map((option) => {
+                      const on = canvasOn.ids.includes(option.id);
+                      const Icon = deviceIcons[option.id];
+                      return (
+                        <IconButton
+                          key={option.id}
+                          label={option.name}
+                          aria-pressed={on}
+                          // The last one on stays on.
+                          aria-disabled={on && canvasOn.ids.length === 1}
+                          onClick={() => (on && canvasOn.ids.length === 1 ? undefined : setCanvasOn({ ...canvasOn, ids: on ? canvasOn.ids.filter((id) => id !== option.id) : [...canvasOn.ids, option.id] }))}
+                          className={on ? controlOn : ""}
+                        >
+                          <Icon />
+                        </IconButton>
+                      );
+                    })}
                   </div>
-                ) : null
+                </div>
               ) : (
                 center?.({ scale })
               )}
@@ -681,7 +823,10 @@ export function PrototypeFrame({
               device={shown}
               fill={fill}
               sizing={sizing}
-              inspect={dev ? { ...inspect, picking: !interacting } : null}
+              // Behind the canvas nothing is picked in it: the canvas does its own picking.
+              inspect={dev && !showingFlow ? { ...inspect, picking: !interacting } : null}
+              // A page on another address (a live version) can't be picked from inside: it is asked, through the studio's own layer over it.
+              across={editing && !interacting && !showingFlow ? { part, onPick: pickPart, onText: typeOver } : null}
               onKey={(event) => hotkeyRef.current(event)}
               comments={showingFlow ? null : commentsUi}
               onPlace={onPlace}
@@ -719,7 +864,7 @@ export function PrototypeFrame({
       ) : null}
 
       {(showingFlow || (canvasKey && warmKey === canvasKey)) && canvas && addressed ? (
-        <div inert={!showingFlow} className={`absolute inset-0 ${showingFlow ? "" : "pointer-events-none invisible"}`}>
+        <div ref={canvasBox} inert={!showingFlow} className={`absolute inset-0 ${showingFlow ? "" : "pointer-events-none invisible"}`}>
           <FlowCanvas
             // The two canvases are different layouts of different screens, so each starts afresh.
             key={canvas.setups ? "variants" : "flow"}
@@ -727,9 +872,15 @@ export function PrototypeFrame({
             setups={canvas.setups}
             base={addressed.split("?")[0]}
             device={device}
+            devices={canvasDevices}
+            controls={center}
+            zoom={zoom}
+            fit={fit}
             // Closed, it isn't looking for pins.
             // The pins are on the canvas whenever it is open, not only while commenting: the eye switch is for the prototype itself.
             comments={showingFlow && commentsUi ? { ...commentsUi, visible: true, ...(canvas.setups ? { list: everything } : {}) } : undefined}
+            // Wherever the version can be edited, and nothing else is going on: not on a share page or a phone, nor on a live version (no `edit`).
+            picking={showingFlow && edit && !minimal && !narrow && !bare && (mode === "view" || editing) ? { target: part, onPick: pickPart, onText: typeOver, busy: editing && (session.edits.length > 0 || session.canUndo || session.canRedo), onPage: session.redraw } : undefined}
           />
         </div>
       ) : null}
@@ -737,7 +888,7 @@ export function PrototypeFrame({
 
     {/* Its own panel beside the canvas, as tall as the canvas without making it taller. It stays mounted so it can open and close. */}
     <div
-      inert={!panelOpen}
+      inert={!panelOpen || waiting}
       className={`relative hidden shrink-0 transition-[width,margin,visibility] duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:block ${
         // Hidden outright once it has gone, not only moved out of sight.
         panelOpen ? "w-[var(--dev-panel-width)]" : "invisible -ml-4 w-0"
@@ -746,11 +897,13 @@ export function PrototypeFrame({
       {/* It travels in from the right and fades in as the space opens for it, at the same pace as the left column goes. */}
       <div
         className={`absolute inset-y-0 right-0 w-[var(--dev-panel-width)] overflow-y-auto rounded-[var(--r-tile)] ${fullscreen ? "lg:rounded-none" : ""} bg-tile transition-[translate,opacity] duration-[var(--dur-standard)] ease-[var(--curve-standard)] [scrollbar-width:thin] ${
-          panelOpen ? "" : "translate-x-full opacity-0"
-        }`}
+          // With reduced motion it only fades: the travel is left out.
+          panelOpen ? "" : "translate-x-full opacity-0 motion-reduce:translate-x-0"
+          // Breathing, and out of reach, while Claude has a live version's edits.
+        } ${waiting ? "pulse-soft" : ""}`}
       >
         {panelKind === "edit" && edit ? (
-          <EditPanel element={target?.isConnected ? target : null} session={session} />
+          <EditPanel part={part} session={session} />
         ) : panelKind === "comments" ? (
           <CommentsPanel groups={groups} currentKey={commentsOf?.version ?? ""} setupLabel={commentsOf?.setupLabel} replies={allReplies} selectedId={focus?.id ?? null} error={commentsError} onSelect={choose} onResolve={resolveComment} onDelete={deleteComment} onCopy={copyForClaude} />
         ) : (
@@ -838,6 +991,7 @@ function FrameBody({
   fill,
   sizing,
   inspect,
+  across,
   onKey,
   comments,
   onPlace,
@@ -852,6 +1006,8 @@ function FrameBody({
   /** The device has just changed, or full screen has: the prototype is resized with its frame rather than at once. */
   sizing: Sizing;
   inspect: { picking: boolean; onPick: (picked: Picked, element: Element) => void; onMotion: (seen: MotionSeen) => void; onEdit: (element: Element) => void; onKey: (event: KeyboardEvent) => void } | null;
+  /** Edit mode on a page on another address (a live version), which `inspect` can't reach into: the part picked, and what to tell (see `EditLayer`). */
+  across: { part: Part | null; onPick: (frame: HTMLIFrameElement, part: Part | null) => void; onText: (part: Part, text: string) => void } | null;
   /** Keys pressed inside the prototype, for the studio's own shortcuts. Dev mode takes them through `inspect` instead. */
   onKey: (event: KeyboardEvent) => void;
   comments: CommentsUi | null;
@@ -864,8 +1020,11 @@ function FrameBody({
   const [documents, setDocuments] = useState(0);
   const frame = useRef<HTMLIFrameElement>(null);
 
+  // Whether the page that loaded is on another address (a live version's dev server), which can't be read from here.
+  const [elsewhere, setElsewhere] = useState(false);
   const arrived = () => {
     setLoaded(true);
+    setElsewhere(!frame.current?.contentDocument);
     setDocuments((count) => count + 1);
   };
 
@@ -967,6 +1126,7 @@ function FrameBody({
         sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
       />
       ) : null}
+      {scale && across && elsewhere ? <EditLayer frame={frame} scale={scale} part={across.part} onPick={across.onPick} onText={across.onText} /> : null}
       {scale && comments ? <CommentLayer key={comments.placing ? "placing" : "looking"} frame={frame} scale={scale} comments={comments} /> : null}
       {loaded ? null : poster && !posterFailed ? (
         // The same picture the tile shows, so the page looks right at once and

@@ -140,3 +140,27 @@ export function splitQuery(query: string, controls: Controls | null) {
   });
   return { values, extra };
 }
+
+/** The controls a setup sets, in words: an option's label, a toggle's name, a range's name and value. Others in the query are left out. */
+export function controlsInWords(setup: string, controls: Controls | null) {
+  const params = new URLSearchParams(setup);
+  const parts: string[] = [];
+  for (const control of controls?.controls ?? []) {
+    const raw = params.get(control.param ?? control.id);
+    if (raw === null) continue;
+    parts.push(
+      control.type === "toggle"
+        ? control.label
+        : control.type === "range"
+          ? `${control.label} ${raw}`
+          : control.type === "multi"
+            ? raw
+                .split(",")
+                .filter(Boolean)
+                .map((value) => control.options.find((option) => option.value === value)?.label ?? value)
+                .join(", ") || `No ${control.label}`
+            : (control.options.find((option) => option.value === raw)?.label ?? raw),
+    );
+  }
+  return parts;
+}

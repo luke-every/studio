@@ -207,6 +207,14 @@ export function PencilIcon(props: IconProps) {
   );
 }
 
+export function PlayIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M5.25 3.6v8.8a.5.5 0 0 0 .76.43l7.1-4.4a.5.5 0 0 0 0-.86l-7.1-4.4a.5.5 0 0 0-.76.43Z" />
+    </Frame>
+  );
+}
+
 export function FitIcon(props: IconProps) {
   return (
     <Frame {...props}>

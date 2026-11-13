@@ -225,6 +225,7 @@
  *               fades the page behind back to clear
  * popover-in    a menu grows out of the control that opened it; set
  *               `transform-origin` to that control's corner
+ * popover-out   and goes back into it the same way, in reverse
  *
  * Animated while MOTION_ENABLED is off, like the other presets here. Reduced
  * motion removes the scale and travel and keeps the fade.
@@ -262,6 +263,13 @@
   }
 }
 
+@keyframes popover-out {
+  to {
+    opacity: 0;
+    transform: scale(var(--motion-pop-scale));
+  }
+}
+
 /* bar-in — the top bar's controls give way to another set (looking, editing,
  * dev mode): the new set settles in from a touch above. */
 @keyframes bar-in {
@@ -293,6 +301,10 @@
 
 @utility popover-in {
   animation: popover-in var(--dur-fast) var(--curve-entrance) both;
+}
+
+@utility popover-out {
+  animation: popover-out var(--dur-fast) var(--curve-exit) both;
 }
 
 /* ---------------------------------------------------------------------------

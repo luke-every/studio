@@ -6,7 +6,10 @@ import type { EditSession } from "@/components/prototype/use-edit-session";
 import { RedoIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
-import { saveEdits } from "@/lib/registry/actions";
+import { applyEditsWithClaude, saveEdits } from "@/lib/registry/actions";
+import type { Comment } from "@/lib/comments";
+
+import { pageOf } from "./frame-page";
 import { useUser } from "@/lib/use-user";
 
 const NAME_KEY = "studio.name";
@@ -24,18 +27,31 @@ const rememberedName = () => {
  * A variant keeps the edits as a named option beside the version's others,
  * shown only when picked, so the version itself stays as it was. The first
  * time, a guest is asked whose edits these are, and it remembers.
+ *
+ * On a live version (`live`) there is no version to save: the edits are a
+ * preview on the running page, and the button gives them to Claude to make in
+ * the prototype's code, as a comment (see `applyEdits` in the registry).
  */
 export function EditBar({
   session,
   slug,
   baseVersionId,
   variantId,
+  versionOnly = false,
+  live,
 }: {
   session: EditSession;
   slug: string;
   baseVersionId: string;
   /** The variant being looked at, which a new one is built on. */
   variantId?: string;
+  /** No Save as variant: on the canvas an edit is drawn on every screen, which is what saving a version does and saving a variant would not. */
+  versionOnly?: boolean;
+  /**
+   * A live version: the setup on screen, the frames it is on screen in, and what to tell once Claude has the edits
+   * (the comment that stands for them). `waiting` is Claude at work on them; `note` says where they stand otherwise.
+   */
+  live?: { setup?: string; frames: () => HTMLIFrameElement[]; onGiven: (comment: Comment) => void; waiting: boolean; note?: string };
 }) {
   const { notify } = useStudio();
   const user = useUser();
@@ -55,6 +71,17 @@ export function EditBar({
     }
     setSaving(true);
     setAsking(null);
+    if (live) {
+      // Pinned to the first thing changed, on whichever screen has it.
+      const changes = session.changes();
+      let anchor = null;
+      for (const frame of live.frames()) anchor ??= await pageOf(frame).anchorOf(changes[0].edit.selector);
+      const result = anchor ? await applyEditsWithClaude({ slug, changes, anchor, variant: live.setup, by: by.trim() }) : { ok: false as const, error: "What you edited isn't on the page any more, so there was nowhere to pin this." };
+      setSaving(false);
+      if (result.ok) live.onGiven(result.value);
+      else notify(result.error, true);
+      return;
+    }
     const form = new FormData();
     form.set("slug", slug);
     form.set("baseVersionId", baseVersionId);
@@ -89,19 +116,24 @@ export function EditBar({
     save(name, { id: `${slugged}-${Math.random().toString(36).slice(2, 6)}`, label });
   };
 
+  const busy = saving || !!live?.waiting;
+
   return (
     <div className="relative flex items-center gap-2">
-      <IconButton label="Undo (⌘Z)" onClick={session.undo} disabled={!session.canUndo || saving}>
+      {live?.note && !busy ? <span className="max-w-64 text-ui leading-[var(--leading-snug)] text-foreground-muted">{live.note}</span> : null}
+      <IconButton label="Undo (⌘Z)" onClick={session.undo} disabled={!session.canUndo || busy}>
         <UndoIcon />
       </IconButton>
-      <IconButton label="Redo (⌘⇧Z)" onClick={session.redo} disabled={!session.canRedo || saving}>
+      <IconButton label="Redo (⌘⇧Z)" onClick={session.redo} disabled={!session.canRedo || busy}>
         <RedoIcon />
       </IconButton>
-      <IconButton onClick={() => setAsking(asking === "variant" ? null : "variant")} disabled={!count || saving} aria-expanded={asking === "variant"}>
-        Save as variant
-      </IconButton>
-      <IconButton variant="primary" onClick={() => save(name)} disabled={!count || saving} loading={saving}>
-        Save
+      {versionOnly || live ? null : (
+        <IconButton onClick={() => setAsking(asking === "variant" ? null : "variant")} disabled={!count || saving} aria-expanded={asking === "variant"}>
+          Save as variant
+        </IconButton>
+      )}
+      <IconButton variant="primary" onClick={() => save(name)} disabled={!count || busy} loading={busy}>
+        {live ? "Apply with Claude" : "Save"}
       </IconButton>
 
       {asking ? (
@@ -145,7 +177,7 @@ export function EditBar({
             </>
           ) : null}
           <IconButton variant="primary" type="submit" disabled={asking === "variant" ? !variantName.trim() || !name.trim() : !name.trim()}>
-            {asking === "variant" ? "Save variant" : "Save version"}
+            {asking === "variant" ? "Save variant" : live ? "Apply with Claude" : "Save version"}
           </IconButton>
         </form>
       ) : null}

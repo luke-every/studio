@@ -22,7 +22,7 @@ import {
   updatePrototype as updatePrototypeAction,
   type WriteResult,
 } from "@/lib/registry/actions";
-import { Toast, useToast } from "@/components/ui/toast";
+import { Toast, useToast, type ToastAction } from "@/components/ui/toast";
 import { summariseTeam, type OpenTimes, type TeamSummary } from "@/lib/registry/select";
 import type { Project, Prototype, RegistrySnapshot } from "@/lib/registry/types";
 
@@ -56,7 +56,7 @@ type StudioContextValue = {
   /** Which saves are in flight, by the keys they were started with. */
   isSaving: (key: string) => boolean;
   /** Say something short at the top of the screen. */
-  notify: (message: string, error?: boolean) => void;
+  notify: (message: string, error?: boolean, action?: ToastAction) => void;
   markOpened: (prototypeSlug: string) => void;
   opened: OpenTimes;
   saving: boolean;
@@ -93,6 +93,7 @@ export function StudioProvider({
   const toast = useToast();
   const [toastText, setToastText] = useState("");
   const [toastError, setToastError] = useState(false);
+  const [toastAction, setToastAction] = useState<ToastAction>();
   const [opened, setOpened] = useState<OpenTimes>({});
 
   // A save is live for everyone as soon as it lands, so all that is left is
@@ -144,10 +145,11 @@ export function StudioProvider({
   );
 
   const notify = useCallback(
-    (message: string, error = false) => {
+    (message: string, error = false, action?: ToastAction) => {
       setToastText(message);
       setToastError(error);
-      toast.show();
+      setToastAction(action);
+      toast.show(!!action);
     },
     [toast],
   );
@@ -236,7 +238,12 @@ export function StudioProvider({
   return (
     <StudioContext.Provider value={value}>
       {children}
-      <Toast state={toast.state} onDone={toast.done} error={toastError}>
+      <Toast
+        state={toast.state}
+        onDone={toast.done}
+        error={toastError}
+        action={toastAction && { label: toastAction.label, onPress: () => (toast.leave(), toastAction.onPress()) }}
+      >
         {toastText}
       </Toast>
     </StudioContext.Provider>

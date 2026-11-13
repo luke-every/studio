@@ -111,3 +111,48 @@ export function bestPerRow(flow: Flow, cell: { width: number; height: number }, 
   }
   return best;
 }
+
+/** What one copy of a screen is called: the screen as one device shows it. A device's id has no slash in it, so the screen's is everything after the first. */
+export const copyKey = (device: string, id: string) => `${device}/${id}`;
+export const screenOfCopy = (key: string) => key.slice(key.indexOf("/") + 1);
+
+/**
+ * Several devices' copies of every screen, each screen's side by side where the layout put the screen: the first
+ * device's where it was, the next to its right after `gap`, and so on. A screen's copies stay together, so the same
+ * screen is seen at each size at a glance. Each is placed under its copy's key.
+ */
+export function spreadCopies(placed: Map<string, Placed>, devices: { id: string; width: number }[], gap: number) {
+  const copies = new Map<string, Placed>();
+  let x = 0;
+  for (const device of devices) {
+    for (const [id, spot] of placed) copies.set(copyKey(device.id, id), { x: spot.x + x, y: spot.y });
+    x += device.width + gap;
+  }
+  return copies;
+}
+
+/**
+ * How far what is at `point` moved when the copies were laid out again (a device switched on or off): as far as the
+ * copy nearest it that is in both layouts. Somebody who has moved the view is kept looking at the same thing by moving
+ * the view as far.
+ */
+export function followShift(before: Map<string, Placed>, after: Map<string, Placed>, point: Placed) {
+  let held: { id: string; spot: Placed; away: number } | null = null;
+  for (const [id, spot] of before) {
+    const away = Math.hypot(spot.x - point.x, spot.y - point.y);
+    if (after.has(id) && (!held || away < held.away)) held = { id, spot, away };
+  }
+  const now = held && after.get(held.id);
+  return held && now ? { x: now.x - held.spot.x, y: now.y - held.spot.y } : { x: 0, y: 0 };
+}
+
+/**
+ * The scale and place that show a canvas `content` big in a `room` with `inset` kept clear around it: as tall as the
+ * room, and as wide as the row is, the start of it at the left unless all of it fits.
+ */
+export function fitView(content: { width: number; height: number }, room: { width: number; height: number }, inset: { top: number; side: number }, least: number) {
+  const space = { width: room.width - inset.side * 2, height: room.height - inset.top - inset.side };
+  const scale = Math.max(least, Math.min(1, space.height / content.height));
+  const across = content.width * scale;
+  return { scale, x: across <= space.width ? (room.width - across) / 2 : inset.side, y: inset.top + (space.height - content.height * scale) / 2 };
+}

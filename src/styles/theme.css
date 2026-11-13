@@ -28,6 +28,10 @@
   --surface-elevated: #ffffff;
   --surface-inset: var(--paper-200);
   --surface-hover: var(--alpha-ink-04);
+  /* A solid control under the pointer: the surface with the same tint mixed into it, not laid over whatever is
+     behind. A control can sit over a prototype (the canvas), where a see-through hover would show the page through it.
+     Worked out from the surface and the text colour, so it follows each theme. */
+  --control-hover: color-mix(in oklab, var(--surface) 95%, var(--foreground));
   --surface-pressed: var(--alpha-ink-08);
 
   /* A feed tile. */
@@ -67,6 +71,9 @@
 
   --focus-ring: var(--ink-900);
   --scrim: color-mix(in oklab, var(--ink-900) 32%, transparent);
+  /* The element a comment would be pinned to: a faint dark fill inside a dark edge. It lies over a prototype's page, not the studio's, so it is the same in every theme. */
+  --pin-target-fill: color-mix(in oklab, var(--ink-900) 10%, transparent);
+  --pin-target-edge: color-mix(in oklab, var(--ink-900) 70%, transparent);
 
   --shadow-color-mix: var(--alpha-ink-12);
 

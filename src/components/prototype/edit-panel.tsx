@@ -6,7 +6,8 @@ import { PanelEmpty } from "@/components/prototype/panel-empty";
 import { PencilIcon } from "@/components/shell/nav-icons";
 import type { EditSession } from "@/components/prototype/use-edit-session";
 import { Check, Choice, ColorField, Field, Glyph, NumberField, PanelButton, Row, Section, SelectField } from "@/components/prototype/edit-fields";
-import { parseShadow, pictureOf, rgbaOf, shadowCss, sizeProperties, sizingOf, textOf, toRgba, type Axis, type Shadow, type Sizing } from "@/lib/edit-dom";
+import { parseShadow, rgbaOf, shadowCss, toRgba, type Axis, type Shadow, type Sizing } from "@/lib/edit-dom";
+import type { Part } from "@/lib/edit-part";
 
 /**
  * Edit mode's side panel: the part of the prototype that was clicked, as
@@ -14,26 +15,28 @@ import { parseShadow, pictureOf, rgbaOf, shadowCss, sizeProperties, sizingOf, te
  *
  * Changes show on the real prototype as they are made. Saving is in the top
  * bar (see `EditBar`).
+ *
+ * It works from a description of the part (`Part`), not the element itself,
+ * so it is the same panel for a page the studio reads directly and for a live
+ * version's, which describes its own parts from another address.
  */
-export function EditPanel({ element, session }: { element: Element | null; session: EditSession }) {
+export function EditPanel({ part: element, session }: { part: Part | null; session: EditSession }) {
   // Values are read from the page, so they are read again after each change.
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
-  const view = element?.ownerDocument.defaultView ?? null;
-  const css = element && view ? view.getComputedStyle(element) : null;
-  const read = (property: string) => css?.getPropertyValue(property).trim() ?? "";
-  const text = element ? textOf(element) : null;
+  const read = (property: string) => element?.css[property] ?? "";
+  const text = element ? element.text : null;
   // The picture to swap: this element's, or a background image on something around it.
-  const picture = element ? pictureOf(element) : null;
-  const flex = css ? css.display.includes("flex") || css.display.includes("grid") : false;
+  const picture = element ? element.picture : null;
+  const flex = /flex|grid/.test(read("display"));
   const column = read("flex-direction").startsWith("column");
-  const inFlexParent = element?.parentElement && view ? /flex|grid/.test(view.getComputedStyle(element.parentElement).display) : false;
+  const inFlexParent = element ? /flex|grid/.test(element.parentDisplay) : false;
   const positioned = read("position") !== "static";
   const shadow = parseShadow(read("box-shadow"));
   const SHADOW: Shadow = { x: 0, y: 4, blur: 12, spread: 0, color: "rgba(0, 0, 0, 0.2)" };
   const setShadow = (change: Partial<Shadow>) => set(["box-shadow", shadowCss({ ...(shadow ?? SHADOW), ...change })]);
   const blurOf = (property: string) => read(property).match(/blur\(([\d.]+)px\)/)?.[1] ?? "0";
-  const sizing = (axis: Axis) => (element ? sizingOf(element, axis) : "fixed");
+  const sizing = (axis: Axis) => (element ? element.sizing[axis] : "fixed");
   /** How big it is along an axis: its own size, or what it fills or hugs, as a mode with the number only when fixed. */
   const dimension = (axis: Axis, caption: string) => {
     const mode = sizing(axis);
@@ -43,7 +46,7 @@ export function EditPanel({ element, session }: { element: Element | null; sessi
           caption={caption}
           label={`${caption} sizing`}
           value={mode}
-          onChange={(next) => element && set(...sizeProperties(element, axis, next as Sizing, parseFloat(read(axis)) || 0))}
+          onChange={(next) => element && set(...element.sizes[axis][next as Sizing])}
           options={[
             { value: "fixed", label: "Fixed" },
             { value: "fill", label: "Fill" },
@@ -66,7 +69,7 @@ export function EditPanel({ element, session }: { element: Element | null; sessi
       </>
     );
   };
-  const hasText = element ? [...element.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim()) : false;
+  const hasText = element ? element.hasText : false;
 
   /** Set one or more properties on the picked element. */
   const set = (...pairs: [string, string][]) => {
@@ -133,12 +136,12 @@ export function EditPanel({ element, session }: { element: Element | null; sessi
         {element ? (
           <>
             <div className="flex h-12 items-center justify-between gap-3 border-b border-divider px-4">
-              <p className="text-sm font-medium text-foreground">{`<${element.tagName.toLowerCase()}>`}</p>
-              {session.has(element) ? (
+              <p className="text-sm font-medium text-foreground">{`<${element.tag}>`}</p>
+              {session.has(element.selector) ? (
                 <PanelButton
                   label="Reset this part"
                   onClick={() => {
-                    session.reset(element);
+                    session.reset(element.selector);
                     bump();
                   }}
                 >
@@ -165,7 +168,7 @@ export function EditPanel({ element, session }: { element: Element | null; sessi
             ) : null}
 
             {picture ? (
-              <Section title={picture === element ? "Image" : "Background image"}>
+              <Section title={picture === element.selector ? "Image" : "Background image"}>
                 <label className="inline-flex h-7 cursor-pointer items-center justify-center rounded-[var(--r-md)] bg-surface-inset px-3 text-xs text-foreground-muted hover:text-foreground">
                   Replace image…
                   <input

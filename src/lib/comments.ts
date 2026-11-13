@@ -53,7 +53,14 @@ export const commentSchema = z.object({
   likes: z.array(z.string()).optional(),
   /** Set on a reply, to the comment it answers. */
   parentId: z.string().optional(),
+  /** On Claude's reply in a live version's thread, while that is only its word that it is waiting its turn or at work, and the answer hasn't taken its place yet. Read from Claude's runs, never saved. */
+  claude: z.enum(["queued", "working"]).optional(),
+  /** On Claude's finished reply in a live version's thread: the change it made can be put back by the studio ("offered"), or has been and can be made again ("undone"). Read from Claude's runs, never saved. */
+  undo: z.enum(["offered", "undone"]).optional(),
 });
+
+/** Who Claude's replies are from, on a live version (see `registry/claude-runs.ts`). */
+export const CLAUDE_AUTHOR = { login: "claude", name: "Claude" };
 
 export const commentsFileSchema = z.array(commentSchema);
 

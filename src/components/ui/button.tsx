@@ -16,7 +16,7 @@ const look = {
   primary: "bg-accent text-accent-foreground hover:bg-accent-hover",
   destructive: "bg-destructive text-destructive-foreground hover:opacity-90",
   positive: "bg-success text-success-foreground hover:opacity-90",
-  secondary: "border border-border bg-surface text-foreground hover:bg-surface-hover",
+  secondary: "border border-border bg-surface text-foreground hover:bg-[var(--control-hover)]",
   ghost: "text-foreground-muted hover:bg-surface-hover hover:text-foreground",
 } as const;
 

@@ -195,6 +195,16 @@ export async function likeComment(input: Parameters<typeof comments.setLiked>[0]
   return attempt(() => comments.setLiked(input), []);
 }
 
+/** Gives edits made by hand on a live version to Claude, to make in the prototype's code. The comment that stands for them. */
+export async function applyEditsWithClaude(input: Parameters<typeof comments.applyEdits>[0]) {
+  return attempt(() => comments.applyEdits(input), []);
+}
+
+/** Puts back what Claude changed for one of its replies on a live version, or makes the change again. */
+export async function undoClaudeChange(input: Parameters<typeof comments.undoClaudeChange>[0]) {
+  return attempt(() => comments.undoClaudeChange(input), []);
+}
+
 export async function deleteComment(input: Parameters<typeof comments.removeComment>[0]) {
   return attempt(() => comments.removeComment(input), []);
 }

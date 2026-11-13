@@ -11,6 +11,7 @@ import { selectorFor } from "@/lib/edit-dom";
  */
 
 export type Spot = { x: number; y: number };
+export type Box = { left: number; top: number; width: number; height: number };
 /** Whether a key in the prototype's address is the studio's (a control, a variant, the review token) rather than the prototype's own. */
 export type StudioOwns = (key: string) => boolean;
 
@@ -97,12 +98,32 @@ export function watchTaps(doc: Document) {
   return () => doc.removeEventListener("click", heard, true);
 }
 
+/** The element a comment at (x, y) in a document's own pixels is pinned to, or null on the bare page. */
+export function elementAt(doc: Document, x: number, y: number) {
+  const hit = doc.elementFromPoint(x, y);
+  return hit && hit !== doc.body && hit !== doc.documentElement ? hit : null;
+}
+
+/** The box of that element, in the document's own pixels, for the studio to outline while somebody chooses where to comment. */
+export function boxAt(doc: Document, x: number, y: number): Box | null {
+  const rect = elementAt(doc, x, y)?.getBoundingClientRect();
+  return rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null;
+}
+
 /** The anchor for a click at (x, y) in a document's own pixels. */
 export function anchorAt(doc: Document, x: number, y: number, studioOwns: StudioOwns): Anchor {
+  return anchorOn(doc, elementAt(doc, x, y), x, y, studioOwns);
+}
+
+/** The anchor for the middle of an element, for a comment that is about it rather than left by a click. */
+export function anchorOf(doc: Document, element: Element, studioOwns: StudioOwns): Anchor {
+  const box = element.getBoundingClientRect();
+  return anchorOn(doc, element, box.left + box.width / 2, box.top + box.height / 2, studioOwns);
+}
+
+function anchorOn(doc: Document, element: Element | null, x: number, y: number, studioOwns: StudioOwns): Anchor {
   const win = doc.defaultView!;
   const root = doc.documentElement;
-  const hit = doc.elementFromPoint(x, y);
-  const element = hit && hit !== doc.body && hit !== root ? hit : null;
   const rect = element?.getBoundingClientRect();
   const tapped = taps.get(doc);
   return {
@@ -180,4 +201,94 @@ export function spotOf(doc: Document, anchor: Anchor): Spot | null {
   const hit = doc.elementFromPoint(spot.x, spot.y);
   if (!hit || !(element.contains(hit) || hit.contains(element))) return null;
   return spot;
+}
+
+/**
+ * Scrolls whatever is under (x, y) and can still move that way, else the page, by (dx, dy) in the document's own
+ * pixels: a wheel over the studio's glass while somebody places a comment, which the page itself never hears.
+ */
+export function scrollAt(doc: Document, x: number, y: number, dx: number, dy: number) {
+  const win = doc.defaultView!;
+  for (let element = doc.elementFromPoint(x, y); element && element !== doc.documentElement && element !== doc.body; element = element.parentElement) {
+    const style = win.getComputedStyle(element);
+    const canY = /auto|scroll|overlay/.test(style.overflowY) && element.scrollHeight > element.clientHeight;
+    const canX = /auto|scroll|overlay/.test(style.overflowX) && element.scrollWidth > element.clientWidth;
+    const roomY = dy < 0 ? element.scrollTop > 0 : element.scrollTop + element.clientHeight < element.scrollHeight - 1;
+    const roomX = dx < 0 ? element.scrollLeft > 0 : element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+    if ((canY && dy && roomY) || (canX && dx && roomX)) {
+      element.scrollBy(dx, dy);
+      return;
+    }
+  }
+  win.scrollBy(dx, dy);
+}
+
+/** How long a comment's element is waited for once its setup is on screen: the prototype may still be moving there, or fetching what it shows. It is pinned the moment it is there. */
+export const WAIT_FOR = 4000;
+/** How long a tap that opened it is waited for before it is passed over. */
+const STEP_WAIT = 600;
+
+/**
+ * Puts a page back where a comment was left: its path and hash, then the comment's point into view, tapping again
+ * what opened the sheet or menu it was left on when its element isn't on the page. `done` is told whether it could be
+ * pinned there in the end. Returns the way to stop.
+ *
+ * `docOf` is asked each time, since sending the page to another path makes a new document. Run from inside the page
+ * (a prototype the studio can't see into), going to another path ends this with the page; the studio asks again once
+ * the new one is there, and by then the path is right.
+ *
+ * Looked at as soon as the markup is in, never waiting for images: a frame that has only just been given its address
+ * is still on a blank page, or still reading, and is looked at again in a moment.
+ */
+export function revealAnchor(win: Window, docOf: () => Document | null, anchor: Anchor, done: (found: boolean) => void) {
+  let timer = 0;
+  let since = 0;
+  // The taps that opened what it was left on, made again one at a time, each once what it taps is there.
+  const steps = anchor.steps ?? [];
+  let step = 0;
+  let stepSince = 0;
+  // Finished once it can be pinned: there, in view and uncovered. Until then it is looked at again.
+  const reveal = () => {
+    const doc = docOf();
+    if (!doc) return;
+    since ||= Date.now();
+    const target = anchor.selector ? elementOf(doc, anchor) : null;
+    if (target) bringIntoView(doc, target, anchor);
+    else if (!anchor.selector) win.scrollTo(0, anchor.fy * doc.documentElement.scrollHeight - win.innerHeight / 2);
+    if (spotOf(doc, anchor)) return done(true);
+    // Not on the page: it was left on something opened over it. A tap whose button never turns up is passed over.
+    if (!target && step < steps.length) {
+      const button = elementOf(doc, steps[step]);
+      stepSince ||= Date.now();
+      if (button) (button as HTMLElement).click();
+      if (button || Date.now() - stepSince > STEP_WAIT) {
+        step += 1;
+        stepSince = 0;
+      }
+      // Its own wait starts after the last tap.
+      since = Date.now();
+      timer = window.setTimeout(reveal, 100);
+      return;
+    }
+    if (Date.now() - since < WAIT_FOR) timer = window.setTimeout(reveal, 100);
+    else done(false);
+  };
+
+  // Sent to the comment's page or hash once, if it isn't on it, and looked at again until it has arrived.
+  let sent = 0;
+  const start = () => {
+    // No document to read: the frame has gone to an address that can't be looked into, and the window can't be asked either.
+    const doc = docOf();
+    if (!doc) return;
+    const to = win.location.href === "about:blank" || doc.readyState === "loading" ? "wait" : addressFor(win.location, anchor);
+    if (to && to !== "wait" && !sent) {
+      sent = Date.now();
+      win.location.assign(to);
+    }
+    if (to && Date.now() - (sent || Date.now()) < WAIT_FOR) timer = window.setTimeout(start, 30);
+    else reveal();
+  };
+
+  start();
+  return () => window.clearTimeout(timer);
 }

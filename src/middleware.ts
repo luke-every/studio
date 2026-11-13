@@ -50,6 +50,8 @@ export async function middleware(request: NextRequest) {
     // The comment script a review link adds to a prototype, and the anchor code it uses, fetched by the prototype's page.
     pathname === "/studio-review.js" ||
     pathname === "/studio-anchor.js" ||
+    // The same anchor code for a live version on its own dev server, loaded by its page when the studio asks.
+    pathname === "/studio-comments.js" ||
     // The service worker and manifest are fetched by the browser without the cookie.
     pathname === "/sw.js" ||
     pathname === "/manifest.webmanifest" ||

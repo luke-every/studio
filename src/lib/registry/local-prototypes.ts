@@ -1,7 +1,7 @@
 import "server-only";
 
 import { execFile } from "node:child_process";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -112,4 +112,40 @@ export async function workingFile(slug: string, path: string[]) {
   if (!workingCopiesOn() || !/^[a-z0-9-]+$/.test(slug)) return null;
   const bytes = await readFile(join(ROOT, slug, "out", ...(path.length ? path : ["index.html"]))).catch(() => null);
   return bytes ? new Response(new Uint8Array(bytes)) : null;
+}
+
+/** A working copy's folder, for what runs in it. Only on this machine, and only for a name that can be one. */
+export function workingFolder(slug: string) {
+  if (!workingCopiesOn() || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("That isn't a prototype on this machine.");
+  return join(ROOT, slug);
+}
+
+/**
+ * The studio's own files about a working copy, kept in its folder's `.studio/` rather than in the content repository:
+ * nobody else can see a version running on this machine, so nothing about it is committed. `comments.json` is its
+ * comments, the same shape as a version's comments file; `claude.json` is Claude's work on them (see `claude-runs.ts`).
+ * The folder starts with a dot, so /push leaves it out of what it uploads, and the starter's .gitignore leaves it out
+ * of the prototype's own repository.
+ */
+export type StudioFile = "comments.json" | "claude.json";
+export const studioPath = (slug: string, name: string) => join(workingFolder(slug), ".studio", name);
+
+export const readStudioFile = (slug: string, name: StudioFile) => readFile(studioPath(slug, name), "utf8").catch(() => null);
+
+// One change at a time to each file, so two saves close together (a like and a reply) don't both start from the same copy.
+const queue = new Map<string, Promise<unknown>>();
+
+/** Read-modify-write, as `updateStoreFile` is; written whole and then moved into place, so a file is never left half written. */
+export function updateStudioFile(slug: string, name: StudioFile, fn: (text: string | null) => { content: string }) {
+  const file = studioPath(slug, name);
+  const next = (queue.get(file) ?? Promise.resolve())
+    .catch(() => {})
+    .then(async () => {
+      const { content } = fn(await readFile(file, "utf8").catch(() => null));
+      await mkdir(join(file, ".."), { recursive: true });
+      await writeFile(`${file}.tmp`, content);
+      await rename(`${file}.tmp`, file);
+    });
+  queue.set(file, next);
+  return next;
 }

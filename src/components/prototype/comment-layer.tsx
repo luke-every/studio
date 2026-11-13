@@ -2,17 +2,15 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 
-import { addressFor, anchorAt, bringIntoView, elementOf, ownedBy, spotOf, type Spot } from "@/lib/anchor";
+import type { Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
 
-import { Card, CommentCard, Composer, DraftPin, Pin, PIN, type CommentsUi } from "./comment-parts";
+import { Card, CommentCard, Composer, DraftPin, Pin, PIN, PinTarget, type CommentsUi } from "./comment-parts";
+import { pageOf } from "./frame-page";
+import { useGlass } from "./use-glass";
 import { usePinWatch } from "./use-pin-watch";
 
 const MISSING = "This looks different for you, so it can't be pinned where it was left.";
-/** How long a comment's element is waited for once its setup is on screen: the prototype may still be moving there, or fetching what it shows. It is pinned the moment it is there. */
-const WAIT_FOR = 4000;
-/** How long a tap that opened it is waited for before it is passed over. */
-const STEP_WAIT = 600;
 
 /**
  * Comments over a prototype: the pins, the card for the one that is open, and
@@ -23,6 +21,8 @@ const STEP_WAIT = 600;
  * Pin positions are read from the prototype whenever something could have
  * moved them (`usePinWatch`), so they follow it as it scrolls, resizes or
  * moves things about; a state is only set when somebody's pin actually moved.
+ * The prototype is read through `pageOf`, so a live version on its own dev
+ * server works the same as one the studio serves.
  */
 export function CommentLayer({
   frame,
@@ -46,6 +46,7 @@ export function CommentLayer({
     onLike,
     onDelete,
     onCopy,
+    onUndo,
   } = ui;
 
   const [draft, setDraft] = useState<Anchor | null>(null);
@@ -67,15 +68,12 @@ export function CommentLayer({
 
   const last = useRef("");
   const read = () => {
-    const doc = frame.current?.contentDocument;
-    if (!doc?.body) return;
-    const next: Record<string, Spot> = {};
-    for (const comment of comments) {
-      const spot = spotOf(doc, comment.anchor);
-      if (spot) next[comment.id] = spot;
-    }
-    const draftSpot = shownDraft ? spotOf(doc, shownDraft) : null;
-    if (draftSpot) next.draft = draftSpot;
+    const element = frame.current;
+    if (!element) return;
+    const anchors: Record<string, Anchor> = Object.fromEntries(comments.map((comment) => [comment.id, comment.anchor]));
+    if (shownDraft) anchors.draft = shownDraft;
+    const next = pageOf(element).spots(anchors);
+    if (!next) return;
     const box = root.current?.getBoundingClientRect();
     const moved = { left: box?.left ?? 0, top: box?.top ?? 0 };
     const signature = JSON.stringify([next, moved]);
@@ -95,131 +93,24 @@ export function CommentLayer({
     if (!focus) return;
     const comment = latest.current.find((item) => item.id === focus.id);
     const element = frame.current;
-    const win = element?.contentWindow;
-    if (!comment || !element || !win) return;
-
-    let timer = 0;
-    let since = 0;
-    // The taps that opened what it was left on, made again one at a time, each once what it taps is there.
-    const steps = comment.anchor.steps ?? [];
-    let step = 0;
-    let stepSince = 0;
-    // Done once it can be pinned: there, in view and uncovered. Until then it is looked at again, and if it never can
-    // be, the card says so rather than nothing showing at all.
-    const reveal = () => {
-      const doc = element.contentDocument;
-      if (!doc) return;
-      since ||= Date.now();
-      const target = comment.anchor.selector ? elementOf(doc, comment.anchor) : null;
-      if (target) bringIntoView(doc, target, comment.anchor);
-      else if (!comment.anchor.selector) win.scrollTo(0, comment.anchor.fy * doc.documentElement.scrollHeight - win.innerHeight / 2);
-      if (spotOf(doc, comment.anchor)) return;
-      // Not on the page: it was left on something opened over it. A tap whose button never turns up is passed over.
-      if (!target && step < steps.length) {
-        const button = elementOf(doc, steps[step]);
-        stepSince ||= Date.now();
-        if (button) (button as HTMLElement).click();
-        if (button || Date.now() - stepSince > STEP_WAIT) {
-          step += 1;
-          stepSince = 0;
-        }
-        // Its own wait starts after the last tap.
-        since = Date.now();
-        timer = window.setTimeout(reveal, 100);
-        return;
-      }
-      if (Date.now() - since < WAIT_FOR) timer = window.setTimeout(reveal, 100);
-      else setMissing(focus.at);
-    };
-
-    // Looked at as soon as the frame's markup is in, never waiting for its images: a frame that has only just been given
-    // its address is still on a blank page, or still reading, and is looked at again in a moment. Sent to the comment's
-    // page or hash once, if it isn't on it, and looked at again until it has arrived.
-    let sent = 0;
-    const start = () => {
-      const to = win.location.href === "about:blank" || element.contentDocument?.readyState === "loading" ? "wait" : addressFor(win.location, comment.anchor);
-      if (to && to !== "wait" && !sent) {
-        sent = Date.now();
-        win.location.assign(to);
-      }
-      if (to && Date.now() - (sent || Date.now()) < WAIT_FOR) timer = window.setTimeout(start, 30);
-      else reveal();
-    };
-
-    start();
-    return () => window.clearTimeout(timer);
+    if (!comment || !element) return;
+    // If it never can be pinned, the card says so rather than nothing showing at all.
+    return pageOf(element).reveal(comment.anchor, (found) => {
+      if (!found) setMissing(focus.at);
+    });
   }, [focus, frame, known]);
 
-  // The glass takes clicks, not scrolling: a wheel over it scrolls whatever in the prototype is under the pointer and can
-  // still move that way, else the page, by the distance it moved on screen.
-  const scroll = (event: WheelEvent) => {
-    // The browser would scroll the page the glass is in as well, so it is told not to; this does the scrolling.
-    event.preventDefault();
-    const doc = frame.current?.contentDocument;
-    const win = frame.current?.contentWindow;
-    if (!doc || !win) return;
-    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const dx = event.deltaX / scale;
-    const dy = event.deltaY / scale;
-    let element: Element | null = doc.elementFromPoint(
-      (event.clientX - box.left) / scale,
-      (event.clientY - box.top) / scale,
-    );
-    for (
-      ;
-      element && element !== doc.documentElement && element !== doc.body;
-      element = element.parentElement
-    ) {
-      const style = win.getComputedStyle(element);
-      const canY =
-        /auto|scroll|overlay/.test(style.overflowY) &&
-        element.scrollHeight > element.clientHeight;
-      const canX =
-        /auto|scroll|overlay/.test(style.overflowX) &&
-        element.scrollWidth > element.clientWidth;
-      const roomY =
-        dy < 0
-          ? element.scrollTop > 0
-          : element.scrollTop + element.clientHeight < element.scrollHeight - 1;
-      const roomX =
-        dx < 0
-          ? element.scrollLeft > 0
-          : element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
-      if ((canY && dy && roomY) || (canX && dx && roomX)) {
-        element.scrollBy(dx, dy);
-        return;
-      }
-    }
-    win.scrollBy(dx, dy);
-  };
+  // While placing, the element a click would pin to is outlined under the pointer, and a wheel over the glass scrolls the prototype.
+  const { target, point, glass } = useGlass(frame, scale, placing);
 
-  // Listened to by hand: React's wheel handlers are passive, which can't stop the page scrolling too.
-  const glass = useRef<HTMLDivElement>(null);
-  const scrolling = useRef(scroll);
-  useEffect(() => {
-    scrolling.current = scroll;
-  });
-  useEffect(() => {
-    const element = glass.current;
-    if (!placing || !element) return undefined;
-    const onWheel = (event: WheelEvent) => scrolling.current(event);
-    element.addEventListener("wheel", onWheel, { passive: false });
-    return () => element.removeEventListener("wheel", onWheel);
-  }, [placing]);
-
-  const place = (event: React.MouseEvent<HTMLDivElement>) => {
-    const doc = frame.current?.contentDocument;
-    if (!doc?.body) return;
+  const place = async (event: React.MouseEvent<HTMLDivElement>) => {
+    const element = frame.current;
+    if (!element) return;
     const box = event.currentTarget.getBoundingClientRect();
+    const anchor = await pageOf(element).anchorAt((event.clientX - box.left) / scale, (event.clientY - box.top) / scale);
+    if (!anchor) return;
     onFocus(null);
-    setDraft(
-      anchorAt(
-        doc,
-        (event.clientX - box.left) / scale,
-        (event.clientY - box.top) / scale,
-        ownedBy(frame.current!),
-      ),
-    );
+    setDraft(anchor);
   };
 
   const windowAt = (spot: { x: number; y: number }) => ({
@@ -244,10 +135,20 @@ export function CommentLayer({
     >
       {placing ? (
         <div
-          onClick={place}
+          onClick={(event) => void place(event)}
+          onPointerMove={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            point(event.clientX - box.left, event.clientY - box.top);
+          }}
+          onPointerLeave={() => point(null)}
           ref={glass}
           className="pointer-events-auto absolute inset-0 cursor-crosshair"
         />
+      ) : null}
+
+      {/* Not while a comment is being written: its pin marks the spot then. */}
+      {placing && target && !shownDraft ? (
+        <PinTarget left={target.left * scale} top={target.top * scale} width={target.width * scale} height={target.height * scale} />
       ) : null}
 
       {visible
@@ -285,6 +186,7 @@ export function CommentLayer({
           onLike={onLike}
           onDelete={onDelete}
           onCopy={onCopy}
+          onUndo={onUndo}
         />
       ) : null}
 

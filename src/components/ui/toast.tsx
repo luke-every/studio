@@ -12,8 +12,12 @@ import {
   UndoIcon,
 } from "@/components/shell/nav-icons";
 
-/** How long a toast stays before it lifts away. */
+/** How long a toast stays before it lifts away; and one with something to press, long enough to press it. */
 const TOAST_MS = 2000;
+const TOAST_ACTION_MS = 8000;
+
+/** Something a toast offers to do about what it says, such as undoing it. */
+export type ToastAction = { label: string; onPress: () => void };
 
 /**
  * A short message that drops in at the top, then leaves by itself.
@@ -25,13 +29,18 @@ export function useToast() {
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const show = useCallback(() => {
+  const show = useCallback((withAction = false) => {
     clearTimeout(timer.current);
     setState("in");
-    timer.current = setTimeout(() => setState("out"), TOAST_MS);
+    timer.current = setTimeout(() => setState("out"), withAction ? TOAST_ACTION_MS : TOAST_MS);
+  }, []);
+  // Leaves now: what it offered was taken.
+  const leave = useCallback(() => {
+    clearTimeout(timer.current);
+    setState((now) => (now ? "out" : now));
   }, []);
 
-  return { state, show, done: () => setState(null) };
+  return { state, show, leave, done: () => setState(null) };
 }
 
 /** The icon that matches what the message says; a tick for anything that just saved. */
@@ -55,11 +64,14 @@ export function Toast({
   state,
   onDone,
   error = false,
+  action,
   children,
 }: {
   state: "in" | "out" | null;
   onDone: () => void;
   error?: boolean;
+  /** A button at the end of the message. The toast itself never takes a press; only this does. */
+  action?: ToastAction;
   children: string;
 }) {
   if (!state) return null;
@@ -81,6 +93,11 @@ export function Toast({
       >
         {toastIcon(children, error)}
         {children}
+        {action ? (
+          <button type="button" onClick={action.onPress} className="pointer-events-auto -my-1 -mr-2 rounded-[var(--r-full)] px-2 py-1 font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">
+            {action.label}
+          </button>
+        ) : null}
       </p>
     </div>
   );

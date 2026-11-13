@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { setupOf, type Anchor, type Comment } from "@/lib/comments";
 import { useUser } from "@/lib/use-user";
-import { addComment, addSharedComment, deleteComment, likeComment, likeSharedComment, listComments, listSharedComments, resolveComment } from "@/lib/registry/actions";
+import { addComment, addSharedComment, deleteComment, likeComment, likeSharedComment, listComments, listSharedComments, resolveComment, undoClaudeChange } from "@/lib/registry/actions";
 
 import { useSharedComments } from "./shared-comments";
 
@@ -70,6 +70,8 @@ const track = <T,>(save: Promise<T>) => {
 };
 
 const POLL_MS = 20_000;
+/** While Claude is at work on a thread (a live version), so its answer shows soon after it is written. */
+const WORKING_POLL_MS = 3_000;
 
 /**
  * The comments on the other versions of a prototype, by version key, read when the panel is opened and whenever the
@@ -118,6 +120,15 @@ export function useComments(slug: string | undefined, version: string | undefine
   const key = target ? `${slug}/${version}` : "";
   const [loaded, setLoaded] = useState<{ key: string; list: Comment[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Claude is answering a thread here; and a count bumped after posting, since a post may be what asked it.
+  const claudeBusy = !!loaded?.list.some((item) => item.claude);
+  const [posted, setPosted] = useState(0);
+  // Claude's reply whose change has just arrived while this page was watching it work: said once, with a way to undo it.
+  const [changed, setChanged] = useState<Comment | null>(null);
+  const seen = useRef<Comment[]>([]);
+  useEffect(() => {
+    seen.current = loaded?.key === key ? loaded.list : [];
+  });
 
   useEffect(() => {
     if (!slug || !version) return;
@@ -129,6 +140,8 @@ export function useComments(slug: string | undefined, version: string | undefine
         // One that overlapped a save of ours would put back what the save has just changed; the next one will be right.
         if (!current || inflight || started !== before) return;
         if (result.ok) {
+          const arrived = result.value.find((item) => item.undo === "offered" && seen.current.some((was) => was.id === item.id && was.claude));
+          if (arrived) setChanged(arrived);
           setLoaded((now) => (now && now.key === key && JSON.stringify(now.list) === JSON.stringify(result.value) ? now : { key, list: result.value }));
         } else setError(result.error);
       });
@@ -140,7 +153,7 @@ export function useComments(slug: string | undefined, version: string | undefine
         current = false;
       };
     }
-    const timer = window.setInterval(read, POLL_MS);
+    const timer = window.setInterval(read, claudeBusy ? WORKING_POLL_MS : POLL_MS);
     window.addEventListener("focus", read);
     document.addEventListener("visibilitychange", read);
     return () => {
@@ -149,7 +162,7 @@ export function useComments(slug: string | undefined, version: string | undefine
       window.removeEventListener("focus", read);
       document.removeEventListener("visibilitychange", read);
     };
-  }, [slug, version, key, active, sharedAs]);
+  }, [slug, version, key, active, sharedAs, claudeBusy, posted]);
 
   const replace = (next: Comment) =>
     setLoaded((now) => (now && now.key === key ? { key, list: now.list.map((item) => (item.id === next.id ? next : item)) } : now));
@@ -176,6 +189,7 @@ export function useComments(slug: string | undefined, version: string | undefine
       return null;
     }
     setError(null);
+    setPosted((count) => count + 1);
     // Swapped in place; if a refresh has dropped the pending one meanwhile, the saved comment is added unless it is already there.
     setLoaded((now) => {
       if (!now || now.key !== key) return now;
@@ -193,6 +207,7 @@ export function useComments(slug: string | undefined, version: string | undefine
       return false;
     }
     setError(null);
+    setPosted((count) => count + 1);
     setLoaded((now) => ({ key, list: [...(now && now.key === key ? now.list : []), result.value] }));
     return true;
   };
@@ -222,6 +237,15 @@ export function useComments(slug: string | undefined, version: string | undefine
     }
   };
 
+  /** Puts back what Claude changed for a reply of its (a live version), or makes the change again, without running Claude. What stopped it, in words, or null. */
+  const undo = async (reply: Comment, redo = false) => {
+    if (!target) return null;
+    const result = await track(undoClaudeChange({ slug: target.slug, id: reply.id, redo }));
+    // Read again either way: a change that couldn't be put back is no longer offered.
+    setPosted((count) => count + 1);
+    return result.ok ? null : result.error;
+  };
+
   const remove = async (comment: Comment) => {
     if (!target || sharedAs) return;
     setWorking(comment.id, true);
@@ -242,5 +266,5 @@ export function useComments(slug: string | undefined, version: string | undefine
   const replies: Record<string, Comment[]> = {};
   for (const item of every) if (item.parentId) (replies[item.parentId] ??= []).push(item);
 
-  return { comments: all.filter((item) => !item.parentId), everything: every.filter((item) => !item.parentId), replies, error, add, reply, resolve, like, remove };
+  return { comments: all.filter((item) => !item.parentId), everything: every.filter((item) => !item.parentId), replies, error, add, reply, resolve, like, remove, undo, changed, refresh: () => setPosted((count) => count + 1) };
 }

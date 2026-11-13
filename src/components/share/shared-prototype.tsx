@@ -247,8 +247,8 @@ function Shared({
           url={frameUrl}
           title={`${name} ${version.label}`}
           leading={null}
-          center={({ scale }) => (
-            <ViewMenu device={device} zoom={zoom} fit={fit} fitted={scale} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
+          center={({ scale, device: shown }) => (
+            <ViewMenu device={shown ?? device} zoom={zoom} fit={fit} fitted={scale} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
           )}
           device={device}
           onDevice={chooseDevice}

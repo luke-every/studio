@@ -9,11 +9,12 @@ import { DEVICES, ZOOMS, type Device } from "@/lib/phone";
 
 const percent = (zoom: number) => `${Math.round(zoom * 100)}%`;
 
-const icons: Record<string, ReactNode> = {
-  "iphone-se": <SmallPhoneIcon className="size-6" />,
-  "iphone-14": <LargePhoneIcon className="size-6" />,
-  tablet: <TabletIcon className="size-6" />,
-  desktop: <DesktopIcon className="size-6" />,
+/** The picture for each device, by its id: here, and on the canvas's switches. */
+export const deviceIcons: Record<string, (props: { className?: string }) => ReactNode> = {
+  "iphone-se": SmallPhoneIcon,
+  "iphone-14": LargePhoneIcon,
+  tablet: TabletIcon,
+  desktop: DesktopIcon,
 };
 
 const step = "grid size-8 place-items-center rounded-[var(--r-full)] text-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover disabled:opacity-30 disabled:hover:bg-transparent";
@@ -90,7 +91,7 @@ export function ViewMenu({
               setOpen(false);
             }}
             className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-[var(--r-control)] border px-4 text-sm font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
-              fit ? "border-transparent bg-accent text-accent-foreground" : "border-border bg-surface text-foreground hover:bg-surface-hover"
+              fit ? "border-transparent bg-accent text-accent-foreground" : "border-border bg-surface text-foreground hover:bg-[var(--control-hover)]"
             }`}
           >
             <FitIcon className="size-4" />
@@ -102,6 +103,7 @@ export function ViewMenu({
         <div role="radiogroup" aria-label="Device" className="grid grid-cols-4 gap-1.5">
           {DEVICES.map((option) => {
             const on = option.id === device.id;
+            const Icon = deviceIcons[option.id];
             return (
               <button
                 key={option.id}
@@ -117,7 +119,7 @@ export function ViewMenu({
                   on ? "bg-surface-inset text-foreground ring-1 ring-border-strong" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
                 }`}
               >
-                {icons[option.id]}
+                <Icon className="size-6" />
                 <span className="text-xs font-medium leading-tight">{option.name}</span>
               </button>
             );

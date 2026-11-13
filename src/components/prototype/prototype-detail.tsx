@@ -13,7 +13,7 @@ import { VersionMenu } from "@/components/prototype/version-menu";
 import { hintFullscreen } from "@/lib/fullscreen-hint";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
-import { applyControls, controlParams, defaultValues, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
+import { applyControls, controlParams, controlsInWords, defaultValues, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
 import { withParams, type Flow } from "@/lib/flow";
 import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
@@ -133,24 +133,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     if (!offered && !variants.length) return null;
     if (!setup) return "Baseline";
     const params = new URLSearchParams(setup);
-    const parts: string[] = [];
-    for (const control of offered?.controls ?? []) {
-      const raw = params.get(control.param ?? control.id);
-      if (raw === null) continue;
-      parts.push(
-        control.type === "toggle"
-          ? control.label
-          : control.type === "range"
-            ? `${control.label} ${raw}`
-            : control.type === "multi"
-              ? raw
-                  .split(",")
-                  .filter(Boolean)
-                  .map((value) => control.options.find((option) => option.value === value)?.label ?? value)
-                  .join(", ") || `No ${control.label}`
-              : (control.options.find((option) => option.value === raw)?.label ?? raw),
-      );
-    }
+    const parts = controlsInWords(setup, offered);
     const made = variants.find((item) => item.id === params.get(VARIANT_PARAM));
     if (made) parts.push(made.label);
     return parts.join(" · ") || "Baseline";
@@ -308,8 +291,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           onDevice={chooseDevice}
           zoom={zoom}
           fit={fit}
-          center={({ scale }) => (
-            <ViewMenu device={device} zoom={zoom} fit={fit} fitted={scale} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
+          center={({ scale, device: shown }) => (
+            <ViewMenu device={shown ?? device} zoom={zoom} fit={fit} fitted={scale} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
           )}
           // The tile's picture is of the default phone and setup, so it is only
           // the placeholder while the prototype is shown that way.
@@ -318,8 +301,10 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               ? `${selected.url}/studio-preview.jpg`
               : undefined
           }
-          edit={selected.live ? undefined : { slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
-          comments={selected.live ? undefined : { slug: prototype.slug, version: selected.key, versions: prototype.versions.map(({ key, version }) => ({ key, version })), onVersion: (key) => { const next = prototype.versions.find((item) => item.key === key); if (next) choose(next); }, variant: address?.split("?")[1] || undefined, onSetup: showSetup, canShow, setupLabel }}
+          // A live version has no version to save: its edits are a preview, given to Claude to make in its code (see `EditBar`).
+          edit={selected.live ? { slug: prototype.slug, versionId: selected.id, live: true } : { slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
+          // A live version's comments are kept in its own folder on this machine, not pushed anywhere (see `registry/comments.ts`).
+          comments={{ slug: prototype.slug, version: selected.key, versions: prototype.versions.map(({ key, version, live }) => ({ key, version: live ? "Live" : version })), onVersion: (key) => { const next = prototype.versions.find((item) => item.key === key); if (next) choose(next); }, variant: address?.split("?")[1] || undefined, onSetup: showSetup, canShow, setupLabel }}
           onPlace={followPlace}
           flow={flow}
           variants={variantsCanvas}

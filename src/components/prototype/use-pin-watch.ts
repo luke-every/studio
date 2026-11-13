@@ -13,6 +13,7 @@ const LISTEN = { capture: true, passive: true } as const;
  * with the page's text read for each comment kept the browser laying the prototype out sixty times a second.
  *
  * A frame that loads a new page is a new document, so the documents are looked at again each time, and listened to anew.
+ * A frame on another address can't be listened to, and says itself when something moved.
  */
 export function usePinWatch(
   frames: () => (HTMLIFrameElement | null | undefined)[],
@@ -38,12 +39,14 @@ export function usePinWatch(
       changes.observe(doc.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
       const events = ["scroll", "transitionend", "animationend", "load"];
       events.forEach((name) => doc.addEventListener(name, later, LISTEN));
-      const win = doc.defaultView;
-      win?.addEventListener("resize", later);
+      doc.defaultView?.addEventListener("resize", later);
       return () => {
         changes.disconnect();
         events.forEach((name) => doc.removeEventListener(name, later, LISTEN));
-        win?.removeEventListener("resize", later);
+        // Asked of the document again, never a window kept from before: once the frame has gone on to another page the
+        // document has no window (and its listeners went with it), while the frame's window is by then the new page's,
+        // which on another address (a live version, after the studio sent it there) refuses to be touched at all.
+        doc.defaultView?.removeEventListener("resize", later);
       };
     };
     const sync = () => {
@@ -76,6 +79,11 @@ export function usePinWatch(
     around.forEach((name) => document.addEventListener(name, later, LISTEN));
     window.addEventListener("resize", later);
     document.addEventListener("visibilitychange", later);
+    // A page on another address says itself when its comments move (see `frame-page.ts`).
+    const heard = (event: MessageEvent) => {
+      if (event.data?.type === "studio:comments:spots") later();
+    };
+    window.addEventListener("message", heard);
     const timer = window.setInterval(later, ANYWAY_MS);
     later();
     return () => {
@@ -84,6 +92,7 @@ export function usePinWatch(
       around.forEach((name) => document.removeEventListener(name, later, LISTEN));
       window.removeEventListener("resize", later);
       document.removeEventListener("visibilitychange", later);
+      window.removeEventListener("message", heard);
       watched.forEach((stop) => stop());
       schedule.current = () => {};
     };
