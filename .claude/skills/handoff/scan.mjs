@@ -1091,8 +1091,11 @@ export function scan({ dir: dirArg, variants: wantedVariants, by }) {
     });
   }
 
+  // The page that draws the entries (its heading, its wrapper) is the app's shell, never a feature to review, but what it draws is
+  // still something an engineer selects: its elements are indexed and its markers listed, with no findings of their own.
+  const pageFiles = allFiles.filter((file) => /^(src\/)?app\/(.*\/)?page\.[jt]sx?$/.test(file) && !live.has(file) && importsOf(dir, file, aliasDir).some((imported) => entries.has(imported)));
   // TODO(lift) markers: the data and copy an engineer has to wire up.
-  const lift = liveFiles.flatMap((file) =>
+  const lift = [...liveFiles, ...pageFiles].flatMap((file) =>
     readFileSync(join(dir, file), "utf8")
       .split("\n")
       .flatMap((line, i) => (line.includes("TODO(lift)") ? [{ file, line: i + 1, text: line.trim().replace(/^(\/\/|\{?\/\*)\s*|\s*(\*\/\}?)$/g, "") }] : [])),
@@ -1122,8 +1125,8 @@ export function scan({ dir: dirArg, variants: wantedVariants, by }) {
       // The elements the prototype's own components draw, as [line, last line, tag, classes it always has, its first words]:
       // what an element picked in the page is matched to, to say which lines of which file draw it.
       elements: Object.fromEntries(
-        own.flatMap((file) => {
-          const rows = parsed.get(file).elements.flatMap((element) => {
+        [...own, ...pageFiles].flatMap((file) => {
+          const rows = (parsed.get(file)?.elements ?? elementsOf(ts, parse(file, readFileSync(join(dir, file), "utf8")))).flatMap((element) => {
             const found = findOf(element);
             return found ? [[element.line, element.endLine, found.tag, found.classes.join(" "), found.text ?? ""]] : [];
           });

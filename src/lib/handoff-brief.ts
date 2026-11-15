@@ -1,4 +1,4 @@
-import { andList, differencesOf, list, text, type BuiltFrom } from "@/components/handoff/words";
+import { differencesOf, list, text, type BuiltFrom } from "@/components/handoff/words";
 import type { Finding } from "@/lib/handoff";
 import { partsOf, type Part } from "@/lib/handoff-parts";
 import type { PublicHandoff } from "@/lib/handoff-public";
@@ -50,7 +50,7 @@ function head(data: PublicHandoff, ctx: Context, title: string) {
 }
 
 /** Whether production already has this part, so the agent builds from its code and the prototype's own is no use to it. */
-function productionHas(part: Part | undefined) {
+export function productionHas(part: Part | undefined) {
   if (part?.kit) return true;
   const finding = part?.finding;
   if (!finding || finding.decision?.action === "extend") return false;
@@ -72,14 +72,13 @@ function aboutPart(part: Part | undefined, snippet?: string) {
     const candidate = finding.candidates.find((item) => item.name === finding.decision?.candidate) ?? finding.candidates[0];
     const differences = candidate ? differencesOf(finding, candidate) : null;
     if (candidate) lines.push(`Production's \`${candidate.name}\`: ${text(candidate.source).split(":").slice(1).join(":")}`);
-    if (differences?.mine.length) lines.push(`- The prototype ${differences.mine.join(", ")}`);
-    if (differences?.theirs.length) lines.push(`- Production ${differences.theirs.join(", ")}`);
+    if (!productionHas(part) && differences?.mine.length) lines.push(`- The prototype ${differences.mine.join(", ")}`);
+    if (!productionHas(part) && differences?.theirs.length) lines.push(`- Production ${differences.theirs.join(", ")}`);
     const builtFrom = list<BuiltFrom>(finding.mine.builtFrom).filter((item) => !snippet || snippet.includes(`<${item.name}`));
     if (builtFrom.length) lines.push(...uses(builtFrom));
   } else if (part?.kit) {
     lines.push(`Use production's \`${part.name}\`, not the prototype's.`);
     lines.push(`Production: ${part.kit.production ?? "not found"}`);
-    if (part.kit.removedProps.length) lines.push(`Production also takes ${andList(part.kit.removedProps.map((prop) => prop.name))}: wire these to real data.`);
   }
   return lines;
 }
@@ -101,7 +100,8 @@ export function briefOf(data: PublicHandoff, selection: Selection, ctx: Context)
       lines.push("", "## Its parts, and what to do with each");
       for (const part of named) {
         const what = part.finding ? verdict(part.finding) : part.kit ? `Use production's component (${part.kit.production ?? "not found"}).` : "";
-        lines.push(`- \`${part.name}\`: ${what} Brief: ${ctx.briefLink(`src:${part.file}:1-9999`)}`);
+        // Production's own is no brief: what to use is already said.
+        lines.push(`- \`${part.name}\`: ${what}${productionHas(part) ? "" : ` Brief: ${ctx.briefLink(`src:${part.file}:1-9999`)}`}`);
       }
     }
     return `${lines.join("\n")}\n`;

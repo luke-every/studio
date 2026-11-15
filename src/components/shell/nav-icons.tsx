@@ -223,6 +223,14 @@ export function FitIcon(props: IconProps) {
   );
 }
 
+export function ComponentIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 2 10 4 8 6 6 4ZM8 10l2 2-2 2-2-2ZM4 6l2 2-2 2-2-2ZM12 6l2 2-2 2-2-2Z" />
+    </Frame>
+  );
+}
+
 export function CodeIcon(props: IconProps) {
   return (
     <Frame {...props}>

@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 
+import { ComponentIcon } from "@/components/shell/nav-icons";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
+import { productionHas } from "@/lib/handoff-brief";
 import { partsOf, type Part } from "@/lib/handoff-parts";
 import type { PublicHandoff } from "@/lib/handoff-public";
 import { targetOf, type Selection } from "@/lib/handoff-selection";
 
-import { andList, BUILT_FROM, DECISION, differencesOf, list, ROLE, summaryOf, text, type BuiltFrom } from "./words";
+import { BUILT_FROM, DECISION, differencesOf, list, ROLE, summaryOf, text, type BuiltFrom } from "./words";
 
 /** Copies text that is still on its way, so the browser still counts it as a result of the press (Safari insists). */
 function copy(value: Promise<string>) {
@@ -69,45 +71,60 @@ export function SelectionPanel({
   const builtFrom = finding ? list<BuiltFrom>(finding.mine.builtFrom) : [];
   const lift = section ? data.lift.filter((item) => item.file === section.file && item.line >= section.line && item.line <= section.endLine) : [];
   const role = finding ? ROLE[finding.kind] : null;
+  // Production has it: which one it is, and nothing about how the prototype's differs.
+  const matched = productionHas(part);
   const inDesign = selection?.kind === "frame" ? parts.filter((item) => item.kit || item.finding?.where.some((place) => !place.variants?.length || place.variants.includes(selection.screenId))) : [];
 
   const title = !selection ? "Ready for dev" : selection.kind === "frame" ? null : `${part?.name ?? selection.file.split("/").pop()}`;
 
   return (
     <div className={`flex flex-col gap-4 ${bare ? "border-b border-divider p-4" : "h-full overflow-y-auto rounded-[var(--r-tile)] border border-border bg-surface-elevated p-4 shadow-floating [scrollbar-width:thin]"}`}>
-      {title ? <h2 className="text-ui font-medium text-foreground">{title}</h2> : null}
+      {title ? (
+        <h2 className="flex items-center gap-2 text-ui font-medium text-foreground">
+          {part ? (
+            <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--component)] text-accent-foreground">
+              <ComponentIcon className="size-3.5" />
+            </span>
+          ) : null}
+          {title}
+        </h2>
+      ) : null}
 
       {!selection ? (
         <p className="text-ui text-foreground-muted">Handed off by {data.signedBy}. Tap anything in a design to get its code for your agent, or a design&apos;s name for the whole design.</p>
       ) : (
         <>
-          {section ? (
+          {section && !part?.kit ? (
             <p className="break-words text-sm text-foreground-muted">
-              {section.file}, lines {section.line} to {section.endLine}
+              {section.file}
+              {section.line <= 1 && section.endLine >= 9999 ? "" : `, lines ${section.line} to ${section.endLine}`}
             </p>
           ) : null}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {role ? <Chip tone={role.tone}>{role.label}</Chip> : null}
-            {part?.kit ? <Chip tone={part.kit.kind === "stand-in" ? "existing" : "near"}>{part.kit.kind === "stand-in" ? "Front-end version of production's" : "Behind production"}</Chip> : null}
-            {decision ? <Chip tone={decision.tone}>{decision.label}</Chip> : null}
-          </div>
-          {finding ? <p className="text-ui text-foreground-muted">{summaryOf(finding)}</p> : null}
-
-          {candidate ? (
-            <Row title="Production">
-              <p className="break-words text-sm text-foreground-muted">
-                {candidate.name} · {text(candidate.source).split(":").slice(1).join(":")}
-              </p>
-              {differences?.mine.length ? <p className="text-sm text-foreground-muted">The prototype {differences.mine.join(", ")}</p> : null}
-              {differences?.theirs.length ? <p className="text-sm text-foreground-muted">Production {differences.theirs.join(", ")}</p> : null}
-            </Row>
-          ) : null}
-          {part?.kit ? (
-            <Row title="Production">
-              <p className="break-words text-sm text-foreground-muted">{part.kit.production ?? "not found"}</p>
-              {part.kit.removedProps.length ? <p className="text-sm text-foreground-muted">Production also takes {andList(part.kit.removedProps.map((prop: { name: string }) => prop.name))}</p> : null}
-            </Row>
-          ) : null}
+          {matched ? (
+            <>
+              <div>
+                <Chip tone="system">Matched to production</Chip>
+              </div>
+              <p className="break-words text-sm text-foreground-muted">{part?.kit ? part.kit.production ?? "not found" : candidate ? text(candidate.source).split(":").slice(1).join(":") : null}</p>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {role ? <Chip tone={role.tone}>{role.label}</Chip> : null}
+                {decision ? <Chip tone={decision.tone}>{decision.label}</Chip> : null}
+              </div>
+              {finding ? <p className="text-ui text-foreground-muted">{summaryOf(finding)}</p> : null}
+              {candidate ? (
+                <Row title="Production">
+                  <p className="break-words text-sm text-foreground-muted">
+                    {candidate.name} · {text(candidate.source).split(":").slice(1).join(":")}
+                  </p>
+                  {differences?.mine.length ? <p className="text-sm text-foreground-muted">The prototype {differences.mine.join(", ")}</p> : null}
+                  {differences?.theirs.length ? <p className="text-sm text-foreground-muted">Production {differences.theirs.join(", ")}</p> : null}
+                </Row>
+              ) : null}
+            </>
+          )}
 
           {builtFrom.length ? (
             <Row title="Built from">
@@ -143,7 +160,7 @@ export function SelectionPanel({
           ) : null}
 
           {data.preview ? <p className="text-sm text-foreground-subtle">The handoff isn&apos;t signed off yet. Engineers get a link and a brief once it is.</p> : null}
-          {briefUrl && !data.preview ? (
+          {briefUrl && !data.preview && !productionHas(part) ? (
             <Button
               className="h-8 self-start px-3"
               loading={copied === "copying"}

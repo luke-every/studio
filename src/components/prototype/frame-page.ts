@@ -1,6 +1,6 @@
 import { anchorAt, anchorOf, boxAt, elementAt, ownedBy, revealAnchor, scrollAt, spotOf, WAIT_FOR, type Box, type Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
-import { describePart, partIn, type painter, type Part } from "@/lib/edit-part";
+import { componentOf, describePart, partIn, type painter, type Part } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
 import { findClip, partBox, setMarks, sourceAt, type Clip, type Find, type SourceEl, type SourceHit } from "@/lib/handoff-clip";
 
@@ -123,7 +123,15 @@ function near(frame: HTMLIFrameElement): FramePage {
     },
     boxAt: async (x, y) => {
       const page = doc();
-      return page ? hitting(frame, () => boxAt(page, x, y)) : null;
+      if (!page) return null;
+      // A design system component is outlined whole, as the bridge does on another address.
+      return hitting(frame, () => {
+        const element = designSystem ? elementAt(page, x, y) : null;
+        const found = element && designSystem ? componentOf(element, new Set(designSystem)) : null;
+        if (!found) return boxAt(page, x, y);
+        const { left, top, width, height } = found.root.getBoundingClientRect();
+        return { left, top, width, height, component: true };
+      });
     },
     scrollAt: (x, y, dx, dy) => {
       const page = doc();
