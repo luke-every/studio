@@ -28,6 +28,8 @@ import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
 import { describePart, partIn, type Part } from "@/lib/edit-part";
 import { EditLayer } from "@/components/prototype/edit-layer";
+import type { SourceEl } from "@/lib/handoff-clip";
+import type { Selection } from "@/lib/handoff-selection";
 import { followPart, setDesignSystem, watchScroll } from "@/components/prototype/frame-page";
 import { designSystemOf } from "@/lib/registry/actions";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
@@ -90,6 +92,9 @@ export function PrototypeFrame({
   comments: commentsOf,
   flow,
   variants,
+  readyForDev,
+  handoffInspect,
+  inspectPanel,
   flowOpen,
   onFlowOpen,
   mode,
@@ -154,6 +159,11 @@ export function PrototypeFrame({
   flow: Flow | null;
   /** The prototype's variants as a canvas of their own, with the setup each one shows. It shares the flow's place: looked at instead of the prototype. */
   variants?: { flow: Flow; setups: Record<string, string> } | null;
+  /** The handoff has been signed off for these designs (a design is a variant's id): the canvas marks their screens Ready for dev. Null when it hasn't. */
+  readyForDev?: string[] | null;
+  /** Engineers looking at a handed-off version: a tap on a canvas screen selects the part of the handoff under it; `inspectPanel` says what it is. */
+  handoffInspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void };
+  inspectPanel?: ReactNode;
   flowOpen: boolean;
   onFlowOpen: (open: boolean) => void;
   /** Looking, editing or in dev mode. The last two replace the bar and bring a panel of their own. */
@@ -854,6 +864,9 @@ export function PrototypeFrame({
         <div ref={canvasBox} inert={!showingFlow} className={`absolute inset-0 ${showingFlow ? "" : "pointer-events-none invisible"}`}>
           <FlowCanvas
             fold={fold}
+            inspect={handoffInspect}
+            // The variants canvas marks the designs that were handed off; a flow of steps is one design, so every step.
+            ready={readyForDev ? (canvas.setups ? (id: string) => readyForDev.includes(id) : () => true) : undefined}
             // The two canvases are different layouts of different screens, so each starts afresh.
             key={canvas.setups ? "variants" : "flow"}
             flow={canvas.flow}
@@ -872,6 +885,7 @@ export function PrototypeFrame({
           />
         </div>
       ) : null}
+      {showingFlow && inspectPanel ? <div className="absolute bottom-4 right-4 top-26 z-[var(--z-raised)] hidden w-[var(--dev-panel-width)] sm:block">{inspectPanel}</div> : null}
     </div>
 
     {/* Its own panel beside the prototype, as tall as it without making it taller; over the canvas, which it never narrows, and starting below the bar so its buttons stay clear. It stays mounted so it can open and close. */}

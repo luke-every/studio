@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { findVersion, readHandoff, saveFindings } from "@/lib/registry/handoff";
+import { carryHandoff, findVersion, readHandoff, saveFindings } from "@/lib/registry/handoff";
 
 /**
  * Where /handoff lands, and where it reads the decisions back from.
@@ -20,11 +20,16 @@ const failed = (error: unknown) => NextResponse.json({ error: error instanceof E
 
 export async function POST(request: NextRequest) {
   if (locked(request)) return refused();
-  const body = (await request.json().catch(() => null)) as { slug?: unknown; version?: unknown; handoff?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { slug?: unknown; version?: unknown; handoff?: unknown; carried?: unknown; changedSince?: unknown } | null;
   if (typeof body?.slug !== "string" || typeof body.version !== "string" || !body.handoff) {
     return NextResponse.json({ error: "A handoff needs a `slug`, a `version` and the `handoff` the scanner wrote." }, { status: 400 });
   }
   try {
+    // /push brings the designer's handoff along to the version it has made: stored as it is, not scanned again.
+    if (body.carried === true) {
+      const carried = await carryHandoff({ slug: body.slug, version: body.version, handoff: body.handoff, changedSince: Array.isArray(body.changedSince) ? body.changedSince.filter((file): file is string => typeof file === "string") : undefined });
+      return NextResponse.json({ ok: true, ...carried });
+    }
     const saved = await saveFindings({ slug: body.slug, version: body.version, handoff: body.handoff });
     // The prototype's page at that version, with its handoff open over it.
     const review = new URL(`/prototypes/${body.slug}`, request.nextUrl.origin);

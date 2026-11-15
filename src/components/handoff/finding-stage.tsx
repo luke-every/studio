@@ -7,7 +7,7 @@ import type { Finding, Handoff } from "@/lib/handoff";
 import { isFind } from "@/lib/handoff-clip";
 
 import { MatchPreview, ModulePreview, PageClip, Swatch } from "./previews";
-import { colourDistance, decisionOf, differencesOf, list, nameOf, ROLE, summaryOf, text, TIER, whereOf, type Candidate, type Prop } from "./words";
+import { BUILT_FROM, colourDistance, decisionOf, differencesOf, list, nameOf, ROLE, summaryOf, text, TIER, whereOf, type BuiltFrom, type Candidate, type Prop } from "./words";
 
 /** What a preview needs from the prototype: its page for a finding's variants, its theme, where its files are. */
 export type Context = {
@@ -15,6 +15,8 @@ export type Context = {
   theme: Handoff["theme"];
   fontBase: string;
   variantLabel: (id: string) => string;
+  /** The components a finding is built from, compiled to draw, by file. */
+  modules?: Record<string, string>;
 };
 
 /** The chips that say what a finding is: its kind (or, for a colour, nothing more), how close its match is, and the decision. */
@@ -42,7 +44,7 @@ function Side({ label, children, tall = true }: { label: ReactNode; children: Re
   );
 }
 
-/** Mine, as the prototype draws it. */
+/** The prototype's own, as the prototype draws it. */
 export function MinePreview({ finding, context, label, priority }: { finding: Finding; context: Context; label: string; priority: number }) {
   if (finding.rule === "colours") {
     return <Swatch hex={text(finding.mine.hex)} alpha={typeof finding.mine.alpha === "number" ? finding.mine.alpha : 1} label={label} />;
@@ -63,6 +65,25 @@ export function MatchView({ finding, candidate, context, label, priority }: { fi
   return <MatchPreview key={candidate.name} candidate={candidate} theme={context.theme} fontBase={context.fontBase} label={label} priority={priority} />;
 }
 
+/** Each component a finding is built from, drawn, so what it is made of can be seen and not only listed. */
+function BuiltFromTiles({ items, context, priority }: { items: BuiltFrom[]; context: Context; priority: number }) {
+  return (
+    <ul className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-3">
+      {items.map((item) => (
+        <li key={item.file} className="flex min-w-0 flex-col gap-1.5">
+          <div className="h-32 overflow-hidden rounded-[var(--r-lg)] border border-border bg-surface-inset">
+            <ModulePreview code={context.modules?.[item.file] ?? ""} name={item.name} props={item.props ?? []} theme={context.theme} fontBase={context.fontBase} label={`${item.name}, as the prototype has it`} priority={priority} />
+          </div>
+          <span className="flex min-w-0 items-center gap-1.5 text-sm text-foreground-muted">
+            <Dot tone={BUILT_FROM[item.from]?.tone ?? "quiet"} />
+            <span className="truncate">{item.name}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Words({ who, items }: { who: string; items: string[] }) {
   if (!items.length) return null;
   return (
@@ -79,10 +100,10 @@ function Words({ who, items }: { who: string; items: string[] }) {
 export function FindingStage({ finding, shown, onShow, context, priority }: { finding: Finding; shown: number; onShow: (index: number) => void; context: Context; /** 0 on screen, then 1, 2, 3 by how soon it will be reached: which previews load first (see `preview-queue.ts`). */ priority: number }) {
   const candidate = finding.candidates[shown];
   const colour = finding.rule === "colours";
-  const theirLabel = finding.kind === "stand-in" || finding.mine.edited ? "Production" : (candidate?.name ?? "");
   const differences = differencesOf(finding, candidate);
   const variants = [...new Set(finding.where.flatMap((place) => place.variants ?? []))].map(context.variantLabel);
   const where = whereOf(finding);
+  const builtFrom = list<BuiltFrom>(finding.mine.builtFrom);
 
   return (
     <article aria-labelledby="finding-name" className="flex min-w-0 flex-col gap-6">
@@ -94,10 +115,25 @@ export function FindingStage({ finding, shown, onShow, context, priority }: { fi
         <p className="text-ui text-foreground-muted">
           {[summaryOf(finding), where, variants.length ? variants.join(", ") : ""].filter(Boolean).join(" · ")}
         </p>
+        {builtFrom.length ? (
+          <div className="flex flex-col gap-1.5 pt-1">
+            <h3 className="text-sm text-foreground-subtle">Built from</h3>
+            <ul className="flex flex-col gap-1">
+              {builtFrom.map((item) => (
+                <li key={item.file} className="flex flex-wrap items-center gap-x-2 text-sm text-foreground-muted">
+                  <Chip tone={BUILT_FROM[item.from]?.tone ?? "quiet"}>{item.name}</Chip>
+                  <span>{BUILT_FROM[item.from]?.label ?? item.from}</span>
+                  <span className="text-foreground-subtle">· {item.importPath}</span>
+                </li>
+              ))}
+            </ul>
+            <BuiltFromTiles items={builtFrom} context={context} priority={priority + 2} />
+          </div>
+        ) : null}
       </header>
 
       <div className="flex flex-col gap-4 sm:flex-row">
-        <Side label={colour ? `Mine, ${text(finding.mine.value)}` : "Mine"}>
+        <Side label={colour ? `Prototype, ${text(finding.mine.value)}` : "Prototype"}>
           <MinePreview finding={finding} context={context} label={`${nameOf(finding)} in the prototype`} priority={priority} />
         </Side>
         {candidate ? (
@@ -105,7 +141,7 @@ export function FindingStage({ finding, shown, onShow, context, priority }: { fi
             label={
               <>
                 <Dot tone={finding.kind === "stand-in" ? "existing" : "system"} />
-                {colour ? `${candidate.name}, ${text(candidate.value)}` : theirLabel}
+                {colour ? `Production · ${candidate.name}, ${text(candidate.value)}` : `Production · ${candidate.name}`}
               </>
             }
           >
@@ -117,8 +153,8 @@ export function FindingStage({ finding, shown, onShow, context, priority }: { fi
       {colour && candidate ? <p className="text-sm text-foreground-muted">{colourDistance(candidate)}</p> : null}
       {differences.mine.length || differences.theirs.length || differences.note ? (
         <div className="flex flex-col gap-1">
-          <Words who="Mine" items={differences.mine} />
-          <Words who={theirLabel} items={differences.theirs} />
+          <Words who="Prototype" items={differences.mine} />
+          <Words who="Production" items={differences.theirs} />
           {differences.note ? <p className="text-sm text-foreground-subtle">{differences.note}</p> : null}
         </div>
       ) : null}

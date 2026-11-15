@@ -16,7 +16,7 @@ export const KINDS: { kind: string; label: string; tone: Tone }[] = [
   { kind: "stand-in", label: "Stand-ins", tone: "existing" },
   { kind: "near-match", label: "Near matches", tone: "near" },
   { kind: "new-reusable", label: "New, reusable", tone: "new" },
-  { kind: "feature-only", label: "Feature only", tone: "quiet" },
+  { kind: "feature-only", label: "New, one feature", tone: "quiet" },
   { kind: "colour", label: "Colours", tone: "quiet" },
 ];
 /** A design-system component used as it is: not a finding, but listed in the package. */
@@ -26,7 +26,7 @@ export const ROLE: Record<string, { label: string; tone: Tone }> = {
   "stand-in": { label: "Stand-in", tone: "existing" },
   "near-match": { label: "Near match", tone: "near" },
   "new-reusable": { label: "New, reusable", tone: "new" },
-  "feature-only": { label: "Feature only", tone: "quiet" },
+  "feature-only": { label: "New, one feature", tone: "quiet" },
 };
 
 export const TIER: Record<Finding["tier"], { label: string; tone: Tone }> = {
@@ -39,8 +39,10 @@ export const DECISION: Record<DecisionAction | "undecided", { label: string; ton
   undecided: { label: "To decide", tone: "quiet" },
   approve: { label: "Approved", tone: "match" },
   pick: { label: "Other match", tone: "existing" },
-  add: { label: "Added to system", tone: "system" },
+  add: { label: "Reusable", tone: "system" },
   exception: { label: "Ignored", tone: "exception" },
+  extend: { label: "Extending production", tone: "near" },
+  new: { label: "New", tone: "new" },
 };
 
 export const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -96,9 +98,9 @@ export function summaryOf(finding: Finding) {
     case "stand-in":
       return `Stands in for production's ${match}`;
     case "new-reusable":
-      return "Could join the system";
+      return "A new component production doesn't have, and could reuse";
     case "feature-only":
-      return "Only for this feature";
+      return "A new component, used by this feature only";
     case "colour":
       return finding.tier === "exact" ? `The same as ${match}` : finding.tier === "near" ? `Close to ${match}` : "No token is close";
     default:
@@ -112,13 +114,13 @@ export function mainLabel(finding: Finding, shown: number) {
   if (shown > 0 || (finding.rule === "colours" && finding.tier === "none")) return candidate ? `Use ${candidate.name}` : null;
   switch (finding.kind) {
     case "near-match":
-      return finding.mine.edited ? "Use production instead" : `Use ${candidate?.name}`;
+      return "Use production";
     case "stand-in":
       return "Matches production";
     case "new-reusable":
-      return "Add to the system";
+      return "Mark as new";
     case "feature-only":
-      return "Keep with the feature";
+      return "Mark as new";
     case "colour":
       return `Use ${candidate?.name}`;
     default:
@@ -128,11 +130,18 @@ export function mainLabel(finding: Finding, shown: number) {
 
 /** The decision the main action makes for the match on show. */
 export function mainChoice(finding: Finding, shown: number): Choice {
+  if (finding.kind === "new-reusable" || finding.kind === "feature-only") return { action: "new" };
   return shown > 0 || (finding.rule === "colours" && finding.tier === "none") ? { action: "pick", candidate: finding.candidates[shown]?.name } : { action: "approve" };
 }
 
-/** Whether a separate "Add to the system" makes sense: not where approving already adds it. */
-export const canAdd = (finding: Finding) => finding.kind !== "new-reusable";
+/** Only a colour can be added: as a token. A component is used from production, extended, or marked as new. */
+export const canAdd = (finding: Finding) => finding.rule === "colours";
+
+/** Whether there is a production component to extend, or to be told it isn't: a near match with a match. */
+export const canExtend = (finding: Finding) => finding.kind === "near-match" && finding.candidates.length > 0;
+
+/** A near match can be marked as new: it is not production's. (A new component already has that as its main action.) */
+export const canMarkNew = (finding: Finding) => finding.kind === "near-match";
 
 /** The name a component or colour would join the system under. */
 export const proposedName = (finding: Finding) => text(finding.proposed.add) || (finding.rule === "colours" ? "" : text(finding.mine.name));
@@ -142,7 +151,9 @@ export function decisionText(finding: Finding) {
   const decision = finding.decision;
   if (!decision) return "";
   if (decision.action === "pick") return `Use ${decision.candidate}`;
-  if (decision.action === "add") return `Add to the system as ${decision.name}`;
+  if (decision.action === "add") return `Add as the ${decision.name} token`;
+  if (decision.action === "extend") return `Extend production's ${decision.candidate ?? finding.candidates[0]?.name ?? ""}`;
+  if (decision.action === "new") return "A new component";
   if (decision.action === "exception") return decision.reason ?? "Ignored";
   return mainLabel(finding, 0) ?? "Approved";
 }
@@ -151,7 +162,7 @@ export const decisionOf = (finding: Finding) => DECISION[finding.decision?.actio
 
 /** How many findings went each way, for the totals. */
 export const totalsOf = (findings: Finding[]) =>
-  (["approve", "pick", "add", "exception"] as const).map((action) => ({ action, count: findings.filter((finding) => finding.decision?.action === action).length }));
+  (["approve", "pick", "extend", "new", "add", "exception"] as const).map((action) => ({ action, count: findings.filter((finding) => finding.decision?.action === action).length }));
 
 // --- Differences, in words ---
 
@@ -257,6 +268,16 @@ export function differencesOf(finding: Finding, candidate: Candidate | undefined
   return { mine: look(mine.filter((cls) => !theirs.includes(cls))), theirs: look(theirs.filter((cls) => !mine.includes(cls))), note: parts };
 }
 
+/** What a component renders can come from: how each is shown in a finding's "Built from". */
+export const BUILT_FROM: Record<string, { label: string; tone: Tone }> = {
+  "design-system": { label: "design system, same as production", tone: "system" },
+  "design-system-behind": { label: "design system, behind production", tone: "near" },
+  kit: { label: "kit, a front-end version of production's", tone: "existing" },
+  "stand-in": { label: "stand-in for production's", tone: "existing" },
+  own: { label: "this prototype's own", tone: "new" },
+};
+export type BuiltFrom = { name: string; file: string; from: string; count: number; importPath: string; props?: Prop[] };
+
 /** How far apart two colours are, in words. */
 export function colourDistance(candidate: Candidate) {
   const delta = parseFloat((candidate.differences?.[0] ?? "").replace(/^ΔE\s*/, ""));
@@ -290,7 +311,7 @@ export function planOf(handoff: Handoff) {
   for (const finding of handoff.findings) {
     const decision = finding.decision;
     if (!decision) plan.waiting.push(finding);
-    else if (decision.action === "exception" || decision.action === "add") plan.nothing.push(finding);
+    else if (decision.action === "exception" || decision.action === "add" || decision.action === "extend" || decision.action === "new") plan.nothing.push(finding);
     else if (finding.rule === "colours") {
       const token = decision.action === "pick" ? decision.candidate : text(finding.proposed.use);
       (token && finding.where.some((place) => own.has(place.file)) ? plan.change : plan.nothing).push(finding);

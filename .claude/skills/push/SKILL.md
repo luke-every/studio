@@ -43,7 +43,7 @@ Add `--team <slug>` for a new prototype, `--description "..."`, `--small` for a 
 
 ## 4. Tell them where it went
 
-One line: the version number and the link the script printed, plus its `Flow:` and `Time:` lines. Nothing more.
+One line: the version number and the link the script printed, plus its `Flow:`, `Time:` and `Handoff:` lines. Nothing more.
 
 ## Never
 

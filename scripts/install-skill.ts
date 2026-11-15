@@ -43,10 +43,15 @@ const handoffDir = join(home, ".claude", "skills", "handoff");
 mkdirSync(handoffDir, { recursive: true });
 for (const file of ["SKILL.md", "scan.mjs"]) copyFileSync(join(process.cwd(), ".claude", "skills", "handoff", file), join(handoffDir, file));
 
+// /handoffpush sends the handoff to the latest pushed version, with the same config.
+const handoffPushDir = join(home, ".claude", "skills", "handoffpush");
+mkdirSync(handoffPushDir, { recursive: true });
+for (const file of ["SKILL.md", "handoffpush.mjs"]) copyFileSync(join(process.cwd(), ".claude", "skills", "handoffpush", file), join(handoffPushDir, file));
+
 mkdirSync(join(home, ".claude"), { recursive: true });
 writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
-console.log("Installed /push and /handoff");
+console.log("Installed /push, /handoff and /handoffpush");
 console.log(`  skill   ${skillDir}/SKILL.md`);
 console.log(`  upload  ${skillDir}/push.mjs`);
 console.log(`  studio  ${configPath}`);

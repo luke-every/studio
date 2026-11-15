@@ -8,7 +8,7 @@ import type { Finding, Handoff } from "@/lib/handoff";
 
 import { MinePreview, type Context } from "./finding-stage";
 import { cssColour, Swatch } from "./previews";
-import { DECISION, decisionOf, decisionText, differencesOf, KINDS, nameOf, plural, SYSTEM_TONE, text, totalsOf } from "./words";
+import { andList, BUILT_FROM, DECISION, decisionOf, decisionText, differencesOf, KINDS, nameOf, plural, SYSTEM_TONE, text, totalsOf } from "./words";
 
 /**
  * The package, once signed off: what engineering builds from, laid out to look at. The same data as the file the
@@ -37,7 +37,7 @@ function Card({ finding, context, priority }: { finding: Finding; context: Conte
     <li className="flex min-w-0 flex-col overflow-hidden rounded-[var(--r-lg)] border border-border">
       {colour ? (
         <div className="flex h-20 gap-1 p-1">
-          <Swatch hex={text(finding.mine.hex)} alpha={alpha} label={`Mine, ${text(finding.mine.value)}`} className="h-full flex-1" />
+          <Swatch hex={text(finding.mine.hex)} alpha={alpha} label={`Prototype, ${text(finding.mine.value)}`} className="h-full flex-1" />
           {token ? <Swatch hex={text(token.value)} alpha={alpha} label={token.name} className="h-full flex-1" /> : null}
         </div>
       ) : (
@@ -76,7 +76,9 @@ const grid = "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3";
 export function PackageView({ handoff, name, context }: { handoff: Handoff; name: string; context: Context }) {
   const ds = handoff.designSystem;
   const exceptions = handoff.findings.filter((finding) => finding.decision?.action === "exception");
-  const proposals = handoff.findings.filter((finding) => finding.decision?.action === "add" || (finding.kind === "new-reusable" && finding.decision?.action === "approve"));
+  const extending = handoff.findings.filter((finding) => finding.decision?.action === "extend");
+  const markedNew = handoff.findings.filter((finding) => finding.decision?.action === "new");
+  const tokens = handoff.findings.filter((finding) => finding.decision?.action === "add");
   const kinds = [...KINDS, ...[...new Set(handoff.findings.map((finding) => finding.kind))].filter((kind) => !KINDS.some((item) => item.kind === kind)).map((kind) => ({ kind, label: kind }))];
   const totals = totalsOf(handoff.findings);
 
@@ -94,6 +96,8 @@ export function PackageView({ handoff, name, context }: { handoff: Handoff; name
           <a href={`https://github.com/${ds.repo}/tree/${ds.sha}`} target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-foreground hover:underline">
             {ds.repo.split("/").pop()} {ds.sha.slice(0, 7)}
           </a>
+          {handoff.changedSince?.length ? <> · {handoff.changedSince.length} file{handoff.changedSince.length === 1 ? "" : "s"} changed since the handoff was made</> : null}
+          {typeof ds.copiedFrom === "string" && ds.copiedFrom !== ds.sha ? <> · shared UI copied from {ds.copiedFrom.slice(0, 7)}</> : null}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {totals
@@ -119,6 +123,47 @@ export function PackageView({ handoff, name, context }: { handoff: Handoff; name
         );
       })}
 
+      {handoff.pages?.length ? (
+        <Section title="Pages" count={handoff.pages.length}>
+          <ul className="flex flex-col divide-y divide-divider border-y border-divider">
+            {handoff.pages.map((page) => (
+              <li key={page.file} className="flex flex-col gap-1.5 py-2.5 sm:flex-row sm:gap-4">
+                <span className="text-ui text-foreground sm:w-56 sm:shrink-0">
+                  {page.name} <span className="text-foreground-subtle">{page.variants.map((id) => context.variantLabel(id)).join(", ")}</span>
+                </span>
+                <span className="flex min-w-0 flex-wrap gap-1.5">
+                  {page.builtFrom.map((item) => (
+                    <Chip key={item.file} tone={BUILT_FROM[item.from]?.tone ?? "quiet"}>
+                      {item.name}
+                    </Chip>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
+      {handoff.kit?.length ? (
+        <Section title="From the kits" count={handoff.kit.length}>
+          <ul className="flex flex-col divide-y divide-divider border-y border-divider">
+            {handoff.kit.map((item) => (
+              <li key={item.file} className="flex flex-col gap-1 py-2.5 sm:flex-row sm:gap-4">
+                <span className="flex items-center gap-2 text-ui text-foreground sm:w-56 sm:shrink-0">
+                  {item.name}
+                  <Chip tone={item.kind === "stand-in" ? "existing" : "near"}>{item.kind === "stand-in" ? "Front-end version" : "Behind production"}</Chip>
+                </span>
+                <span className="flex min-w-0 flex-col gap-0.5 text-sm text-foreground-muted">
+                  <span className="break-words">Production: {item.production ?? "not found"}</span>
+                  {item.addedProps.length ? <span>The kit also takes {andList(item.addedProps.map((prop) => prop.name))}</span> : null}
+                  {item.removedProps.length ? <span>Production also takes {andList(item.removedProps.map((prop) => prop.name))}</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
       <Section title="Ignored" count={exceptions.length}>
         <ul className="flex flex-col divide-y divide-divider border-y border-divider">
           {exceptions.map((finding) => (
@@ -130,15 +175,51 @@ export function PackageView({ handoff, name, context }: { handoff: Handoff; name
         </ul>
       </Section>
 
-      <Section title="Proposed for the system" count={proposals.length}>
-        <ul className="flex flex-wrap gap-1.5">
-          {proposals.map((finding) => (
-            <li key={finding.id}>
-              <Chip tone="system">{finding.decision?.name || nameOf(finding)}</Chip>
-            </li>
-          ))}
-        </ul>
-      </Section>
+      {extending.length ? (
+        <Section title="Extending production" count={extending.length}>
+          <ul className="flex flex-col divide-y divide-divider border-y border-divider">
+            {extending.map((finding) => {
+              const candidate = finding.candidates.find((item) => item.name === finding.decision?.candidate) ?? finding.candidates[0];
+              const differences = differencesOf(finding, candidate);
+              return (
+                <li key={finding.id} className="flex flex-col gap-1 py-2.5 sm:flex-row sm:gap-4">
+                  <span className="text-ui text-foreground sm:w-56 sm:shrink-0">
+                    {nameOf(finding)} <span className="text-foreground-subtle">extends {candidate?.name}</span>
+                  </span>
+                  <span className="flex min-w-0 flex-col gap-0.5 text-sm text-foreground-muted">
+                    {differences.mine.length ? <span>The prototype {differences.mine.join(", ")}</span> : null}
+                    {differences.theirs.length ? <span>Production {differences.theirs.join(", ")}</span> : null}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Section>
+      ) : null}
+
+      {markedNew.length ? (
+        <Section title="New components" count={markedNew.length}>
+          <ul className="flex flex-wrap gap-1.5">
+            {markedNew.map((finding) => (
+              <li key={finding.id}>
+                <Chip tone="new">{nameOf(finding)}</Chip>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
+      {tokens.length ? (
+        <Section title="New tokens" count={tokens.length}>
+          <ul className="flex flex-wrap gap-1.5">
+            {tokens.map((finding) => (
+              <li key={finding.id}>
+                <Chip tone="system">{finding.decision?.name || nameOf(finding)}</Chip>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
 
       <Section title="From the system, as it is" count={handoff.scope.designSystem.length}>
         <ul className="flex flex-wrap gap-x-4 gap-y-1.5">

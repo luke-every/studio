@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { SelectionPanel } from "@/components/handoff/part-panel";
+import { useSharedHandoff } from "@/components/handoff/use-shared-handoff";
+import type { Selection } from "@/lib/handoff-selection";
+
 import { SharedCommentsContext } from "@/components/prototype/shared-comments";
 import { ColumnHandle, RevealTab } from "@/components/prototype/column-handle";
 import { ViewMenu } from "@/components/prototype/view-menu";
@@ -63,6 +67,7 @@ function Shared({
   slug,
   versionKey,
   githubUrl,
+  token,
 }: {
   name: string;
   description: string;
@@ -91,6 +96,10 @@ function Shared({
   const controlled = withParams(applyControls(version.url, offered, values), extra);
   const chosenAddress = withVariant(controlled);
   const address = `${chosenAddress}${chosenAddress.includes("?") ? "&" : "?"}review=${encodeURIComponent(review)}`;
+
+  // A handed-off version: its screens are marked Ready for dev on the canvas, and a tap on a part says what it is.
+  const handoff = useSharedHandoff(slug, version.url.split("/").pop() ?? "", token);
+  const [section, setSection] = useState<Selection | null>(null);
 
   const phone = useMediaQuery("(max-width: 639px)");
   // What the iframe is given: `studio=1` added, held still once the prototype can take control changes as messages.
@@ -266,6 +275,19 @@ function Shared({
           onPlace={followPlace}
           flow={flow}
           variants={variantsCanvas}
+          readyForDev={handoff ? handoff.variants : null}
+          handoffInspect={handoff ? { elements: handoff.elements, onSelect: setSection } : undefined}
+          inspectPanel={
+            handoff ? (
+              <SelectionPanel
+                data={handoff}
+                selection={section}
+                onClose={() => setSection(null)}
+                variantLabel={(id) => variantsCanvas?.flow.screens.find((screen) => screen.id === id)?.name ?? id}
+                briefUrl={(target) => `${window.location.origin}/api/review/handoff/brief?${new URLSearchParams({ slug, version: version.url.split("/").pop() ?? "", token, target, ref: `${window.location.origin}${window.location.pathname}` })}`}
+              />
+            ) : undefined
+          }
           flowOpen={flowOpen}
           onFlowOpen={setFlowOpen}
           mode={mode}

@@ -2,7 +2,7 @@ import { anchorAt, anchorOf, boxAt, elementAt, ownedBy, revealAnchor, scrollAt, 
 import type { Anchor } from "@/lib/comments";
 import { describePart, partIn, type painter, type Part } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
-import { findClip, setMarks, type Clip, type Find } from "@/lib/handoff-clip";
+import { findClip, partBox, setMarks, sourceAt, type Clip, type Find, type SourceEl, type SourceHit } from "@/lib/handoff-clip";
 
 /**
  * A prototype's page, for comments and for editing: what is at a point, where comments are on it, going to one, the
@@ -172,7 +172,7 @@ function near(frame: HTMLIFrameElement): FramePage {
 /** How long a question is waited for before the page is taken not to know (it may not have the helper). */
 const ASK_MS = 1500;
 
-type Ask = { id: number; what: "anchor" | "box" | "reveal" | "part" | "anchorOf" | "clip" | "mark"; x?: number; y?: number; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; find?: Find; finds?: Find[]; colour?: string | null };
+type Ask = { id: number; what: "anchor" | "box" | "reveal" | "part" | "anchorOf" | "clip" | "mark" | "sourceAt" | "handoffPartBox" | "selectorBox"; x?: number; y?: number; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; find?: Find; finds?: Find[]; colour?: string | null; elements?: SourceEl[]; part?: Find; index?: number };
 type Link = {
   /** The page's own address, once it has said hello; questions wait until then. */
   origin: string | null;
@@ -288,6 +288,34 @@ export function clipOf(frame: HTMLIFrameElement, find: Find, done: (clip: Clip |
   // The page loads the bridge first, then looks for the element for as long as the studio's side would.
   void askOf<Clip | null>(win, { what: "clip", find }, 10000, null).then((clip) => stopped || done(clip));
   return () => void (stopped = true);
+}
+
+/** Which section of the code draws what is at a point in a page: read directly on the studio's own address, asked of the bridge on another. */
+export function handoffSourceAt(frame: HTMLIFrameElement, x: number, y: number, elements: SourceEl[]) {
+  const win = frame.contentWindow;
+  if (!win) return Promise.resolve<SourceHit | null>(null);
+  if (frame.contentDocument) return Promise.resolve(sourceAt(frame.contentDocument, x, y, elements));
+  return askOf<SourceHit | null>(win, { what: "sourceAt", x, y, elements }, 3000, null);
+}
+
+/** Where the element a selector names is in a page (another copy of the one an element was selected in): its box, or null when it isn't there. */
+export function selectorBox(frame: HTMLIFrameElement, selector: string) {
+  const win = frame.contentWindow;
+  if (!win) return Promise.resolve<SourceHit["box"] | null>(null);
+  if (frame.contentDocument) {
+    const element = frame.contentDocument.body ? partIn(frame.contentDocument, selector) : null;
+    const rect = element?.getBoundingClientRect();
+    return Promise.resolve(rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null);
+  }
+  return askOf<SourceHit["box"] | null>(win, { what: "selectorBox", selector }, 3000, null);
+}
+
+/** Where a handoff's part is in another copy of the page (the same page on another device): its box, or null when it isn't there. */
+export function handoffPartBox(frame: HTMLIFrameElement, part: Find, index: number) {
+  const win = frame.contentWindow;
+  if (!win) return Promise.resolve<SourceHit["box"] | null>(null);
+  if (frame.contentDocument) return Promise.resolve(partBox(frame.contentDocument, part, index));
+  return askOf<SourceHit["box"] | null>(win, { what: "handoffPartBox", part, index }, 3000, null);
 }
 
 /** Outlines what a handoff changed in the page (see `setMarks`), or takes the outlines away: directly, or through the bridge. */

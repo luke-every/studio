@@ -19,7 +19,7 @@ import { FindingStage, type Context } from "./finding-stage";
 import { CheckStage } from "./check-stage";
 import { PackageView } from "./package-view";
 import { cssColour } from "./previews";
-import { canAdd, decisionOf, KINDS, mainChoice, mainLabel, nameOf, planOf, text, TIER, totalsOf, type Choice } from "./words";
+import { canAdd, canExtend, canMarkNew, decisionOf, KINDS, mainChoice, mainLabel, nameOf, planOf, text, TIER, totalsOf, type Choice } from "./words";
 
 /**
  * A version's handoff, over its prototype: every finding in a queue, one at a time on a stage of mine beside the
@@ -81,6 +81,7 @@ export function HandoffModal({ prototype, version, controls, onClose }: { protot
     const control = variantControl(controls);
     return {
       theme: handoff?.theme,
+      modules: handoff?.modules,
       fontBase: typeof window === "undefined" || !base ? "" : `${window.location.origin}${base}/`,
       variantLabel: (id: string) => handoff?.scope.variants.find((variant) => variant.id === id)?.label ?? id,
       pageFor: (variants?: string[]) => {
@@ -187,6 +188,12 @@ export function HandoffModal({ prototype, version, controls, onClose }: { protot
       case "i":
         if (can) press(() => void decide(current, { action: "exception" }));
         return;
+      case "n":
+        if (can && canMarkNew(current)) press(() => void decide(current, { action: "new" }));
+        return;
+      case "e":
+        if (can && canExtend(current)) press(() => void decide(current, { action: "extend", candidate: current.candidates[shownIndex]?.name }));
+        return;
     }
   };
 
@@ -208,20 +215,11 @@ export function HandoffModal({ prototype, version, controls, onClose }: { protot
         </h2>
         {handoff?.signOff ? (
           <Chip tone="match">Ready for dev</Chip>
-        ) : handoff && total ? (
-          <div className="flex items-center gap-3">
-            <p className="text-sm tabular-nums text-foreground-muted">
-              {total - left} of {total}
-            </p>
-            <div role="progressbar" aria-label="Decided" aria-valuemin={0} aria-valuemax={total} aria-valuenow={total - left} className="h-1 w-24 overflow-hidden rounded-[var(--r-full)] bg-surface-inset max-sm:hidden sm:w-40">
-              <div style={{ width: `${((total - left) / total) * 100}%` }} className="h-full bg-foreground" />
-            </div>
-          </div>
         ) : null}
         {handoff && !handoff.signOff ? (
           stage === "review" ? (
             <Button variant={left === 0 ? "primary" : "secondary"} className="h-8 px-3" disabled={busy} onClick={() => void check()}>
-              Check the result
+              Preview and commit
             </Button>
           ) : null
         ) : null}

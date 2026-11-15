@@ -17,15 +17,18 @@ There are three steps, and you do the first one:
 3. **Ready for dev** (the designer): once everything is decided they sign it off, and the same page becomes the
    package engineering reads.
 
+Files that came with the prototype from the team's starter, kits or templates, untouched, are not the designer's to decide: the
+scan lists them for engineering (with how they differ from production's) and never puts them in the review or checks them for colours.
+A kit file the designer has changed since is reviewed like any other.
+
 The scanner is deterministic. Your part is the judgement it can't make: which variants are final, and which files each
 one starts from. **Don't change any of the prototype's code during a handoff**, and never run git. The one exception is
 the scanner's own: it replaces a colour class that is exactly a token (`border-[#bdb3a9]` becomes
 `border-light-grey-3`) in the prototype's own files, never in files copied from production, and prints each change.
 
-## 1. Which version
+## 1. Where it goes
 
-A handoff describes a version the studio already has. If this session changed the prototype since its last /push,
-say so and /push first (or ask, if you aren't sure). The prototype's name in the studio is the one /push used.
+A handoff is made while you work on the prototype, with nothing pushed. It goes to the studio running on this machine (the scanner finds it on its usual ports) and describes the prototype's **Live** version, the one running from the folder. The prototype only has to be in `~/Claude/prototypes/`; the name is the folder's name in the studio. Don't /push first. If no studio is running, tell the designer to start it (`npm run dev` in the studio's folder).
 
 ## 2. Which variants are final
 

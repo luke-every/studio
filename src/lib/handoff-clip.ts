@@ -96,3 +96,52 @@ export function setMarks(doc: Document, finds: Find[], colour: string | null) {
   style.textContent = `${selectors.join(",")}{outline:2px solid ${colour.replace(/[;{}]/g, "")} !important;outline-offset:2px !important;}`;
   doc.head.append(style);
 }
+
+/** Whether an element is the one a find describes: its tag, the classes it always has, and the words it starts with. */
+export function matches(element: Element, find: Find) {
+  if (!find.classes.length && !find.tag) return false;
+  if (find.tag && element.tagName.toLowerCase() !== find.tag) return false;
+  if (!find.classes.every((cls) => element.classList.contains(cls))) return false;
+  return !find.text || words(element).includes(find.text);
+}
+
+/** One element the prototype's own code draws: where, and how to recognise it in the page. */
+export type SourceEl = { file: string; line: number; endLine: number; find: Find };
+export type SourceHit = { file: string; line: number; endLine: number; find: Find; box: { left: number; top: number; width: number; height: number }; /** Which of the page's elements that match it this is, in document order: the same one is found on another copy of the page. */ index: number };
+
+/**
+ * The section of the code under a point in a page: from the element there outwards, the first that one of `elements`
+ * describes, so the innermost wins (a tile inside a card is the tile). Of several that describe the same element the
+ * most exact (more classes) wins, then the smallest range. Its box is in the page's own window.
+ */
+export function sourceAt(doc: Document, x: number, y: number, elements: SourceEl[]): SourceHit | null {
+  let element: Element | null = doc.elementFromPoint(x, y);
+  while (element && element !== doc.documentElement) {
+    const here = element;
+    const found = elements.filter((item) => matches(here, item.find)).sort((a, b) => b.find.classes.length - a.find.classes.length || a.endLine - a.line - (b.endLine - b.line));
+    if (found[0]) {
+      const rect = here.getBoundingClientRect();
+      return { ...found[0], box: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, index: Math.max(0, allMatching(doc, found[0].find).indexOf(here)) };
+    }
+    element = element.parentElement;
+  }
+  return null;
+}
+
+/** Every element in the page a find describes, in document order. */
+function allMatching(doc: Document, find: Find): Element[] {
+  try {
+    return Array.from(doc.querySelectorAll(selectorOf(find))).filter((element) => matches(element, find));
+  } catch {
+    return [];
+  }
+}
+
+/** Where the `index`th element a find describes is in the page's window (the first if there are fewer): the same part as one selected on another copy of the page. */
+export function partBox(doc: Document, find: Find, index: number): SourceHit["box"] | null {
+  const all = allMatching(doc, find);
+  const element = all[index] ?? all[0];
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+}

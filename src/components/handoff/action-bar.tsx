@@ -9,7 +9,7 @@ import { fieldClass } from "@/components/ui/dialog-form";
 import { Stamp } from "@/components/ui/stamp";
 import type { Finding } from "@/lib/handoff";
 
-import { canAdd, decisionOf, proposedName, mainChoice, mainLabel, type Choice } from "./words";
+import { canAdd, canExtend, canMarkNew, decisionOf, proposedName, mainChoice, mainLabel, type Choice } from "./words";
 
 export type BarMode = "choose" | "add";
 
@@ -83,11 +83,11 @@ export function ActionBar({
           <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
             <input
               autoFocus
-              aria-label="Its name in the system"
+              aria-label="Token name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               onKeyDown={fieldKeys(addIt)}
-              placeholder="Name in the system"
+              placeholder="Token name"
               className={`${fieldClass} h-10 min-w-0 flex-1 py-0 text-ui sm:max-w-xs`}
             />
             <Button onClick={() => onMode("choose")}>Cancel</Button>
@@ -113,9 +113,19 @@ export function ActionBar({
             <Button disabled={off} aria-keyshortcuts="i" onClick={() => onDecide({ action: "exception" })}>
               Ignore <Key>I</Key>
             </Button>
+            {canMarkNew(finding) ? (
+              <Button disabled={off} aria-keyshortcuts="n" onClick={() => onDecide({ action: "new" })}>
+                Mark as new <Key>N</Key>
+              </Button>
+            ) : null}
+            {canExtend(finding) ? (
+              <Button disabled={off} aria-keyshortcuts="e" onClick={() => onDecide({ action: "extend", candidate: finding.candidates[shown]?.name })}>
+                Extend production <Key>E</Key>
+              </Button>
+            ) : null}
             {canAdd(finding) ? (
               <Button disabled={off} aria-keyshortcuts="s" onClick={() => onMode("add")}>
-                Add to the system <Key>S</Key>
+                Add as a token <Key>S</Key>
               </Button>
             ) : null}
             {finding.candidates.length > 1 ? (

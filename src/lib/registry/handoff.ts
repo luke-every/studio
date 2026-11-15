@@ -41,6 +41,12 @@ export async function readHandoff(slug: string, key: string): Promise<Handoff | 
   return text ? handoffSchema.parse(JSON.parse(text)) : null;
 }
 
+/** How far a handoff has got, for the row on the prototype's page: small, since it is asked for every few seconds. */
+export async function handoffStatus(slug: string, key: string) {
+  const current = await readHandoff(slug, key);
+  return current ? { total: current.findings.length, left: undecided(current), signedBy: current.signOff?.by ?? null, variants: current.scope.variants.map((variant) => variant.id) } : null;
+}
+
 async function update<T>(slug: string, key: string, change: (current: Handoff | null) => { next: Handoff; message: string; result: T }): Promise<T> {
   const path = pathFor(slug, key);
   let result!: T;
@@ -86,6 +92,21 @@ export async function saveFindings(input: { slug: string; version: string; hando
   });
 }
 
+/**
+ * A handoff made on the designer's machine, carried to the version /push has just made: stored as it was, decisions and
+ * sign-off included, so engineers who open that version find it. The version's code is what was pushed, so it is the
+ * working copy's; `changedSince` names any live files that were changed after the handoff was made.
+ */
+export async function carryHandoff(input: { slug: string; version: string; handoff: unknown; changedSince?: string[] }) {
+  const version = await findVersion(input.slug, input.version);
+  const carried = handoffSchema.parse(input.handoff);
+  return update(input.slug, version.key, (current) => {
+    // Carrying is the designer's own act, and the latest handoff they made replaces whatever the version had.
+    const next: Handoff = { ...carried, prototype: { slug: input.slug, version: version.version }, applied: null, changedSince: input.changedSince?.length ? input.changedSince : undefined };
+    return { next, message: `Handoff carried to ${input.slug} ${version.version}`, result: { version: version.version, signedOff: !!next.signOff, changedSince: next.changedSince?.length ?? 0 } };
+  });
+}
+
 /** A designer's decision on one finding, or null to take it back. Decisions can change until the handoff is signed off. */
 export async function decide(input: { slug: string; key: string; id: string; decision: Pick<Decision, "action" | "candidate" | "name" | "reason"> | null; by: string }) {
   const by = input.by.trim();
@@ -102,7 +123,7 @@ export async function decide(input: { slug: string; key: string; id: string; dec
       const { action, candidate, name, reason } = input.decision;
       decision = {
         action,
-        ...(action === "pick" ? { candidate } : {}),
+        ...(action === "pick" || action === "extend" ? { candidate } : {}),
         ...(action === "add" ? { name: name?.trim() } : {}),
         ...(action === "exception" ? { reason: reason?.trim() } : {}),
         by,

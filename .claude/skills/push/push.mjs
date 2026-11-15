@@ -28,7 +28,7 @@
  */
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 
@@ -154,7 +154,8 @@ lap("studio");
 const { owner, repo, branch, token } = start.repository;
 const prefix = start.prefix;
 
-const SKIP_DIRS = new Set(["node_modules", ".git", ".next", ".vercel", "dist", "build"]);
+// `.studio` is the studio's own notes about a working copy (comments, a handoff and its backups): kept on this machine, not pushed with the source.
+const SKIP_DIRS = new Set(["node_modules", ".git", ".next", ".vercel", "dist", "build", ".studio"]);
 // GitHub refuses any single file over 100MB.
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
@@ -701,6 +702,38 @@ lap("record");
 // The export was only for the upload, and it doubles the prototype's public/ on disk.
 if (appMode) rmSync(join(root, "out"), { recursive: true, force: true });
 
+// What was pushed, kept on this machine: /handoffpush compares it with the files as they are, to say whether the version's code is still the working copy's.
+try {
+  const sent = (appMode ? files.filter((file) => file.path.startsWith("_source/")).map((file) => [file.path.slice("_source/".length), file.filePath]) : files.map((file) => [file.path, file.filePath]));
+  mkdirSync(join(root, ".studio"), { recursive: true });
+  writeFileSync(join(root, ".studio", "pushed.json"), JSON.stringify({ slug: result.slug, version: result.version, at: new Date().toISOString(), hashes: Object.fromEntries(sent.map(([path, filePath]) => [path, createHash("sha1").update(readFileSync(filePath)).digest("hex")])) }));
+} catch {
+  // Only a convenience: the push has happened.
+}
+
+// The designer's handoff, if they made one here, goes with the version so engineers who open it find it. Never stops the push.
+let handoffLine = "";
+try {
+  const made = existsSync(join(root, ".studio", "handoff.json")) ? JSON.parse(readFileSync(join(root, ".studio", "handoff.json"), "utf8")) : null;
+  if (made) {
+    const changedSince = Object.entries(made.scope?.hashes ?? {})
+      .filter(([file, hash]) => {
+        try {
+          return createHash("sha1").update(readFileSync(join(root, file))).digest("hex") !== hash;
+        } catch {
+          return true;
+        }
+      })
+      .map(([file]) => file);
+    const carried = await studio("/api/handoff", { slug: result.slug, version: result.version, handoff: made, carried: true, changedSince }, { soft: true });
+    handoffLine = carried.error
+      ? `Handoff: not carried (${carried.error})`
+      : `Handoff: carried${made.signOff ? `, signed off by ${made.signOff.by}` : ", not signed off yet"}${changedSince.length ? `; ${changedSince.length} file(s) changed since it was made, so it may be out of date` : ""}`;
+  }
+} catch {
+  handoffLine = "Handoff: not carried";
+}
+
 console.log(`${saved.summary}, ${(totalBytes / 1024 / 1024).toFixed(1)} MB total`);
 console.log(`Pushed ${result.slug} ${result.version}`);
 console.log(result.studio);
@@ -711,3 +744,4 @@ console.log(
     ? `Flow: ${flowScreens} screens${carried ? ` (carried over from ${carried.version})` : ""}`
     : "Flow: none. Fine for a single screen; if this has several, add one (step 2 of the skill) and push again.",
 );
+if (handoffLine) console.log(handoffLine);

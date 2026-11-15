@@ -2,7 +2,9 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { FitIcon, PlayIcon } from "@/components/shell/nav-icons";
+import { CodeIcon, FitIcon, PlayIcon } from "@/components/shell/nav-icons";
+import type { SourceEl } from "@/lib/handoff-clip";
+import type { Selection } from "@/lib/handoff-selection";
 import { IconButton } from "@/components/ui/button";
 import type { Spot } from "@/lib/anchor";
 import { setupOf, type Anchor } from "@/lib/comments";
@@ -15,7 +17,7 @@ import { Card, CommentCard, Composer, DraftPin, Pin, PinTarget, type CommentsUi 
 import type { Part } from "@/lib/edit-part";
 
 import { TextInPlace } from "./edit-layer";
-import { pageOf } from "./frame-page";
+import { handoffPartBox, handoffSourceAt, pageOf, selectorBox } from "./frame-page";
 import { usePinWatch } from "./use-pin-watch";
 
 /** How big a screen is drawn on the canvas, as a share of the phone's real size. */
@@ -103,6 +105,8 @@ export function FlowCanvas({
   zoom = 1,
   fit = false,
   fold = false,
+  ready,
+  inspect,
   picking,
 }: {
   flow: Flow;
@@ -121,6 +125,10 @@ export function FlowCanvas({
   fit?: boolean;
   /** Fades what is below where each screen's device height ends, when the page runs on past it. */
   fold?: boolean;
+  /** Which screens have been handed off to engineering (see `Ready for dev`): each is marked beside its name. */
+  ready?: (screenId: string) => boolean;
+  /** Engineers looking at a handed-off version: a tap on a screen selects the part of the handoff under it (outlined), and says which. */
+  inspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void };
   /**
    * The version can be edited: a click on a screen selects the part under it as well. `target` is the one selected, as
    * its page describes it; `onPick` is told the next and the frame it is in, or null when it is let go of; `onText` is
@@ -247,6 +255,27 @@ export function FlowCanvas({
   const [origin, setOrigin] = useState({ left: 0, top: 0 });
   const placing = !!comments?.placing;
   const selecting = !!picking;
+  // The part of a handoff selected on a screen (see `inspect`), and where it is in that screen's pixels.
+  const [inspected, setInspected] = useState<{ id: string; copyId: string; box: Box } | null>(null);
+  // The same part on the screen's other copies (the same page on the other devices that are on), so it is plain they are one.
+  const [echoes, setEchoes] = useState<{ key: string; copyId: string; box: Box }[]>([]);
+  // The same element as one selected on `copy`, on that screen's other copies, by how each finds it.
+  const echo = async (copy: { id: string; screen: { id: string } }, key: string, find: (frame: HTMLIFrameElement) => Promise<Box | null>) => {
+    const others = copies.filter((item) => item.screen.id === copy.screen.id && item.id !== copy.id);
+    const boxes = await Promise.all(others.map(async (item) => ({ copyId: item.id, box: frames.current.get(item.id) ? await find(frames.current.get(item.id)!) : null })));
+    setEchoes(boxes.flatMap((item) => (item.box ? [{ key, copyId: item.copyId, box: item.box }] : [])));
+  };
+  const inspectAt = async (clientX: number, clientY: number) => {
+    const found = inspect && pointIn(clientX, clientY);
+    if (!inspect || !found) return;
+    const hit = await handoffSourceAt(found.frame, found.x, found.y, inspect.elements);
+    const key = hit ? `${hit.file}:${hit.line}` : "";
+    setInspected(hit ? { id: key, copyId: found.copy.id, box: hit.box } : null);
+    setEchoes([]);
+    // Whatever is tapped is a section of the code; on bare page it is the screen itself.
+    inspect.onSelect(hit ? { kind: "section", file: hit.file, line: hit.line, endLine: hit.endLine } : { kind: "frame", screenId: found.copy.screen.id });
+    if (hit) void echo(found.copy, key, (frame) => handoffPartBox(frame, hit.find, hit.index));
+  };
   // The element selected to edit, and the screen it is on; only while it is still the one the page holds.
   const [pickedOn, setPickedOn] = useState<{ selector: string; copyId: string } | null>(null);
   const picked = pickedOn && copyOf.has(pickedOn.copyId) && picking?.target && pickedOn.selector === picking.target.selector ? { copyId: pickedOn.copyId, part: picking.target } : null;
@@ -603,6 +632,8 @@ export function FlowCanvas({
     if (!picking || !found) return;
     const part = await pageOf(found.frame).partAt(found.x, found.y);
     setPickedOn(part ? { selector: part.selector, copyId: found.copy.id } : null);
+    setEchoes([]);
+    if (part) void echo(found.copy, part.selector, (frame) => selectorBox(frame, part.selector));
     if (part || picking.target) picking.onPick(found.frame, part);
   };
   // A second tap on words types over them, where they are.
@@ -693,6 +724,11 @@ export function FlowCanvas({
       onPointerUp={(event) => {
         const done = drag.current;
         // A tap on the canvas around the screens lets go of an element selected to edit; a control or a pin pressed is not that.
+        if (done && !done.moved && !done.screen && inspected && !(event.target as Element).closest("button, [data-pin], textarea")) {
+          setInspected(null);
+          setEchoes([]);
+          inspect?.onSelect(null);
+        }
         if (done && !done.moved && !done.screen && picking?.target && !(event.target as Element).closest("button, [data-pin], textarea")) picking.onPick(null, null);
         if (done?.moved && done.screen && done.origin) {
           moves.current.past.push({ id: done.screen, from: done.origin, to: offsetsNow.current[done.screen] ?? { x: 0, y: 0 } });
@@ -700,6 +736,12 @@ export function FlowCanvas({
         }
         // Letting go of a drag isn't a click on anything; a tap on a screen's name selects it.
         if (!drag.current?.moved) setSelected(drag.current?.screen ?? null);
+        // And, to an engineer, the screen's name is the frame itself: the whole design, with nothing in it picked.
+        if (inspect && done && !done.moved && done.screen && (event.target as Element).closest("[data-screen-name]")) {
+          setInspected(null);
+          setEchoes([]);
+          inspect.onSelect({ kind: "frame", screenId: screenOfCopy(done.screen) });
+        }
         window.setTimeout(() => (drag.current = null), 0);
       }}
       style={{
@@ -742,6 +784,7 @@ export function FlowCanvas({
                 } else {
                   lastTap.current = { id, at: now };
                   void pick(event.clientX, event.clientY);
+                  void inspectAt(event.clientX, event.clientY);
                 }
               }}
               aria-label={devices.length > 1 ? `${screen.name}, ${on.name}` : screen.name}
@@ -860,10 +903,15 @@ export function FlowCanvas({
                 data-screen-name
                 onPointerDown={(event) => grab(event, id)}
                 style={{ left: spot.x, top: spot.y - 22, maxWidth: Math.max(60, widthOf(id) * view.scale) }}
-                className={`absolute truncate text-xs font-medium ${placing ? "pointer-events-none" : "pointer-events-auto cursor-grab"} ${selected === id ? "text-foreground" : "text-foreground-muted"}`}
+                className={`absolute flex items-center gap-1.5 text-xs font-medium ${placing ? "pointer-events-none" : "pointer-events-auto cursor-grab"} ${selected === id ? "text-foreground" : "text-foreground-muted"}`}
               >
                 {/* With several devices on, each copy says which it is. */}
-                {devices.length > 1 ? `${screen.name} · ${on.name}` : screen.name}
+                <span className="truncate">{devices.length > 1 ? `${screen.name} · ${on.name}` : screen.name}</span>
+                {ready?.(screen.id) ? (
+                  <span role="img" aria-label="Ready for dev" title="Ready for dev" className="grid size-4 shrink-0 place-items-center rounded-[var(--r-xs)] bg-success text-success-foreground">
+                    <CodeIcon className="size-3" />
+                  </span>
+                ) : null}
               </span>
             );
           })}
@@ -913,10 +961,17 @@ export function FlowCanvas({
           {placing && target && !draft ? outline("target", target.copyId, target.box) : null}
         </div>
       ) : null}
+      {size && inspected && copyOf.has(inspected.copyId) ? (
+        <div className="pointer-events-none absolute inset-0">
+          {outline("inspected", inspected.copyId, inspected.box, true)}
+          {echoes.filter((item) => item.key === inspected.id && copyOf.has(item.copyId)).map((item) => outline(`echo-${item.copyId}`, item.copyId, item.box, true))}
+        </div>
+      ) : null}
       {/* Where the version can be edited: the element under the pointer, and the one selected, marked the same way. */}
       {size && selecting ? (
         <div className="absolute inset-0">
           {picked ? outline("picked", picked.copyId, picked.part.box, !!picked.part.component) : null}
+          {picked ? echoes.filter((item) => item.key === picked.part.selector && copyOf.has(item.copyId)).map((item) => outline(`echo-${item.copyId}`, item.copyId, item.box, !!picked.part.component)) : null}
           {target ? outline("target", target.copyId, target.box, target.box.component) : null}
           {typing
             ? (() => {

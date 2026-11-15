@@ -210,6 +210,10 @@ export async function readHandoff(slug: string, key: string) {
   return attempt(() => handoff.readHandoff(slug, key), []);
 }
 
+export async function handoffStatusOf(slug: string, key: string) {
+  return attempt(() => handoff.handoffStatus(slug, key), []);
+}
+
 export async function decideFinding(input: Parameters<typeof handoff.decide>[0]) {
   return attempt(() => handoff.decide(input), []);
 }

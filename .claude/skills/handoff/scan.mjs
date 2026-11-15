@@ -16,6 +16,7 @@
  * The finding shape is the same for every rule (see FINDING below), so another rule only adds findings.
  */
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
@@ -629,6 +630,52 @@ export function coloursOf(ts, source, file) {
  *     tier: "exact" | "near" | "none", proposed: { summary, ... }, decision: null }
  * `decision` is filled in by the designer in the studio: { action: "approve" | "pick" | "add" | "exception", candidate?, name?, reason?, by, at }.
  */
+// ---------------------------------------------------------------------------------------------------------------
+// What the team's kits provide: not the designer's to decide.
+
+/** The team's starter, kits and templates, where /newprototype copies a prototype's first files from. */
+export const TEAM_CONVENTIONS = join(homedir(), "Claude", "team-conventions");
+
+/**
+ * Every file the starter, the kits (`optional-stubs/<kit>/src`) and the templates carry, by the path it has in a
+ * prototype (`src/...`), with the text each version of it has. A live file that is byte for byte one of these came with
+ * the prototype: whoever made it didn't write it, so there is nothing for them to decide about it. Without the folder
+ * (a machine that doesn't have it) there is no baseline and every file is judged on its own.
+ */
+export function kitBaseline(root = TEAM_CONVENTIONS) {
+  const texts = new Map();
+  const add = (base) => {
+    if (!existsSync(base)) return;
+    const walk = (folder) => {
+      for (const entry of readdirSync(folder, { withFileTypes: true })) {
+        const full = join(folder, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (/\.(tsx?|jsx?|css|json)$/.test(entry.name)) {
+          const key = posix(join("src", relative(base, full)));
+          (texts.get(key) ?? texts.set(key, new Set()).get(key)).add(readFileSync(full, "utf8"));
+        }
+      }
+    };
+    walk(base);
+  };
+  add(join(root, "starter", "src"));
+  const stubs = join(root, "starter", "optional-stubs");
+  if (existsSync(stubs)) for (const kit of readdirSync(stubs, { withFileTypes: true })) if (kit.isDirectory()) add(join(stubs, kit.name, "src"));
+  const templates = join(root, "templates");
+  if (existsSync(templates)) for (const template of readdirSync(templates, { withFileTypes: true })) if (template.isDirectory()) add(join(templates, template.name, "src"));
+  return texts;
+}
+
+/** The production commit the prototype's copies of the shared UI were taken from (`.design-system.json`, written by the sync), if it says. */
+function copiedFrom(dir) {
+  try {
+    const sha = JSON.parse(readFileSync(join(dir, ".design-system.json"), "utf8")).sha;
+    return typeof sha === "string" ? { copiedFrom: sha } : {};
+  } catch {
+    return {};
+  }
+}
+
 export function scan({ dir: dirArg, variants: wantedVariants, by }) {
   const dir = resolve(dirArg);
   const ts = loadTypescript(dir);
@@ -816,6 +863,86 @@ export function scan({ dir: dirArg, variants: wantedVariants, by }) {
     roles.set(file, isComponent ? "new" : "supporting");
   }
 
+  // What came with the prototype (the starter, a kit, a template) and hasn't been touched is not the designer's to decide:
+  // listed for engineering with how it differs from production, never reviewed, and never judged for colours.
+  const baseline = kitBaseline();
+  const came = (file) => baseline.get(file)?.has(readFileSync(join(dir, file), "utf8")) ?? false;
+  const kit = [];
+  for (const finding of [...findings]) {
+    const file = finding.mine?.file;
+    if (finding.rule !== "components" || !file || !(finding.kind === "stand-in" || (finding.kind === "near-match" && finding.mine.edited)) || !came(file)) continue;
+    const candidate = finding.candidates[0];
+    kit.push({
+      name: finding.mine.name,
+      file,
+      production: candidate ? String(candidate.source).split(":").slice(1).join(":") : undefined,
+      // A stand-in is a front-end version of production's; "behind" is a copy of production's that production has since changed.
+      kind: finding.kind === "stand-in" ? "stand-in" : "behind",
+      similarity: candidate?.score ?? finding.mine.similarity,
+      addedProps: finding.mine.addedProps ?? [],
+      removedProps: finding.mine.removedProps ?? [],
+      ...(finding.mine.find ? { find: finding.mine.find } : {}),
+    });
+    findings.splice(findings.indexOf(finding), 1);
+    roles.set(file, "kit");
+  }
+  for (const file of liveFiles) if (roles.get(file) !== "kit" && roles.get(file) !== "plumbing" && came(file)) roles.set(file, roles.get(file) === "design-system" || roles.get(file) === "repo-copy" ? roles.get(file) : "kit");
+
+  // What a component is built from: each component it renders that comes from the prototype's own files, and what that is:
+  // the design system as production has it, the design system behind production's, a kit's, a stand-in, or the prototype's own.
+  const aliasDir = aliasRoot(dir);
+  // Each file drawn for a "Built from" is kept once, here, whoever uses it.
+  const modules = {};
+  const pages = [];
+  const kitByFile = new Map(kit.map((item) => [item.file, item]));
+  const builtFromOf = (file) => {
+    const source = parse(file, readFileSync(join(dir, file), "utf8"));
+    const imported = new Map();
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.importClause || statement.importClause.isTypeOnly) continue;
+      const clause = statement.importClause;
+      if (clause.name) imported.set(clause.name.text, statement.moduleSpecifier.text);
+      if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) for (const item of clause.namedBindings.elements) if (!item.isTypeOnly) imported.set(item.name.text, statement.moduleSpecifier.text);
+    }
+    const used = new Map();
+    const visit = (node) => {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const name = node.tagName.getText(source).split(".")[0];
+        if (/^[A-Z]/.test(name)) used.set(name, (used.get(name) ?? 0) + 1);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    const out = [];
+    for (const [name, count] of used) {
+      const spec = imported.get(name);
+      if (!spec || !(spec.startsWith(".") || spec.startsWith("@/")) || spec.endsWith("components/icons")) continue;
+      const resolved = resolveImport(dir, file, spec, aliasDir);
+      const role = resolved ? roles.get(resolved) : undefined;
+      if (!resolved || !role) continue;
+      const from =
+        role === "design-system" || role === "repo-copy" ? "design-system"
+        : role === "edited-design-system" ? "design-system-behind"
+        : role === "kit" ? (kitByFile.get(resolved)?.kind === "behind" ? "design-system-behind" : "kit")
+        : role === "stand-in" ? "stand-in"
+        : role === "new" || role === "supporting" ? "own"
+        : null;
+      if (!from) continue;
+      let props = [];
+      try {
+        props = propsOf(ts, parse(resolved, readFileSync(join(dir, resolved), "utf8")), name);
+      } catch {
+        // No props to give examples from: drawn without.
+      }
+      if (!(resolved in modules)) {
+        const code = drawn(resolved);
+        if (code) modules[resolved] = code;
+      }
+      out.push({ name, file: resolved, from, count, importPath: spec, props });
+    }
+    return out.slice(0, 8);
+  };
+
   // Near-matches: elements of the prototype's own components that re-implement a design-system component.
   const own = liveFiles.filter((file) => roles.get(file) === "new");
   const parsed = new Map(own.map((file) => {
@@ -886,6 +1013,11 @@ export function scan({ dir: dirArg, variants: wantedVariants, by }) {
   // Each of the prototype's own components: reusable, or part of the feature. Duplicates of each other are flagged.
   const fileFeatures = new Map(own.map((file) => [file, features(parsed.get(file).elements.flatMap((element) => element.alts.flat()))]));
   for (const file of own) {
+    // A variant's entry (the page) is where the design is put together, not a part to decide on: its "Built from" is listed as the page's.
+    if (entries.has(file)) {
+      pages.push({ file, name: componentName(file), variants: variantsOf(file), builtFrom: builtFromOf(file) });
+      continue;
+    }
     const name = componentName(file);
     const uses = usesOf(file);
     const count = uses.reduce((sum, use) => sum + use.count, 0);
@@ -910,7 +1042,7 @@ export function scan({ dir: dirArg, variants: wantedVariants, by }) {
       rule: "components",
       kind: reusable ? "new-reusable" : "feature-only",
       where: [{ file, line: 1, variants: variantsOf(file) }],
-      mine: { name, file, code: snippet(parsed.get(file).text), props, uses, useCount: count, duplicates, generic, entry: entries.has(file), find: findOf(rootOf(ts, source, parsed.get(file).elements, name)), module: drawn(file) },
+      mine: { name, file, code: snippet(parsed.get(file).text), props, uses, useCount: count, duplicates, generic, entry: entries.has(file), find: findOf(rootOf(ts, source, parsed.get(file).elements, name)), module: drawn(file), builtFrom: builtFromOf(file) },
       candidates: [],
       tier: "none",
       proposed: reusable
@@ -923,7 +1055,7 @@ export function scan({ dir: dirArg, variants: wantedVariants, by }) {
   // Colours: every literal one in the live files the prototype wrote (not unedited copies), one finding per colour.
   const tokens = parseTokens(repoText(TOKENS_FILE) ?? "");
   const byColour = new Map();
-  for (const file of liveFiles.filter((item) => !["design-system", "repo-copy", "plumbing"].includes(roles.get(item)))) {
+  for (const file of liveFiles.filter((item) => !["design-system", "repo-copy", "plumbing", "kit"].includes(roles.get(item)))) {
     if (!CODE.test(file)) continue;
     for (const hit of coloursOf(ts, parse(file, readFileSync(join(dir, file), "utf8")), file)) {
       const key = hit.colour.a < 1 ? `${toHex(hit.colour)}/${Math.round(hit.colour.a * 100)}` : toHex(hit.colour);
@@ -981,15 +1113,33 @@ export function scan({ dir: dirArg, variants: wantedVariants, by }) {
     prototype: null,
     scannedAt: new Date().toISOString(),
     scannedBy: by,
-    designSystem: { repo: ds.repo, ref: ds.ref, sha: ds.sha, source: ds.source, ...(ds.localPath ? { localPath: ds.localPath, note: ds.note } : {}) },
+    designSystem: { repo: ds.repo, ref: ds.ref, sha: ds.sha, source: ds.source, ...(ds.localPath ? { localPath: ds.localPath, note: ds.note } : {}), ...copiedFrom(dir) },
     scope: {
       variants,
       live: liveFiles.map((file) => ({ file, role: roles.get(file), variants: variantsOf(file) })),
+      // What each live file was when this was scanned: /push compares, to say what changed after the handoff was made.
+      // Which live file imports which: engineers' agents are given a part and what it pulls in, not the whole prototype.
+      // The elements the prototype's own components draw, as [line, last line, tag, classes it always has, its first words]:
+      // what an element picked in the page is matched to, to say which lines of which file draw it.
+      elements: Object.fromEntries(
+        own.flatMap((file) => {
+          const rows = parsed.get(file).elements.flatMap((element) => {
+            const found = findOf(element);
+            return found ? [[element.line, element.endLine, found.tag, found.classes.join(" "), found.text ?? ""]] : [];
+          });
+          return rows.length ? [[file, rows.slice(0, 600)]] : [];
+        }),
+      ),
+      graph: Object.fromEntries(liveFiles.map((file) => [file, [...(graph.get(file) ?? [])].filter((other) => live.has(other))])),
+      hashes: Object.fromEntries(liveFiles.map((file) => [file, createHash("sha1").update(readFileSync(join(dir, file))).digest("hex")])),
       dropped,
       designSystem: designSystemUsed,
     },
     findings,
     lift,
+    kit,
+    pages,
+    modules,
     theme: themeOf(dir),
     signOff: null,
   };
@@ -1107,7 +1257,7 @@ export function applyDecisions({ dir: dirArg, handoff }) {
   for (const finding of handoff.findings) {
     const decision = finding.decision;
     if (!decision) continue;
-    if (decision.action === "exception" || decision.action === "add") {
+    if (decision.action === "exception" || decision.action === "add" || decision.action === "extend" || decision.action === "new") {
       summary.nothing++;
       continue;
     }
@@ -1190,16 +1340,13 @@ function typecheck(dir, changed) {
 // ---------------------------------------------------------------------------------------------------------------
 // Command line.
 
-function studioConfig(args) {
-  const flag = (name) => (args.includes(`--${name}`) ? args[args.indexOf(`--${name}`) + 1] : undefined);
-  const path = join(homedir(), ".claude", "prototype-studio.json");
-  const config = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
-  const url = flag("studio-url") ?? config.url;
-  if (!url) throw new Error(`No studio configured in ${path}, and no --studio-url given. Open the studio and use "Get set up".`);
-  const password = flag("studio-password") ?? config.password;
-  const headers = { "content-type": "application/json", ...(password ? { "x-studio-password": password } : {}) };
+/** Where the studio usually runs on a designer's machine; a prototype's own dev server may be on any of them, so each is asked. */
+const LOCAL_PORTS = [4747, 3000, 3001, 3002, 3100];
+
+function studioAt(url, headers) {
   return {
     url,
+    local: /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url),
     async call(path, init = {}) {
       const response = await fetch(new URL(path, url), { ...init, headers });
       const body = await response.json().catch(() => ({}));
@@ -1207,6 +1354,35 @@ function studioConfig(args) {
       return body;
     },
   };
+}
+
+/**
+ * The studio to use. A handoff is made while the prototype is being worked on, so it goes to the studio running on this
+ * machine, which shows the prototype's Live version: found by asking the usual ports which one knows this prototype.
+ * `--studio-url` names one; `--remote` uses the studio in ~/.claude/prototype-studio.json (the deployed one, for a version that has been pushed).
+ */
+async function pickStudio(args, flag) {
+  const path = join(homedir(), ".claude", "prototype-studio.json");
+  const config = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+  const password = flag("studio-password") ?? config.password;
+  const headers = { "content-type": "application/json", ...(password ? { "x-studio-password": password } : {}) };
+  const wanted = (flag("slug") ?? flag("name") ?? "").toLowerCase();
+  const explicit = flag("studio-url");
+  if (explicit) return studioAt(explicit, headers);
+  if (args.includes("--remote")) {
+    if (!config.url) throw new Error(`No studio configured in ${path}. Open the studio and use "Get set up".`);
+    return studioAt(config.url, headers);
+  }
+  for (const url of [...new Set([config.localUrl, ...LOCAL_PORTS.map((port) => `http://localhost:${port}`)].filter(Boolean))]) {
+    try {
+      const response = await fetch(new URL("/api/prototypes", url), { headers, signal: AbortSignal.timeout(2000) });
+      const body = await response.json().catch(() => null);
+      if (response.ok && body?.prototypes?.some((item) => item.slug === wanted || item.name.toLowerCase() === wanted)) return studioAt(url, headers);
+    } catch {
+      // Nothing there, or not the studio: the next one.
+    }
+  }
+  throw new Error(`No studio running on this machine knows "${flag("name") ?? flag("slug")}". Start the studio (npm run dev in its folder) and keep the prototype in ~/Claude/prototypes, or pass --studio-url, or --remote for the deployed studio.`);
 }
 
 /** The prototype in the studio, by --slug or --name, and the version: --version, else its newest. */
@@ -1241,7 +1417,7 @@ async function main() {
   }
 
   if (args.includes("--fetch")) {
-    const studio = studioConfig(args);
+    const studio = await pickStudio(args, flag);
     const { slug, version } = await whichVersion(studio, flag);
     const { handoff } = await studio.call(`/api/handoff?slug=${encodeURIComponent(slug)}&version=${encodeURIComponent(version)}`);
     const out = resolve(flag("out") ?? join(tmpdir(), `handoff-${slug}-${version}.json`));
@@ -1258,7 +1434,7 @@ async function main() {
     return { id: id.trim(), entries: (files ?? "").split(",").map((file) => file.trim()).filter(Boolean) };
   });
   // Which version it describes is settled first, so a scan is never done for nothing.
-  const studio = dry ? null : studioConfig(args);
+  const studio = dry ? null : await pickStudio(args, flag);
   const target = studio ? await whichVersion(studio, flag) : null;
   const by = flag("by") ?? spawnSync("git", ["config", "user.name"], { encoding: "utf8" }).stdout?.trim();
   const result = scanAndFix({ dir, variants, by: by || "Someone", fix: !args.includes("--no-fix") });
@@ -1277,7 +1453,7 @@ async function main() {
   if (!studio) return;
 
   const saved = await studio.call("/api/handoff", { method: "POST", body: JSON.stringify({ ...target, handoff: result }) });
-  console.log(`Saved to the studio for ${target.slug} ${saved.version}${saved.kept ? ` (${saved.kept} earlier decisions kept)` : ""}. Review it here: ${saved.review}`);
+  console.log(`Saved to the studio on ${studio.local ? "this machine" : studio.url} for ${target.slug} ${saved.version}${saved.kept ? ` (${saved.kept} earlier decisions kept)` : ""}. Review it here: ${saved.review}`);
 }
 
 export function printSummary(result) {
@@ -1285,7 +1461,7 @@ export function printSummary(result) {
   const count = (role) => scope.live.filter((item) => item.role === role).length;
   console.log(`Design system: ${designSystem.repo}@${designSystem.sha.slice(0, 7)} (${designSystem.source}${designSystem.note ? `; ${designSystem.note}` : ""})`);
   console.log(`Final variants: ${scope.variants.map((item) => `${item.label} (${item.id})`).join(", ")}`);
-  console.log(`Live files: ${scope.live.length}: ${count("new")} new components, ${count("supporting")} supporting, ${count("stand-in")} stand-ins, ${count("design-system")} design system, ${count("repo-copy")} unchanged repo files, ${count("plumbing")} studio plumbing`);
+  console.log(`Live files: ${scope.live.length}: ${count("new")} new components, ${count("supporting")} supporting, ${count("stand-in")} stand-ins, ${count("kit")} from the kits, ${count("design-system")} design system, ${count("repo-copy")} unchanged repo files, ${count("plumbing")} studio plumbing`);
   console.log(`Not handed off (${scope.dropped.length}): ${scope.dropped.map((file) => basename(file)).join(", ")}`);
   const kinds = {};
   for (const finding of findings) (kinds[finding.kind] ??= []).push(finding);

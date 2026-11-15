@@ -2,7 +2,7 @@ import { anchorAt, anchorOf, boxAt, elementAt, revealAnchor, scrollAt, spotOf, w
 import type { Anchor } from "@/lib/comments";
 import { componentOf, describePart, painter, partIn } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
-import { findClip, isFind, setMarks } from "@/lib/handoff-clip";
+import { findClip, isFind, partBox, setMarks, sourceAt } from "@/lib/handoff-clip";
 
 /**
  * Comments on, and edits to, a prototype the studio can't see into: a live version, running on its own dev server at
@@ -160,6 +160,17 @@ const ANYWAY_MS = 1000;
           stopClip = findClip(window, data.find, answer);
           return;
         }
+        // A handoff's part at a point: which one it is, and its box.
+        if (data.what === "sourceAt") {
+          const elements = Array.isArray(data.elements) ? data.elements.filter((item: { file?: unknown; find?: unknown }) => typeof item?.file === "string" && isFind(item.find)) : [];
+          return answer(point && document.body ? sourceAt(document, data.x, data.y, elements) : null);
+        }
+        if (data.what === "selectorBox") {
+          const element = typeof data.selector === "string" && document.body ? partIn(document, data.selector) : null;
+          const rect = element?.getBoundingClientRect();
+          return answer(rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null);
+        }
+        if (data.what === "handoffPartBox") return answer(document.body && isFind(data.part) ? partBox(document, data.part, Number(data.index) || 0) : null);
         // A handoff outlining what it changed.
         if (data.what === "mark") {
           setMarks(document, Array.isArray(data.finds) ? data.finds.filter(isFind) : [], typeof data.colour === "string" ? data.colour : null);

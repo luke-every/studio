@@ -22,6 +22,7 @@ import { useMediaQuery } from "@/lib/use-media-query";
 import { DEFAULT_DEVICE } from "@/lib/phone";
 import { useDevice, useFit, useInApp, useZoom } from "@/lib/use-device";
 import { HandoffNotice } from "@/components/handoff/handoff-notice";
+import { useHandoffStatus } from "@/components/handoff/use-handoff-status";
 import { AvatarStack } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
 import { collaborators } from "@/lib/registry/select";
@@ -191,6 +192,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
   // A version's handoff, reviewed over the page: `#handoff` in the address, so a link (the one /handoff prints) opens it.
   const handoffOpen = useUrlHash() === "handoff";
+  // Asked again when the review is closed, and every few seconds on a running prototype (see the hook).
+  const handoffStatus = useHandoffStatus(prototype.slug, selected.key, !!selected.live, handoffOpen);
   const openHandoff = useCallback(() => setUrlHash("handoff"), []);
   const closeHandoff = useCallback(() => setUrlHash(""), []);
 
@@ -282,7 +285,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
             {prototype.description || "A short description of what this prototype is and the question it is asking will go here."}
           </p>
           {/* Read again once the review closes, so it says what was decided there. */}
-          <HandoffNotice key={String(handoffOpen)} slug={prototype.slug} versionKey={selected.key} onOpen={openHandoff} />
+          <HandoffNotice status={handoffStatus} onOpen={openHandoff} />
         </div>
 
         {/* The variants, when there are some, in a framed block that fills what is left. On a phone they are a dropdown under the prototype instead. */}
@@ -323,6 +326,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           onPlace={followPlace}
           flow={flow}
           variants={variantsCanvas}
+          readyForDev={handoffStatus?.signedBy ? handoffStatus.variants : null}
           flowOpen={flowOpen}
           onFlowOpen={setFlowOpen}
           mode={mode}

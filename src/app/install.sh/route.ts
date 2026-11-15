@@ -46,6 +46,11 @@ mkdir -p "$CLAUDE_DIR/skills/handoff"
 curl -fsSL "$STUDIO/skill/handoff/SKILL.md" -o "$CLAUDE_DIR/skills/handoff/SKILL.md"
 curl -fsSL "$STUDIO/skill/handoff/scan.mjs" -o "$CLAUDE_DIR/skills/handoff/scan.mjs"
 
+# /handoffpush: sends the handoff to the latest pushed version without pushing the prototype again.
+mkdir -p "$CLAUDE_DIR/skills/handoffpush"
+curl -fsSL "$STUDIO/skill/handoffpush/SKILL.md" -o "$CLAUDE_DIR/skills/handoffpush/SKILL.md"
+curl -fsSL "$STUDIO/skill/handoffpush/handoffpush.mjs" -o "$CLAUDE_DIR/skills/handoffpush/handoffpush.mjs"
+
 # Keep the password from last time, if it was for this studio.
 PASSWORD=""
 if [ -f "$CONFIG" ]; then
