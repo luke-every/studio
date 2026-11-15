@@ -12,6 +12,7 @@ import { join } from "node:path";
 const FILES: Record<string, string> = {
   "SKILL.md": "text/markdown; charset=utf-8",
   "FLOW.md": "text/markdown; charset=utf-8",
+  "REFERENCE.md": "text/markdown; charset=utf-8",
   "push.mjs": "text/javascript; charset=utf-8",
 };
 

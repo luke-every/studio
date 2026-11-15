@@ -9,7 +9,7 @@ import { NewUserModal } from "@/components/shell/profile-modal";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { StudioProvider, useStudio } from "@/lib/data/studio-store";
 import { hintFullscreen } from "@/lib/fullscreen-hint";
-import { useAboutCorner, useDevice, useFit, useZoom } from "@/lib/use-device";
+import { useAboutCorner, useDevice, useFit, useInApp, useZoom } from "@/lib/use-device";
 import { Toggle } from "@/components/ui/toggle";
 import { useUser } from "@/lib/use-user";
 
@@ -95,6 +95,12 @@ function Shared({
   const phone = useMediaQuery("(max-width: 639px)");
   // What the iframe is given: `studio=1` added, held still once the prototype can take control changes as messages.
   const [flowOpen, setFlowOpen] = useState(false);
+  // A canvas link (`#canvas`) opens straight onto it, except on a phone, which has no way to leave it.
+  useEffect(() => {
+    if (window.location.hash !== "#canvas" || !window.matchMedia("(min-width: 640px)").matches) return;
+    const timer = window.setTimeout(() => setFlowOpen(true));
+    return () => window.clearTimeout(timer);
+  }, []);
   const live = useLiveControls(phone ? address : chosenAddress, `${version.url}|${variant ?? ""}|${phone}`, { ...controlParams(offered, values), ...extra }, flowOpen);
   const frameUrl = live.src;
   // The prototype moved itself: the controls and the setup comments are left on follow it.
@@ -127,6 +133,7 @@ function Shared({
   // Which phone it is shown on and how big: the one control of the toolbar kept besides comments.
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
+  const [inApp, chooseInApp] = useInApp();
   const [fit, chooseFit] = useFit();
   const [mode, setMode] = useState<"view" | "dev" | "edit" | "comment">("view");
   const [listing, setListing] = useState(false);
@@ -248,12 +255,13 @@ function Shared({
           title={`${name} ${version.label}`}
           leading={null}
           center={({ scale, device: shown }) => (
-            <ViewMenu device={shown ?? device} zoom={zoom} fit={fit} fitted={scale} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
+            <ViewMenu device={shown ?? device} zoom={zoom} fit={fit} fitted={scale} inApp={inApp} onInApp={chooseInApp} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
           )}
           device={device}
           onDevice={chooseDevice}
           zoom={zoom}
           fit={fit}
+          inApp={inApp}
           comments={full ? undefined : { slug, version: versionKey, variant: chosenAddress.split("?")[1] || undefined }}
           onPlace={followPlace}
           flow={flow}

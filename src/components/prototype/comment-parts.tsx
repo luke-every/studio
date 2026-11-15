@@ -37,7 +37,7 @@ export type CommentsUi = {
   /** What has been said back to each comment, oldest first. */
   replies: Record<string, Comment[]>;
   /** `setup` puts it on a particular setup of the prototype (see `Comment`); an empty one is the version as it is, and none is the setup on screen. */
-  onAdd: (text: string, anchor: Anchor, setup?: string) => Promise<boolean>;
+  onAdd: (text: string, anchor: Anchor, setup?: string, device?: string) => Promise<boolean>;
   onReply: (parent: Comment, text: string) => Promise<boolean>;
   onResolve: (comment: Comment, resolved: boolean) => void;
   onLike: (comment: Comment, liked: boolean) => void;
@@ -258,12 +258,12 @@ export function DraftPin({ left, top }: { left: number; top: number }) {
  * The element a comment would be pinned to, marked while somebody chooses where to leave one: a dark edge with
  * rounded corners around a faint dark fill, so what is under it stays readable. It never takes a click.
  */
-export function PinTarget({ left, top, width, height }: { left: number; top: number; width: number; height: number }) {
+export function PinTarget({ left, top, width, height, component }: { left: number; top: number; width: number; height: number; /** A design-system component instance: drawn in its own colour. */ component?: boolean }) {
   return (
     <span
       aria-hidden
       style={{ left, top, width, height }}
-      className="pointer-events-none absolute rounded-[var(--r-lg)] border border-[var(--pin-target-edge)] bg-[var(--pin-target-fill)]"
+      className={`pointer-events-none absolute rounded-[var(--r-lg)] border ${component ? "border-[var(--component)] bg-[var(--component-muted)]" : "border-[var(--pin-target-edge)] bg-[var(--pin-target-fill)]"}`}
     />
   );
 }

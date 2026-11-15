@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { DEVICES } from "@/lib/phone";
+
 /**
  * Comments on a prototype.
  *
@@ -49,6 +51,8 @@ export const commentSchema = z.object({
   resolvedAt: z.string().optional(),
   /** The setup it was left on: the query of the prototype's address (its controls, its own place, a studio variant; see `setupOf`), none for the version as it is. */
   variant: z.string().optional(),
+  /** The id of the device (see `DEVICES`) it was left on; none on older comments, which show on every device. */
+  device: z.string().optional(),
   /** The names of the people who liked it. */
   likes: z.array(z.string()).optional(),
   /** Set on a reply, to the comment it answers. */
@@ -98,6 +102,8 @@ export function reviewPrompt(
     if (anchor.text) lines.push(`   - On: "${anchor.text}"`);
     if (anchor.selector) lines.push(`   - Element: ${anchor.selector}`);
     if (anchor.screen) lines.push(`   - Screen: ${anchor.screen}`);
+    const device = DEVICES.find((item) => item.id === comment.device);
+    if (device) lines.push(`   - Device: ${device.name}`);
     for (const reply of replies[comment.id] ?? []) lines.push(`   - Reply from ${reply.author.name}: ${reply.text.trim()}`);
     return lines.join("\n");
   };

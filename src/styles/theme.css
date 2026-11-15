@@ -74,6 +74,36 @@
   /* The element a comment would be pinned to: a faint dark fill inside a dark edge. It lies over a prototype's page, not the studio's, so it is the same in every theme. */
   --pin-target-fill: color-mix(in oklab, var(--ink-900) 10%, transparent);
   --pin-target-edge: color-mix(in oklab, var(--ink-900) 70%, transparent);
+  /* A design-system component instance picked in edit mode: drawn over the prototype's page too, so the same in every theme. */
+  --inapp-chrome: var(--instagram-chrome);
+  --inapp-chrome-foreground: var(--paper-50);
+  --inapp-light: var(--paper-50);
+  --inapp-light-foreground: var(--ink-800);
+  --component: var(--violet-500);
+  --component-muted: color-mix(in oklab, var(--violet-500) 14%, transparent);
+
+  /* Handoff tones (see src/components/ui/chip.tsx): each a colour for a dot and a chip's words, and its tint behind them.
+   *   match      an exact match; approved
+   *   near       close to the system: a near match, a component rebuilt from one
+   *   system     the design system: a component from it; added to it
+   *   existing   something that already exists elsewhere: production's own (a stand-in); another match picked
+   *   new        new, and could join the system
+   *   exception  kept as it is, on purpose
+   *   quiet      nothing to match; only for this feature; not decided yet */
+  --tone-match: var(--tone-green-deep);
+  --tone-near: var(--tone-amber-deep);
+  --tone-system: var(--tone-violet-deep);
+  --tone-existing: var(--tone-blue-deep);
+  --tone-new: var(--tone-teal-deep);
+  --tone-exception: var(--tone-rose-deep);
+  --tone-quiet: var(--foreground-muted);
+  --tone-match-muted: color-mix(in oklab, var(--tone-match) 12%, transparent);
+  --tone-near-muted: color-mix(in oklab, var(--tone-near) 12%, transparent);
+  --tone-system-muted: color-mix(in oklab, var(--tone-system) 12%, transparent);
+  --tone-existing-muted: color-mix(in oklab, var(--tone-existing) 12%, transparent);
+  --tone-new-muted: color-mix(in oklab, var(--tone-new) 12%, transparent);
+  --tone-exception-muted: color-mix(in oklab, var(--tone-exception) 12%, transparent);
+  --tone-quiet-muted: var(--accent-muted);
 
   --shadow-color-mix: var(--alpha-ink-12);
 
@@ -131,6 +161,19 @@
     --success-foreground: var(--ink-900);
     --review: var(--signal-review-soft);
 
+    --tone-match: var(--tone-green-soft);
+    --tone-near: var(--tone-amber-soft);
+    --tone-system: var(--tone-violet-soft);
+    --tone-existing: var(--tone-blue-soft);
+    --tone-new: var(--tone-teal-soft);
+    --tone-exception: var(--tone-rose-soft);
+    --tone-match-muted: color-mix(in oklab, var(--tone-match) 16%, transparent);
+    --tone-near-muted: color-mix(in oklab, var(--tone-near) 16%, transparent);
+    --tone-system-muted: color-mix(in oklab, var(--tone-system) 16%, transparent);
+    --tone-existing-muted: color-mix(in oklab, var(--tone-existing) 16%, transparent);
+    --tone-new-muted: color-mix(in oklab, var(--tone-new) 16%, transparent);
+    --tone-exception-muted: color-mix(in oklab, var(--tone-exception) 16%, transparent);
+
     --focus-ring: var(--paper-100);
     --scrim: color-mix(in oklab, #000000 58%, transparent);
 
@@ -180,6 +223,19 @@
   --success: var(--signal-live);
   --success-foreground: var(--ink-900);
   --review: var(--signal-review-soft);
+
+  --tone-match: var(--tone-green-soft);
+  --tone-near: var(--tone-amber-soft);
+  --tone-system: var(--tone-violet-soft);
+  --tone-existing: var(--tone-blue-soft);
+  --tone-new: var(--tone-teal-soft);
+  --tone-exception: var(--tone-rose-soft);
+  --tone-match-muted: color-mix(in oklab, var(--tone-match) 16%, transparent);
+  --tone-near-muted: color-mix(in oklab, var(--tone-near) 16%, transparent);
+  --tone-system-muted: color-mix(in oklab, var(--tone-system) 16%, transparent);
+  --tone-existing-muted: color-mix(in oklab, var(--tone-existing) 16%, transparent);
+  --tone-new-muted: color-mix(in oklab, var(--tone-new) 16%, transparent);
+  --tone-exception-muted: color-mix(in oklab, var(--tone-exception) 16%, transparent);
 
   --focus-ring: var(--paper-100);
   --scrim: color-mix(in oklab, #000000 58%, transparent);

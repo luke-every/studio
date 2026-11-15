@@ -31,6 +31,12 @@ import { liveOrigin, WORKING_SEGMENT } from "@/lib/registry/local-prototypes";
  * on as one, because Safari won't play a video from a server that can't
  * answer a byte range.
  */
+/**
+ * A font may be read from any page: a handoff draws a design-system component in a sandboxed frame of no address of its
+ * own, in the prototype's fonts, and a browser only lets a page like that use a font that says so.
+ */
+const fontAccess = (path: string): Record<string, string> => (/\.(woff2?|ttf|otf)$/i.test(path) ? { "access-control-allow-origin": "*" } : {});
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ slug: string; version: string; path?: string[] }> },
@@ -49,7 +55,10 @@ export async function GET(
     if (!path.length) return NextResponse.redirect(`${live.replace("localhost", host)}/${search}`);
     const response = await fetch(`${live}/${path.map(encodeURIComponent).join("/")}`, { headers: range ? { range } : {}, cache: "no-store" }).catch(() => null);
     if (!response?.ok) return new NextResponse("Not found.", { status: 404 });
-    return new NextResponse(response.body, { status: response.status, headers: { "content-type": response.headers.get("content-type") ?? guessContentType(path.join("/")), "cache-control": "no-store" } });
+    return new NextResponse(response.body, {
+      status: response.status,
+      headers: { "content-type": response.headers.get("content-type") ?? guessContentType(path.join("/")), "cache-control": "no-store", ...fontAccess(relativePath) },
+    });
   }
 
   let upstream = await fetchPrototypeFile(slug, version, path, range);
@@ -82,6 +91,7 @@ export async function GET(
     "accept-ranges": "bytes",
     // Nothing here should end up in a search index.
     "x-robots-tag": "noindex",
+    ...fontAccess(relativePath),
   });
   // A tile's preview asks for `?preview`: the page as normal, minus video and
   // audio, which are usually the bulk of what a prototype loads and are no

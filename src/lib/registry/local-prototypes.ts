@@ -125,9 +125,9 @@ export function workingFolder(slug: string) {
  * nobody else can see a version running on this machine, so nothing about it is committed. `comments.json` is its
  * comments, the same shape as a version's comments file; `claude.json` is Claude's work on them (see `claude-runs.ts`).
  * The folder starts with a dot, so /push leaves it out of what it uploads, and the starter's .gitignore leaves it out
- * of the prototype's own repository.
+ * of the prototype's own repository. `handoff.json` is its handoff (see `handoff.ts`).
  */
-export type StudioFile = "comments.json" | "claude.json";
+export type StudioFile = "comments.json" | "claude.json" | "handoff.json";
 export const studioPath = (slug: string, name: string) => join(workingFolder(slug), ".studio", name);
 
 export const readStudioFile = (slug: string, name: StudioFile) => readFile(studioPath(slug, name), "utf8").catch(() => null);

@@ -41,8 +41,6 @@ type Thread = {
   session?: string;
   /** How Claude last ended: the change made, a question the thread is waiting on somebody to answer, or not finished. */
   last?: "done" | "question" | "failed";
-  /** Edits made by hand in the studio that this thread asks Claude to make in the code (see `editsBrief`), until it has answered. */
-  brief?: string;
   /**
    * A run asked for and not finished: waiting its turn, or at work in process `pid`. `reply` is Claude's reply standing
    * in the thread for it, which the answer takes the place of. `again` is a reply that came in while it worked.
@@ -197,16 +195,15 @@ function inTurn<T>(slug: string, step: () => Promise<T>) {
 
 /**
  * A comment was posted on a live version: if it is for Claude, its thread waits its turn (or, if Claude is at work on
- * it, goes again after). `brief` is more for Claude than the comment says: the edits it stands for, each in full.
+ * it, goes again after).
  */
-export function ask(slug: string, comment: Comment, brief?: string) {
+export function ask(slug: string, comment: Comment) {
   return inTurn(slug, async () => {
     const id = comment.parentId ?? comment.id;
     const threads = await readThreads(slug);
     if (!goesToClaude(comment, threads[id])) return;
     await changeThreads(slug, (now) => {
       const thread = (now[id] ??= {});
-      if (brief) thread.brief = brief;
       if (thread.run?.state === "working") thread.run.again = true;
       else thread.run ??= { state: "queued", at: new Date().toISOString() };
     });
@@ -302,8 +299,6 @@ async function answer(slug: string, id: string, outcome: Outcome) {
     const thread = (threads[id] ??= {});
     if (outcome.session) thread.session = outcome.session;
     thread.last = outcome.outcome;
-    // Said once: a follow-up carries on the same conversation, which has it.
-    delete thread.brief;
     thread.run = thread.run?.again ? { state: "queued", at: new Date().toISOString() } : undefined;
   });
   return reply;
@@ -380,7 +375,6 @@ async function start(slug: string, id: string, thread: Thread) {
   }
   // The thread as people wrote it: not Claude's own word that it is waiting, which is no part of what was asked.
   const asked = await promptFor(slug, root, comments.filter((item) => item.parentId === id && item.id !== thread.run?.reply));
-  const prompt = thread.brief ? `${asked}\n\n${thread.brief}` : asked;
 
   const args = [
     "--print",
@@ -409,7 +403,7 @@ async function start(slug: string, id: string, thread: Thread) {
   child.on("error", settle);
   child.on("exit", settle);
   child.stdin?.on("error", () => {});
-  child.stdin?.end(prompt);
+  child.stdin?.end(asked);
   child.unref();
 
   await changeThreads(slug, (threads) => {

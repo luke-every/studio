@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { EDIT_IMAGE_DIR, mergeEdits, type Edit, type EditChange } from "@/lib/edits";
+import { EDIT_IMAGE_DIR, mergeEdits, type Edit } from "@/lib/edits";
 import { painter, type Part } from "@/lib/edit-part";
 
 import { paintFrames } from "./frame-page";
@@ -10,8 +10,8 @@ import { paintFrames } from "./frame-page";
 /** Changes to the same thing within this long are one step to undo. */
 const SAME_STEP_MS = 800;
 
-/** What a change is made to: the part as it was described when it was changed, which says what it was before. */
-type Touched = Pick<Part, "selector" | "tag" | "text" | "css">;
+/** What a change is made to: the part as it was described when it was changed. */
+type Touched = Pick<Part, "selector">;
 
 /**
  * Edits made to the prototype on screen, with their history.
@@ -42,13 +42,6 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
   const [images] = useState(() => new Map<string, { file: File; url: string }>());
   const [brush] = useState(() => painter((src) => images.get(src)?.url));
   const lastStep = useRef<{ key: string; at: number } | null>(null);
-  // What each thing changed was before it was first touched, for saying a change in words (a live version's are given to Claude).
-  const before = useRef(new Map<string, { tag: string; words: string | null; css: Record<string, string> }>());
-  const remember = (part: Touched, properties: string[]) => {
-    const was = before.current.get(part.selector) ?? { tag: part.tag, words: part.text, css: {} };
-    for (const property of properties) was.css[property] ??= part.css[property] ?? "";
-    before.current.set(part.selector, was);
-  };
 
   /** Draw the page from a list of edits. */
   const paint = (edits: Edit[]) => paintFrames(frames(), edits, brush);
@@ -69,13 +62,17 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
 
   /** Change several properties of one element as a single step to undo. */
   const setStyles = (part: Touched, css: Record<string, string>) => {
-    remember(part, Object.keys(css));
     apply({ kind: "style", selector: part.selector, css }, `style:${part.selector}:${Object.keys(css).join(",")}`);
   };
 
   const setText = (part: Touched, text: string) => {
-    remember(part, []);
     apply({ kind: "text", selector: part.selector, text }, `text:${part.selector}`);
+  };
+
+  /** Changes a prop of a design-system component instance, drawn by the page itself when it can preview props. */
+  const setProp = (part: Touched & { component: NonNullable<Part["component"]> }, prop: string, value: string | number | boolean) => {
+    const { name } = part.component;
+    apply({ kind: "prop", selector: part.selector, component: name, prop, value }, `prop:${part.selector}:${prop}`);
   };
 
   /** Swaps the picture of the element `selector` names. */
@@ -92,20 +89,6 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
 
   /** Put everything back as it was. */
   const discard = () => commit([], "discard");
-
-  /**
-   * Lets go of the edits without putting the page back: they have been made in the prototype's own code (a live
-   * version, by Claude), so the page is loaded again by whoever calls this, and shows them for real.
-   */
-  const forget = () => {
-    lastStep.current = null;
-    before.current.clear();
-    const next = { url, edits: [] as Edit[], past: [] as Edit[][], future: [] as Edit[][] };
-    latest.current = next;
-    setState(next);
-    // So a page that loads again isn't sent them again.
-    paint([]);
-  };
 
   const undo = () => {
     const { past, edits, future } = latest.current;
@@ -132,29 +115,21 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
       .filter(([path]) => current.edits.some((edit) => edit.kind === "image" && edit.src === path))
       .map(([path, { file }]) => [path, file] as const);
 
-  /** The edits with what each thing was before, for putting them in words. */
-  const changes = (): EditChange[] =>
-    latest.current.edits.map((edit) => {
-      const was = before.current.get(edit.selector);
-      return { edit, tag: was?.tag, words: was?.words ?? undefined, from: edit.kind === "style" ? was?.css : undefined };
-    });
-
   return {
     edits: current.edits,
     canUndo: current.past.length > 0,
     canRedo: current.future.length > 0,
     setStyles,
     setText,
+    setProp,
     setImage,
     reset,
     undo,
     redo,
     discard,
-    forget,
     /** Draws the edits again: a page has just loaded that should show them too. */
     redraw: () => paint(latest.current.edits),
     imagesInUse,
-    changes,
     has: (selector: string) => current.edits.some((edit) => edit.selector === selector),
   };
 }

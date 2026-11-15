@@ -38,6 +38,26 @@
   --signal-review: #9a6b2f;
   --signal-review-soft: #c19a62;
   --signal-stop: #ff3b30;
+  /* A design-system component instance. */
+  --violet-500: #9531fe;
+  --instagram-chrome: #191b1f;
+
+  /* --- Palette: handoff tones ------------------------------------------------
+   * What a handoff found and what was decided, as a chip or a dot. Each tone
+   * is a deep shade for light themes and a soft one for dark, both readable
+   * as small text on their own tint. */
+  --tone-green-deep: #276b43;
+  --tone-green-soft: #74c995;
+  --tone-amber-deep: #85591f;
+  --tone-amber-soft: #d0a66a;
+  --tone-violet-deep: #7b3fd1;
+  --tone-violet-soft: #b893f7;
+  --tone-blue-deep: #2f62b3;
+  --tone-blue-soft: #8daef0;
+  --tone-teal-deep: #1a6964;
+  --tone-teal-soft: #6cc3bd;
+  --tone-rose-deep: #a63a50;
+  --tone-rose-soft: #ef91a2;
 
   /* --- Palette: avatar backgrounds ----------------------------------------
    * Pastel, soft and matte, so a face sits on its colour the way a sticker
@@ -142,9 +162,13 @@
   --splash-perspective: calc(var(--splash-radius) * 2.6);
   /* The column beside a prototype: its name, description, variants and links. */
   --detail-side-width: 21.75rem;
+  /* A modal that is a place to work (a handoff's review): most of a wide window, never wider than this. */
+  --modal-fill-width: 90rem;
+  /* A handoff's list of findings, beside the one open. */
+  --handoff-queue-width: 16rem;
   /* What is written under a prototype: narrow enough to read. */
   --content-width: 45rem;
-  --dev-panel-width: 20rem;
+  --dev-panel-width: 14rem;
 
   /* --- Radii -------------------------------------------------------------- */
   --r-xs: 0.125rem;

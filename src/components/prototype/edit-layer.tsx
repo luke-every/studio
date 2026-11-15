@@ -132,8 +132,8 @@ export function EditLayer({
         onPointerLeave={() => point(null)}
         className="pointer-events-auto absolute inset-0"
       />
-      {part ? <PinTarget left={part.box.left * scale} top={part.box.top * scale} width={part.box.width * scale} height={part.box.height * scale} /> : null}
-      {target ? <PinTarget left={target.left * scale} top={target.top * scale} width={target.width * scale} height={target.height * scale} /> : null}
+      {part ? <PinTarget left={part.box.left * scale} top={part.box.top * scale} width={part.box.width * scale} height={part.box.height * scale} component={!!part.component} /> : null}
+      {target ? <PinTarget left={target.left * scale} top={target.top * scale} width={target.width * scale} height={target.height * scale} component={target.component} /> : null}
       {typing && typed ? (
         <TextInPlace
           part={typing}

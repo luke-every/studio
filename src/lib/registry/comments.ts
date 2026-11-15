@@ -1,7 +1,6 @@
 import "server-only";
 
 import { anchorSchema, commentsFileSchema, type Anchor, type Comment } from "@/lib/comments";
-import { describeEdits, editChangesSchema, editsBrief, type EditChange } from "@/lib/edits";
 
 import * as claude from "./claude-runs";
 import { readStudioFile, updateStudioFile, workingCopiesOn, WORKING_VERSION } from "./local-prototypes";
@@ -77,23 +76,6 @@ export const readComments = load;
 
 export const addComment = (input: CommentInput) => post(input);
 
-/**
- * Edits made by hand on a working copy, given to Claude to make in the prototype's code. It is a comment like any
- * other, from whoever made them and pinned to the first thing they changed, so there is one place to see Claude at
- * work, answer its question or undo what it did; what it is told beyond the comment's words is every edit in full.
- */
-export async function applyEdits(input: { slug: string; changes: EditChange[]; anchor: Anchor; variant?: string; by?: string }) {
-  if (!workingCopiesOn()) throw new Error("That isn't a prototype on this machine.");
-  // A swapped picture is a file in the studio, not something that can be described: those are left out.
-  const changes = editChangesSchema.parse(input.changes).filter((change) => change.edit.kind !== "image");
-  if (!changes.length) throw new Error("There's nothing to apply yet.");
-  const anchor = anchorSchema.parse(input.anchor);
-  return post(
-    { slug: input.slug, version: WORKING_VERSION, anchor, variant: input.variant, by: input.by, text: `@claude Put the edits I made here into the code. ${describeEdits(changes.map((change) => change.edit))}` },
-    editsBrief(changes, { screen: anchor.screen, setup: input.variant }),
-  );
-}
-
 type CommentInput = {
   slug: string;
   version: string;
@@ -104,13 +86,15 @@ type CommentInput = {
   parentId?: string;
   /** The setup it is left on (see `Comment`), if any. A reply takes its comment's. */
   variant?: string;
+  /** The device it is left on (see `Comment`). */
+  device?: string;
   by?: string;
   /** The commenter's chosen face, for the notification only; it is not kept. */
   avatar?: number;
 };
 
-/** Saves a comment. `brief` is more for Claude, on a working copy, than the comment itself says (see `applyEdits`). */
-async function post(input: CommentInput, brief?: string) {
+/** Saves a comment. */
+async function post(input: CommentInput) {
   const text = input.text.trim();
   if (!text) throw new Error("Write something first.");
   const id = crypto.randomUUID();
@@ -132,6 +116,7 @@ async function post(input: CommentInput, brief?: string) {
       text,
       anchor,
       variant,
+      device: parent ? parent.device : input.device,
       parentId: parent?.id,
     };
     return {
@@ -142,7 +127,7 @@ async function post(input: CommentInput, brief?: string) {
   });
   if (working(input.version)) {
     // A comment for Claude starts it in the background; whatever happens to that, the comment itself is saved.
-    await claude.ask(input.slug, comment, brief).catch(() => {});
+    await claude.ask(input.slug, comment).catch(() => {});
   } else await announceComment({ slug: input.slug, version: input.version, comment, avatar: input.avatar });
   return comment;
 }

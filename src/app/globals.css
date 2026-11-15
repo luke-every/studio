@@ -36,6 +36,10 @@
   --color-foreground-muted: var(--foreground-muted);
   --color-foreground-subtle: var(--foreground-subtle);
 
+  --color-inapp-chrome: var(--inapp-chrome);
+  --color-inapp-chrome-foreground: var(--inapp-chrome-foreground);
+  --color-inapp-light: var(--inapp-light);
+  --color-inapp-light-foreground: var(--inapp-light-foreground);
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);
   --color-surface-inset: var(--surface-inset);
@@ -60,6 +64,21 @@
   --color-success-foreground: var(--success-foreground);
   --color-scrim: var(--scrim);
   --color-review: var(--review);
+
+  --color-tone-match: var(--tone-match);
+  --color-tone-near: var(--tone-near);
+  --color-tone-system: var(--tone-system);
+  --color-tone-existing: var(--tone-existing);
+  --color-tone-new: var(--tone-new);
+  --color-tone-exception: var(--tone-exception);
+  --color-tone-quiet: var(--tone-quiet);
+  --color-tone-match-muted: var(--tone-match-muted);
+  --color-tone-near-muted: var(--tone-near-muted);
+  --color-tone-system-muted: var(--tone-system-muted);
+  --color-tone-existing-muted: var(--tone-existing-muted);
+  --color-tone-new-muted: var(--tone-new-muted);
+  --color-tone-exception-muted: var(--tone-exception-muted);
+  --color-tone-quiet-muted: var(--tone-quiet-muted);
 
   /* One family, throughout. */
   --font-sans: var(--font-family);

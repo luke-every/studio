@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
-import { ArchiveIcon, EllipsisIcon, GithubIcon, PencilIcon, SendIcon, ShuffleIcon, SlidersIcon, TrashIcon, UndoIcon } from "@/components/shell/nav-icons";
+import { ArchiveIcon, CheckIcon, EllipsisIcon, GithubIcon, PencilIcon, SendIcon, ShuffleIcon, SlidersIcon, TrashIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { DialogForm, fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
@@ -17,8 +17,8 @@ type Dialog = "rename" | "move" | "remix" | "archive" | "delete";
 
 const item = menuItem;
 
-/** The ellipsis beside a prototype's title: remix the version on screen, rename it, move it, open its files on GitHub, archive it. Edit and Remix, the two ways of making something from it, sit together. */
-export function PrototypeMenu({ prototype, version, githubUrl, onEdit }: { prototype: Prototype; version: string; githubUrl?: string; onEdit?: () => void }) {
+/** The ellipsis beside a prototype's title: remix the version on screen, rename it, move it, open its files on GitHub, hand it off, archive it. Edit and Remix, the two ways of making something from it, sit together. */
+export function PrototypeMenu({ prototype, version, githubUrl, onHandoff, onEdit }: { prototype: Prototype; version: string; githubUrl?: string; onHandoff?: () => void; onEdit?: () => void }) {
   const { isSaving, updatePrototype } = useStudio();
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -97,6 +97,21 @@ export function PrototypeMenu({ prototype, version, githubUrl, onEdit }: { proto
                   <GithubIcon />
                   Open in GitHub
                 </a>
+              ) : null}
+              {onHandoff ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-haspopup="dialog"
+                  onClick={() => {
+                    setOpen(false);
+                    onHandoff();
+                  }}
+                  className={`${item} text-foreground`}
+                >
+                  <CheckIcon />
+                  Hand off {version}
+                </button>
               ) : null}
               <div role="separator" className="my-1 h-px bg-border" />
               {prototype.versions.length > 1 ? (

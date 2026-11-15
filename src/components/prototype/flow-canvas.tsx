@@ -36,7 +36,7 @@ const SETTLE_MS = 80;
 const INTERACT = { top: 52, margin: 24 };
 /** How long a screen takes to grow into the middle and back, matching `--dur-deliberate`. */
 const INTERACT_MS = 460;
-type Box = { left: number; top: number; width: number; height: number };
+type Box = { left: number; top: number; width: number; height: number; component?: boolean };
 /** A screen moved by hand: where it was, and where it was put. */
 type Move = { id: string; from: { x: number; y: number }; to: { x: number; y: number } };
 /** A page is measured this long after it loads, and again later, since it may still be settling. */
@@ -49,6 +49,8 @@ const READY_AFTER_LOAD_MS = 700;
 const LOADING_LINES = ["Making magic…", "Abracadabra…", "Conjuring your screens…", "A little bit of magic…"];
 /** A screen counts as ready after this long even if its page is still loading, so one slow page can't hold the canvas back. */
 const GIVE_UP_MS = 6000;
+/** Long enough for every screen of the first arrival to have come in (the last starts eight steps after the first). */
+const ARRIVAL_MS = 2000;
 /** The tallest a page is drawn, so one that grows with its window can't grow without end. */
 const MAX_PAGE = 12000;
 
@@ -100,6 +102,7 @@ export function FlowCanvas({
   controls,
   zoom = 1,
   fit = false,
+  fold = false,
   picking,
 }: {
   flow: Flow;
@@ -116,6 +119,8 @@ export function FlowCanvas({
   /** The size a screen opened to be used is drawn at, as in the prototype's own view; `fit` scales it to the room instead. */
   zoom?: number;
   fit?: boolean;
+  /** Fades what is below where each screen's device height ends, when the page runs on past it. */
+  fold?: boolean;
   /**
    * The version can be edited: a click on a screen selects the part under it as well. `target` is the one selected, as
    * its page describes it; `onPick` is told the next and the frame it is in, or null when it is let go of; `onText` is
@@ -134,13 +139,38 @@ export function FlowCanvas({
   // whether it is selected, the pins on it) is kept under its copy's key, so each copy has its own.
   const copies = devices.flatMap((on) => flow.screens.map((screen, index) => ({ id: copyKey(on.id, screen.id), screen, device: on, index })));
   const copyOf = new Map(copies.map((copy) => [copy.id, copy]));
+  // Every device that has been on since the canvas opened, in the order they were switched on. A device switched off
+  // keeps its pages, out of sight, so switching it on again shows them as they were instead of loading them again.
+  // The order never changes: a frame moved in the page loads again.
+  const [seen, setSeen] = useState(devices);
+  const unseen = devices.filter((on) => !seen.some((was) => was.id === on.id));
+  if (unseen.length) setSeen([...seen, ...unseen]);
+  const kept = [...seen, ...unseen].flatMap((on) => flow.screens.map((screen, index) => ({ id: copyKey(on.id, screen.id), screen, device: on, index })));
   // Nothing is shown while the pages load: a quiet loader, then every screen arrives together, left to right, at the size it will stay.
-  // That is once. A device switched on later brings its screens in as each is ready, and the rest stay as they are.
+  // That is once. A device switched on later has its screens put in place at once, each a breathing placeholder that
+  // its page fades in over when it has loaded, so the room made for it is never blank; the rest stay as they are.
   const [readyIds, setReadyIds] = useState<ReadonlySet<string>>(new Set());
   const [saying] = useState(() => LOADING_LINES[Math.floor(Math.random() * LOADING_LINES.length)]);
   const [revealed, setRevealed] = useState(false);
-  if (!revealed && copies.every((copy) => readyIds.has(copy.id))) setRevealed(true);
+  // The screens that were there for that arrival: only they come in together.
+  const [opening, setOpening] = useState<ReadonlySet<string>>(new Set());
+  if (!revealed && copies.every((copy) => readyIds.has(copy.id))) {
+    setRevealed(true);
+    setOpening(new Set(copies.map((copy) => copy.id)));
+  }
   const arrived = (id: string) => revealed && readyIds.has(id);
+  // Once they have arrived it is forgotten, or a screen hidden with its device and shown again would arrive a second time.
+  useEffect(() => {
+    if (!revealed) return undefined;
+    const timer = window.setTimeout(() => setOpening(new Set()), ARRIVAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [revealed]);
+  const without = (ids: ReadonlySet<string>, id: string) => {
+    if (!ids.has(id)) return ids;
+    const next = new Set(ids);
+    next.delete(id);
+    return next;
+  };
   // Every screen is a whole page: as tall as it turns out to be once it has loaded, so none is cut off.
   const [pageHeights, setPageHeights] = useState<Record<string, number>>({});
   const pageHeight = (id: string) => pageHeights[id] ?? copyOf.get(id)?.device.height ?? 0;
@@ -293,6 +323,7 @@ export function FlowCanvas({
       const anchors: Record<string, Anchor> = {};
       for (const comment of list) {
         if (setups && setupOf(comment.variant) !== setupOf(setups[screen.id])) continue;
+        if (comment.device && comment.device !== copyOf.get(copyId)?.device.id) continue;
         anchors[comment.id] = comment.anchor;
       }
       if (draft?.copyId === copyId) anchors.draft = draft.anchor;
@@ -582,10 +613,10 @@ export function FlowCanvas({
     if (part?.text != null) setTyping({ part, copyId: found.copy.id });
   };
   // An element's box in its screen's own pixels, outlined on the canvas as it is now.
-  const outline = (key: string, copyId: string, box: Box) => {
+  const outline = (key: string, copyId: string, box: Box, component?: boolean) => {
     const corner = onCanvas(copyId, { x: box.left, y: box.top });
     const scale = SCREEN_SCALE * view.scale;
-    return <PinTarget key={key} left={corner.x} top={corner.y} width={box.width * scale} height={box.height * scale} />;
+    return <PinTarget key={key} left={corner.x} top={corner.y} width={box.width * scale} height={box.height * scale} component={component} />;
   };
   // While placing, the element a click would pin to is outlined under the pointer, in its screen's own pixels so it
   // stays on it as the canvas moves. Asked for at most once a frame; a late answer is dropped if the pointer has moved on.
@@ -677,15 +708,17 @@ export function FlowCanvas({
         backgroundPosition: `${view.x}px ${view.y}px`,
         transition: gliding || easing ? `background-position var(--dur-deliberate) var(--curve-standard), background-size var(--dur-deliberate) var(--curve-standard)` : undefined,
       }}
-      className={`absolute inset-0 touch-none overflow-hidden rounded-[var(--r-tile)] ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : "active:cursor-grabbing"}`}
+      className={`absolute inset-0 touch-none overflow-hidden ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : "active:cursor-grabbing"}`}
     >
       <div
         className="absolute left-0 top-0 origin-top-left"
         onTransitionEnd={(event) => event.target === event.currentTarget && setEasing(false)}
         style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, visibility: size ? undefined : "hidden", transition: gliding || easing ? "transform var(--dur-deliberate) var(--curve-standard)" : undefined }}
       >
-        {size ? copies.map(({ id, screen, device: on, index }) => {
-          const spot = at(id);
+        {size ? kept.map(({ id, screen, device: on, index }) => {
+          // Its device is on; otherwise it is only being kept.
+          const shown = copyOf.has(id);
+          const spot = shown ? at(id) : { x: 0, y: 0 };
           return (
             <button
               key={id}
@@ -714,6 +747,7 @@ export function FlowCanvas({
               aria-label={devices.length > 1 ? `${screen.name}, ${on.name}` : screen.name}
               aria-pressed={selected === id}
               style={{
+                display: shown ? undefined : "none",
                 left: spot.x,
                 top: spot.y,
                 width: widthOf(id),
@@ -722,11 +756,11 @@ export function FlowCanvas({
                 outline: selected === id ? `${2 / view.scale}px solid var(--focus-ring)` : undefined,
                 outlineOffset: 3 / view.scale,
                 "--i": Math.min(index, 8),
-                // Out of sight, and out of reach, until the whole canvas arrives (or, on a device switched on later, until its own page has); and while it is opened, since that is it.
-                opacity: arrived(id) ? undefined : 0,
+                // Out of sight until the whole canvas arrives (a device switched on later shows its placeholder straight away); and while it is opened, since that is it.
+                opacity: revealed ? undefined : 0,
                 visibility: interact?.id === id && loadedId === screen.id ? "hidden" : undefined,
               } as React.CSSProperties}
-              className={`absolute block overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface text-left ${arrived(id) ? "stagger-in" : "pointer-events-none"}`}
+              className={`absolute block overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface text-left ${opening.has(id) ? "stagger-in" : ""} ${arrived(id) ? "" : "pointer-events-none"}`}
             >
               <ScreenFrame
                 onReady={() => {
@@ -739,17 +773,16 @@ export function FlowCanvas({
                 register={(element) => {
                   if (element) return void frames.current.set(id, element);
                   frames.current.delete(id);
-                  // Gone with its device: switched on again, it loads again, and isn't shown until it has.
-                  setReadyIds((now) => {
-                    if (!now.has(id)) return now;
-                    const next = new Set(now);
-                    next.delete(id);
-                    return next;
-                  });
+                  // Gone with its device: switched on again, it loads again, as a placeholder until it has.
+                  setReadyIds((now) => without(now, id));
+                  setOpening((now) => without(now, id));
                 }}
                 src={`${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`}
                 device={on}
               />
+              {fold && pageHeight(id) > on.height ? (
+                <span aria-hidden style={{ top: on.height * SCREEN_SCALE }} className="pointer-events-none absolute inset-x-0 bottom-0 bg-surface opacity-50" />
+              ) : null}
               {/* A layer of the canvas's own over the page, so a swipe lands on the canvas and never on something that scrolls inside the screen, whatever address the page is on. */}
               <span aria-hidden className="absolute inset-0 [will-change:transform]" />
             </button>
@@ -817,7 +850,8 @@ export function FlowCanvas({
           )}
 
           {copies.map(({ id, screen, device: on }) => {
-            if (!arrived(id)) return null;
+            // A placeholder has its name too.
+            if (!revealed) return null;
             const spot = toScreen(at(id).x, at(id).y);
             // The name is a handle too: pressed, it selects its screen and moves it.
             return (
@@ -882,8 +916,8 @@ export function FlowCanvas({
       {/* Where the version can be edited: the element under the pointer, and the one selected, marked the same way. */}
       {size && selecting ? (
         <div className="absolute inset-0">
-          {picked ? outline("picked", picked.copyId, picked.part.box) : null}
-          {target ? outline("target", target.copyId, target.box) : null}
+          {picked ? outline("picked", picked.copyId, picked.part.box, !!picked.part.component) : null}
+          {target ? outline("target", target.copyId, target.box, target.box.component) : null}
           {typing
             ? (() => {
                 // Where the words are now, if the part being typed over is the one selected, which is kept up to date.
@@ -942,7 +976,7 @@ export function FlowCanvas({
               const placed = draft;
               setDraft(null);
               setRetry({ text: "" });
-              void comments.onAdd(text, placed.anchor, setups?.[screenOfCopy(placed.copyId)]).then((saved) => {
+              void comments.onAdd(text, placed.anchor, setups?.[screenOfCopy(placed.copyId)], copyOf.get(placed.copyId)?.device.id).then((saved) => {
                 if (saved) return;
                 setRetry({ text });
                 setDraft(placed);
@@ -1151,6 +1185,13 @@ function ScreenFrame({
   }, [loaded]);
 
   return (
+    <>
+    {/* Until its page has loaded: a placeholder the size of the screen, a faint fill inside an edge, breathing. It goes
+        the moment the page is there, fading away over it, and a page that is already there never has one. */}
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute inset-0 z-[var(--z-raised)] rounded-[inherit] border border-border bg-surface-hover transition-opacity duration-[var(--fade-duration)] ease-[var(--fade-curve)] ${loaded ? "opacity-0" : "pulse-soft"}`}
+    />
     <iframe
       ref={frame}
       src={src}
@@ -1170,6 +1211,7 @@ function ScreenFrame({
       className="pointer-events-none block origin-top-left border-0"
       sandbox="allow-scripts allow-forms allow-same-origin"
     />
+    </>
   );
 }
 

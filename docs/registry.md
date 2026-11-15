@@ -21,6 +21,7 @@ GitHub   registry.json                  teams, projects, prototypes, versions
          p/<slug>/<version>/index.html  the version's entry point
          p/<slug>/<version>/<...>       every other file in the folder pushed
          comments/<slug>/<version>.json comments and replies left on that version
+         handoff/<slug>/<version>.json  that version's handoff: findings, decisions, sign-off
 ```
 
 A version isn't forced into one file, and nothing about it is rewritten. The
@@ -46,6 +47,16 @@ Every version is one commit, written through GitHub's Git Data API (a blob
 per file, one tree, one commit, move the branch ref) — never a local `git`
 checkout, and never this application's own repository. A version's path is
 checked for existence first and never replaced, the same as it was in Blob.
+
+A handoff is kept the same way, one file per version (`src/lib/registry/handoff.ts`). /handoff
+scans the prototype on the designer's machine and posts the findings to `/api/handoff` with the
+studio password (they are small, so unlike /push's files they come through the studio); the
+designer's decisions are written into the same file from the studio, one at a time; "Ready for
+dev" adds the sign-off, after which the file is never replaced. That file *is* the package an
+engineer's agent reads (`GET /api/handoff`, or `scan.mjs --fetch`): its shape is `Handoff` in
+`src/lib/handoff.ts`. A working copy's (v0.0) is kept in its `.studio/handoff.json` instead. Exact colours are
+never decisions: the scanner swaps them for their tokens in the prototype's own files before it
+scans (`fixed`), and lists any it left as written (`exact`, in a copied file or not a colour class).
 
 **/push commits from the laptop, not through the studio.** A Vercel
 Function can't accept a request body over 4.5MB, and prototypes outgrow

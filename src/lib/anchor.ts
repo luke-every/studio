@@ -11,7 +11,7 @@ import { selectorFor } from "@/lib/edit-dom";
  */
 
 export type Spot = { x: number; y: number };
-export type Box = { left: number; top: number; width: number; height: number };
+export type Box = { left: number; top: number; width: number; height: number; /** The element is a design-system component instance (edit mode on a live version). */ component?: boolean };
 /** Whether a key in the prototype's address is the studio's (a control, a variant, the review token) rather than the prototype's own. */
 export type StudioOwns = (key: string) => boolean;
 

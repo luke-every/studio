@@ -8,6 +8,7 @@ import { UserAvatar } from "@/components/shell/user-avatar";
 import { Button, controlOn, IconButton } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
 import type { Comment } from "@/lib/comments";
+import { DEVICES } from "@/lib/phone";
 
 import { CommentMenu, ResolveToggle, WhileWorking } from "./comment-parts";
 import { useSharedComments } from "./shared-comments";
@@ -208,8 +209,8 @@ export function CommentsPanel({
                       </span>
                       )}
                     </div>
-                    {setupLabel?.(comment.variant) ? (
-                      <p className="truncate text-ui text-foreground-subtle">{setupLabel(comment.variant)}</p>
+                    {[setupLabel?.(comment.variant), DEVICES.find((item) => item.id === comment.device)?.name].filter(Boolean).join(" · ") ? (
+                      <p className="truncate text-ui text-foreground-subtle">{[setupLabel?.(comment.variant), DEVICES.find((item) => item.id === comment.device)?.name].filter(Boolean).join(" · ")}</p>
                     ) : null}
                     <p
                       className={`whitespace-pre-wrap py-2 text-base leading-[var(--leading-relaxed)] ${comment.resolvedAt ? "text-foreground-subtle" : "text-foreground"}`}

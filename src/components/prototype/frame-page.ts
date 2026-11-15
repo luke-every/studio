@@ -2,6 +2,7 @@ import { anchorAt, anchorOf, boxAt, elementAt, ownedBy, revealAnchor, scrollAt, 
 import type { Anchor } from "@/lib/comments";
 import { describePart, partIn, type painter, type Part } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
+import { findClip, setMarks, type Clip, type Find } from "@/lib/handoff-clip";
 
 /**
  * A prototype's page, for comments and for editing: what is at a point, where comments are on it, going to one, the
@@ -32,6 +33,15 @@ export type FramePage = {
   spots(anchors: Record<string, Anchor>): Record<string, Spot> | null;
   /** Puts the page back where an anchor was left (see `revealAnchor`); `done` says whether it could be pinned there. Returns the way to stop. */
   reveal(anchor: Anchor, done: (found: boolean) => void): () => void;
+};
+
+/**
+ * The design system's component names while a live version is being edited (see `useDesignSystem`), told to its page
+ * with each question, so what is picked or hovered inside one of them is the component. Null otherwise.
+ */
+let designSystem: string[] | null = null;
+export const setDesignSystem = (names: string[] | null) => {
+  designSystem = names;
 };
 
 export function pageOf(frame: HTMLIFrameElement): FramePage {
@@ -82,7 +92,7 @@ export function followPart(frame: HTMLIFrameElement, selector: string, heard: (p
   if (!win) return () => {};
   const link = linkOf(win);
   link.part = { selector, heard };
-  send(win, link, { type: "studio:edits:follow", selector });
+  send(win, link, { type: "studio:edits:follow", selector, components: designSystem });
   return () => {
     if (link.part?.heard !== heard) return;
     link.part = null;
@@ -162,7 +172,7 @@ function near(frame: HTMLIFrameElement): FramePage {
 /** How long a question is waited for before the page is taken not to know (it may not have the helper). */
 const ASK_MS = 1500;
 
-type Ask = { id: number; what: "anchor" | "box" | "reveal" | "part" | "anchorOf"; x?: number; y?: number; owns?: string[]; anchor?: Anchor; selector?: string };
+type Ask = { id: number; what: "anchor" | "box" | "reveal" | "part" | "anchorOf" | "clip" | "mark"; x?: number; y?: number; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; find?: Find; finds?: Find[]; colour?: string | null };
 type Link = {
   /** The page's own address, once it has said hello; questions wait until then. */
   origin: string | null;
@@ -174,6 +184,8 @@ type Link = {
   /** The edits drawn on it, and the part followed on it: both said again to a page that has loaded again. */
   edits: Edit[];
   part: { selector: string; heard: (part: Part | null) => void } | null;
+  /** Told when the page is scrolled down or back up. */
+  scrolled: ((down: boolean) => void) | null;
 };
 
 const links = new WeakMap<Window, Link>();
@@ -213,7 +225,7 @@ function listen() {
         link.sent = "";
         follow(win, link);
         if (link.edits.length) send(win, link, { type: "studio:edits:paint", edits: link.edits });
-        if (link.part) send(win, link, { type: "studio:edits:follow", selector: link.part.selector });
+        if (link.part) send(win, link, { type: "studio:edits:follow", selector: link.part.selector, components: designSystem });
         for (const { ask } of link.waiting.values()) send(win, link, { type: "studio:comments:ask", ...ask });
         return;
       case "studio:comments:answer": {
@@ -227,6 +239,9 @@ function listen() {
         if (event.origin !== link.origin || typeof data.spots !== "object" || !data.spots) return;
         link.spots = data.spots;
         return;
+      case "studio:comments:scrolled":
+        if (event.origin === link.origin) link.scrolled?.(!!data.down);
+        return;
       case "studio:edits:part":
         if (event.origin === link.origin) link.part?.heard(heardPart(data.part ?? null));
         return;
@@ -238,7 +253,7 @@ function linkOf(win: Window) {
   listen();
   let link = links.get(win);
   if (!link) {
-    link = { origin: null, sent: "", wanted: {}, spots: {}, waiting: new Map(), edits: [], part: null };
+    link = { origin: null, sent: "", wanted: {}, spots: {}, waiting: new Map(), edits: [], part: null, scrolled: null };
     links.set(win, link);
     // "*": the page's address isn't known until it answers, and this carries nothing. A page whose helper has already
     // said hello (before comments were wanted here) loads the bridge on this; one still loading says hello itself.
@@ -247,32 +262,72 @@ function linkOf(win: Window) {
   return link;
 }
 
+/** Told whether a page on another address (a dev server) is scrolled down, through its bridge. */
+export function watchScroll(frame: HTMLIFrameElement, told: (down: boolean) => void) {
+  const win = frame.contentWindow;
+  if (!win) return () => {};
+  const link = linkOf(win);
+  link.scrolled = told;
+  return () => {
+    if (link.scrolled === told) link.scrolled = null;
+  };
+}
+
+/**
+ * Where one of the page's elements is, for a handoff (see `handoff-clip.ts`): read directly on the studio's own address,
+ * asked of the bridge on another. Called once the frame has loaded its page. Returns the way to stop.
+ */
+export function clipOf(frame: HTMLIFrameElement, find: Find, done: (clip: Clip | null) => void) {
+  const win = frame.contentWindow;
+  if (!win) {
+    done(null);
+    return () => {};
+  }
+  if (frame.contentDocument) return findClip(win, find, done);
+  let stopped = false;
+  // The page loads the bridge first, then looks for the element for as long as the studio's side would.
+  void askOf<Clip | null>(win, { what: "clip", find }, 10000, null).then((clip) => stopped || done(clip));
+  return () => void (stopped = true);
+}
+
+/** Outlines what a handoff changed in the page (see `setMarks`), or takes the outlines away: directly, or through the bridge. */
+export function markChanged(frame: HTMLIFrameElement, finds: Find[], colour: string | null) {
+  const win = frame.contentWindow;
+  if (!win) return;
+  if (frame.contentDocument) return setMarks(frame.contentDocument, finds, colour);
+  void askOf<boolean>(win, { what: "mark", finds, colour }, 5000, false);
+}
+
+/** Puts a question to a page on another address; `missing` if it hasn't answered in `wait`. */
+function askOf<T>(win: Window | null, question: Omit<Ask, "id">, wait: number, missing: T) {
+  return new Promise<T>((resolve) => {
+    if (!win) return resolve(missing);
+    const link = linkOf(win);
+    const id = ++asked;
+    const timer = window.setTimeout(() => {
+      link.waiting.delete(id);
+      resolve(missing);
+    }, wait);
+    link.waiting.set(id, {
+      ask: { id, ...question },
+      answer: (value) => {
+        window.clearTimeout(timer);
+        resolve((value ?? missing) as T);
+      },
+    });
+    send(win, link, { type: "studio:comments:ask", id, ...question });
+  });
+}
+
 /** A page on another address (a dev server), asked by message. */
 function across(frame: HTMLIFrameElement): FramePage {
   const win = frame.contentWindow;
-  const ask = <T>(question: Omit<Ask, "id">, wait = ASK_MS, missing: T) =>
-    new Promise<T>((resolve) => {
-      if (!win) return resolve(missing);
-      const link = linkOf(win);
-      const id = ++asked;
-      const timer = window.setTimeout(() => {
-        link.waiting.delete(id);
-        resolve(missing);
-      }, wait);
-      link.waiting.set(id, {
-        ask: { id, ...question },
-        answer: (value) => {
-          window.clearTimeout(timer);
-          resolve((value ?? missing) as T);
-        },
-      });
-      send(win, link, { type: "studio:comments:ask", id, ...question });
-    });
+  const ask = <T>(question: Omit<Ask, "id">, wait = ASK_MS, missing: T) => askOf(win, question, wait, missing);
   return {
     // The keys the studio put in the frame's address are its own, whatever the page adds (see `ownedBy`).
     anchorAt: (x, y) => ask<Anchor | null>({ what: "anchor", x, y, owns: [...new URL(frame.src, window.location.href).searchParams.keys()] }, ASK_MS, null),
-    boxAt: (x, y) => ask<Box | null>({ what: "box", x, y }, ASK_MS, null),
-    partAt: (x, y) => ask<Part | null>({ what: "part", x, y }, ASK_MS, null).then(heardPart),
+    boxAt: (x, y) => ask<Box | null>({ what: "box", x, y, components: designSystem ?? undefined }, ASK_MS, null),
+    partAt: (x, y) => ask<Part | null>({ what: "part", x, y, components: designSystem ?? undefined }, ASK_MS, null).then(heardPart),
     anchorOf: (selector) => ask<Anchor | null>({ what: "anchorOf", selector, owns: [...new URL(frame.src, window.location.href).searchParams.keys()] }, ASK_MS, null),
     scrollAt: (x, y, dx, dy) => {
       if (win) send(win, linkOf(win), { type: "studio:comments:scroll", x, y, dx, dy });

@@ -15,7 +15,9 @@ export type Edit =
   | { kind: "text"; selector: string; text: string }
   | { kind: "style"; selector: string; css: Record<string, string> }
   /** `src` is a path inside the version's own folder. */
-  | { kind: "image"; selector: string; src: string };
+  | { kind: "image"; selector: string; src: string }
+  /** A prop of a design-system component instance, only ever made on a live version, where the page itself previews it. */
+  | { kind: "prop"; selector: string; component: string; prop: string; value: string | number | boolean };
 
 /** A named set of edits that is only shown when asked for, so the version itself stays as it was. */
 export type EditVariant = { id: string; label: string; edits: Edit[] };
@@ -38,54 +40,15 @@ export const editsSchema = z.array(
       css: z.record(z.string().regex(/^[a-z-]+$/), z.string().regex(/^[^{};<>]*$/)),
     }),
     z.object({ kind: z.literal("image"), selector: z.string().min(1), src: z.string().regex(/^_edits\/[\w.-]+$/) }),
+    z.object({
+      kind: z.literal("prop"),
+      selector: z.string().min(1),
+      component: z.string().regex(/^\w+$/),
+      prop: z.string().regex(/^\w+$/),
+      value: z.union([z.string().max(500), z.number(), z.boolean()]),
+    }),
   ]),
 );
-
-/** An edit with what its element was before it: its tag, its words, and for a style what each property was. For putting edits in words. */
-export type EditChange = { edit: Edit; tag?: string; words?: string; from?: Record<string, string> };
-
-export const editChangesSchema = z
-  .array(
-    z.object({
-      edit: editsSchema.element,
-      tag: z.string().max(40).optional(),
-      words: z.string().max(2000).optional(),
-      from: z.record(z.string(), z.string().max(500)).optional(),
-    }),
-  )
-  .min(1)
-  .max(200);
-
-const quoted = (text: string) => JSON.stringify(text.length > 300 ? `${text.slice(0, 300)}…` : text);
-
-/**
- * Edits made by hand on a live version, as what Claude is asked to do about them: each element, and each thing that
- * changed on it from what to what, then how to go about it. The edits were only ever a preview on the running page;
- * this is what makes them real, in the prototype's own code. `where` is the page they were made on and its setup.
- */
-export function editsBrief(changes: EditChange[], where: { screen?: string; setup?: string } = {}) {
-  const elements = new Map<string, EditChange[]>();
-  for (const change of changes) elements.set(change.edit.selector, [...(elements.get(change.edit.selector) ?? []), change]);
-  const items = [...elements].map(([selector, list], index) => {
-    const { tag, words } = list[0];
-    const lines = [`${index + 1}. ${tag ? `<${tag}>` : "An element"}${words ? ` that says ${quoted(words)}` : ""}`, `   - Element: ${selector}`];
-    for (const { edit, from } of list) {
-      if (edit.kind === "text") lines.push(`   - Words: ${words === undefined ? "" : `${quoted(words)} → `}${quoted(edit.text)}`);
-      if (edit.kind === "style") for (const [property, value] of Object.entries(edit.css)) lines.push(`   - ${property}: ${from?.[property] ? `${from[property]} → ` : ""}${value}`);
-    }
-    return lines.join("\n");
-  });
-  return [
-    "## Edits to make in the code",
-    "",
-    "These were made by hand in the studio, as a preview on the running page. Make each one in this prototype's code, so that the page looks exactly as it did with them on.",
-    "",
-    ...(where.screen ? [`Page: ${where.screen}${where.setup ? ` (setup: ?${where.setup})` : ""}`, ""] : []),
-    items.join("\n\n"),
-    "",
-    "Each value is what the browser showed before and after (computed values, so a colour is rgb and a size is in pixels). Make the change the way this codebase would: its own classes, tokens and components, following this folder's CLAUDE.md, with the nearest token or class that gives that value. Never as an inline style or an !important rule. The element path says where it is on the page; find the component that renders it. Change only what is listed here.",
-  ].join("\n");
-}
 
 /** Where replaced images are kept inside a version's folder. */
 export const EDIT_IMAGE_DIR = "_edits";
@@ -94,7 +57,7 @@ export const EDIT_IMAGE_DIR = "_edits";
 export function mergeEdits(earlier: Edit[], later: Edit[]): Edit[] {
   const merged = [...earlier];
   for (const edit of later) {
-    const at = merged.findIndex((other) => other.kind === edit.kind && other.selector === edit.selector);
+    const at = merged.findIndex((other) => other.kind === edit.kind && other.selector === edit.selector && (edit.kind !== "prop" || (other as typeof edit).prop === edit.prop));
     if (at === -1) merged.push(edit);
     else if (edit.kind === "style" && merged[at].kind === "style") merged[at] = { ...edit, css: { ...merged[at].css, ...edit.css } };
     else merged[at] = edit;
@@ -107,10 +70,12 @@ export function describeEdits(edits: Edit[]) {
   const copy = edits.filter((edit) => edit.kind === "text").length;
   const images = edits.filter((edit) => edit.kind === "image").length;
   const styled = edits.filter((edit) => edit.kind === "style").length;
+  const props = edits.filter((edit) => edit.kind === "prop").length;
   const parts = [
     copy && `${copy} ${copy === 1 ? "line" : "lines"} of copy`,
     images && `${images} ${images === 1 ? "image" : "images"}`,
     styled && `styling on ${styled} ${styled === 1 ? "element" : "elements"}`,
+    props && `${props} component ${props === 1 ? "prop" : "props"}`,
   ].filter(Boolean);
   return parts.length ? `Edited in the studio: ${parts.join(", ")}.` : "";
 }

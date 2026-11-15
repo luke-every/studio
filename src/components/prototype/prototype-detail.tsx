@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { ViewMenu } from "@/components/prototype/view-menu";
@@ -19,11 +20,15 @@ import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { DEFAULT_DEVICE } from "@/lib/phone";
-import { useDevice, useFit, useZoom } from "@/lib/use-device";
+import { useDevice, useFit, useInApp, useZoom } from "@/lib/use-device";
+import { HandoffNotice } from "@/components/handoff/handoff-notice";
 import { AvatarStack } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
 import { collaborators } from "@/lib/registry/select";
 import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
+
+// The review and what it draws its previews with are only loaded once it is opened.
+const HandoffModal = dynamic(() => import("@/components/handoff/handoff-modal").then((module) => module.HandoffModal), { ssr: false });
 
 /**
  * A prototype.
@@ -42,6 +47,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const people = collaborators(prototype);
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
+  const [inApp, chooseInApp] = useInApp();
   const [fit, chooseFit] = useFit();
   const fromUrl = useUrlParam("v");
   const variantFromUrl = useUrlParam("variant");
@@ -183,6 +189,11 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     return () => document.documentElement.removeAttribute("data-fullscreen");
   }, [focus]);
 
+  // A version's handoff, reviewed over the page: `#handoff` in the address, so a link (the one /handoff prints) opens it.
+  const handoffOpen = useUrlHash() === "handoff";
+  const openHandoff = useCallback(() => setUrlHash("handoff"), []);
+  const closeHandoff = useCallback(() => setUrlHash(""), []);
+
   const githubUrl = repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}${selected.source ? "/_source" : ""}` : undefined;
 
   const versionMenu = (
@@ -214,7 +225,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // Two columns that always fit the window; whatever is bigger scrolls inside its own column.
   return (
     <div
-      className={`flex w-full flex-col gap-6 pb-6 pt-2 sm:px-8 ${hideAll ? "max-lg:!p-0" : ""} lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:flex-row lg:items-stretch ${
+      className={`flex w-full flex-col gap-6 pb-6 pt-2 sm:px-8 ${hideAll || showingFlow ? "max-lg:!p-0" : ""} lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:flex-row lg:items-stretch ${
         focus ? "lg:h-dvh lg:p-0" : "lg:h-[calc(100dvh-var(--nav-height))]"
       }`}
     >
@@ -253,6 +264,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
                 prototype={prototype}
                 version={selected.live ? "Live" : selected.version}
                 githubUrl={githubUrl}
+                onHandoff={openHandoff}
                 onEdit={selected.url && !showingFlow ? () => (setListing(false), setMode("edit")) : undefined}
               />
             </div>
@@ -269,6 +281,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           <p className="text-base leading-[var(--leading-relaxed)] text-foreground-muted">
             {prototype.description || "A short description of what this prototype is and the question it is asking will go here."}
           </p>
+          {/* Read again once the review closes, so it says what was decided there. */}
+          <HandoffNotice key={String(handoffOpen)} slug={prototype.slug} versionKey={selected.key} onOpen={openHandoff} />
         </div>
 
         {/* The variants, when there are some, in a framed block that fills what is left. On a phone they are a dropdown under the prototype instead. */}
@@ -291,8 +305,9 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           onDevice={chooseDevice}
           zoom={zoom}
           fit={fit}
+          inApp={inApp}
           center={({ scale, device: shown }) => (
-            <ViewMenu device={shown ?? device} zoom={zoom} fit={fit} fitted={scale} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
+            <ViewMenu device={shown ?? device} zoom={zoom} fit={fit} fitted={scale} inApp={inApp} onInApp={chooseInApp} onDevice={chooseDevice} onZoom={chooseZoom} onFit={chooseFit} />
           )}
           // The tile's picture is of the default phone and setup, so it is only
           // the placeholder while the prototype is shown that way.
@@ -301,7 +316,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               ? `${selected.url}/studio-preview.jpg`
               : undefined
           }
-          // A live version has no version to save: its edits are a preview, given to Claude to make in its code (see `EditBar`).
+          // A live version has no version to save: its edits are only a preview on the running page.
           edit={selected.live ? { slug: prototype.slug, versionId: selected.id, live: true } : { slug: prototype.slug, versionId: selected.id, variantId: variant ?? undefined }}
           // A live version's comments are kept in its own folder on this machine, not pushed anywhere (see `registry/comments.ts`).
           comments={{ slug: prototype.slug, version: selected.key, versions: prototype.versions.map(({ key, version, live }) => ({ key, version: live ? "Live" : version })), onVersion: (key) => { const next = prototype.versions.find((item) => item.key === key); if (next) choose(next); }, variant: address?.split("?")[1] || undefined, onSetup: showSetup, canShow, setupLabel }}
@@ -333,12 +348,35 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           }}
           title={`${prototype.name} ${selected.version}`}
           leading={versionMenu}
-          share={{ slug: prototype.slug, versionKey: selected.key, version: selected.version }}
+          share={{ slug: prototype.slug }}
           bottom={options ? <VariantsDropdown label={variantsLabel}>{options}</VariantsDropdown> : undefined}
         />
       </div>
+      {handoffOpen ? <HandoffModal prototype={prototype} version={selected} controls={offered} onClose={closeHandoff} /> : null}
     </div>
   );
+}
+
+const listenToHash = (listener: () => void) => {
+  window.addEventListener("hashchange", listener);
+  window.addEventListener("popstate", listener);
+  return () => {
+    window.removeEventListener("hashchange", listener);
+    window.removeEventListener("popstate", listener);
+  };
+};
+
+/** The address's hash, read the same way as its parameters (see `useUrlParam`): empty on the server, so the page stays prerendered. */
+export function useUrlHash() {
+  return useSyncExternalStore(listenToHash, () => window.location.hash.slice(1), () => "");
+}
+
+/** Sets the address's hash without a history entry or a jump, and says so to `useUrlHash`. */
+export function setUrlHash(hash: string) {
+  const url = new URL(window.location.href);
+  url.hash = hash;
+  window.history.replaceState(null, "", url);
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
 
 /**
@@ -350,7 +388,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
  * the current version and corrects itself on hydration if a link asked for
  * another one.
  */
-function useUrlParam(name: string) {
+export function useUrlParam(name: string) {
   const subscribe = useCallback((listener: () => void) => {
     window.addEventListener("popstate", listener);
     return () => window.removeEventListener("popstate", listener);

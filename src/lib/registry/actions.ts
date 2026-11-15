@@ -10,6 +10,8 @@ import { EDIT_IMAGE_DIR, editsSchema, type Edit } from "@/lib/edits";
 
 import * as activity from "./activity";
 import * as comments from "./comments";
+import * as system from "./design-system";
+import * as handoff from "./handoff";
 import * as push from "./push";
 import * as registry from "./write";
 
@@ -195,9 +197,34 @@ export async function likeComment(input: Parameters<typeof comments.setLiked>[0]
   return attempt(() => comments.setLiked(input), []);
 }
 
-/** Gives edits made by hand on a live version to Claude, to make in the prototype's code. The comment that stands for them. */
-export async function applyEditsWithClaude(input: Parameters<typeof comments.applyEdits>[0]) {
-  return attempt(() => comments.applyEdits(input), []);
+/** A live version's design-system components, and when one is named, its props (see `design-system.ts`). */
+export async function designSystemOf(slug: string, name?: string) {
+  return attempt(() => system.designSystem(slug, name), []);
+}
+
+/**
+ * A version's handoff (see `handoff.ts`), and the designer's decisions on it. Read by the browser, like comments, so the
+ * page stays prerendered; nothing prerendered shows it, so nothing is revalidated. `key` is the version's stored key.
+ */
+export async function readHandoff(slug: string, key: string) {
+  return attempt(() => handoff.readHandoff(slug, key), []);
+}
+
+export async function decideFinding(input: Parameters<typeof handoff.decide>[0]) {
+  return attempt(() => handoff.decide(input), []);
+}
+
+export async function signOffHandoff(input: Parameters<typeof handoff.signOff>[0]) {
+  return attempt(() => handoff.signOff(input), []);
+}
+
+/** Does what the decisions say that a script can, in the prototype's code on this machine; and takes it back. */
+export async function applyHandoffDecisions(input: Parameters<typeof handoff.applyHandoff>[0]) {
+  return attempt(() => handoff.applyHandoff(input), []);
+}
+
+export async function undoHandoffDecisions(input: Parameters<typeof handoff.undoHandoffApply>[0]) {
+  return attempt(() => handoff.undoHandoffApply(input), []);
 }
 
 /** Puts back what Claude changed for one of its replies on a live version, or makes the change again. */

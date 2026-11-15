@@ -17,21 +17,36 @@ const PhoneQr = dynamic(() => import("./phone-qr").then((m) => m.PhoneQr), { ssr
 const item = `${menuItem} text-foreground`;
 
 /**
- * Everything for getting this version in front of somebody else: copy a link
- * (to the latest version, or pinned to this one) that opens without the password, open it in a tab, or scan its code from a
- * phone. Opens on hover with a mouse, on a tap otherwise.
+ * Copies a link that opens without the password: the latest version, or the one `key` names, on its canvas when asked.
+ * The link is made on the server, so the copy is handed a promise of it: Safari only lets a page write the clipboard straight from a tap.
+ */
+export function copyShareLink(slug: string, notify: (message: string, error?: boolean) => void, done: string, { key, canvas }: { key?: string; canvas?: boolean } = {}) {
+  const link = shareLink(slug, key).then((result) => {
+    if (!result.ok) throw new Error(result.error);
+    return `${window.location.origin}${result.value}${canvas ? "#canvas" : ""}`;
+  });
+  const copied =
+    typeof ClipboardItem === "undefined"
+      ? link.then((text) => navigator.clipboard.writeText(text))
+      : navigator.clipboard.write([new ClipboardItem({ "text/plain": link.then((text) => new Blob([text], { type: "text/plain" })) })]);
+  copied.then(
+    () => notify(done),
+    () => notify("Couldn't copy the share link", true),
+  );
+}
+
+/**
+ * Everything for getting this prototype in front of somebody else: copy a link
+ * (to the prototype or to its canvas, both the latest version) that opens without the password, open it in a tab, or scan its code from a
+ * phone. A link pinned to one version is the version menu's. Opens on hover with a mouse, on a tap otherwise.
  */
 export function ShareMenu({
   slug,
-  versionKey,
-  version,
   stage,
   newTab,
   onOpenNew,
 }: {
   slug: string;
-  versionKey: string;
-  version: string;
   /** Where the prototype is drawn, so the code can follow what is open in it. */
   stage: RefObject<HTMLElement | null>;
   /** Where "Open prototype" goes. */
@@ -59,21 +74,9 @@ export function ShareMenu({
     leaving.current = window.setTimeout(() => setOpen(false), 200);
   };
 
-  // The link is made on the server, so the copy is handed a promise of it: Safari only lets a page write the clipboard straight from a tap.
-  const copy = (pinned: boolean) => {
+  const copy = (canvas: boolean) => {
     setOpen(false);
-    const link = shareLink(slug, pinned ? versionKey : undefined).then((result) => {
-      if (!result.ok) throw new Error(result.error);
-      return `${window.location.origin}${result.value}`;
-    });
-    const copied =
-      typeof ClipboardItem === "undefined"
-        ? link.then((text) => navigator.clipboard.writeText(text))
-        : navigator.clipboard.write([new ClipboardItem({ "text/plain": link.then((text) => new Blob([text], { type: "text/plain" })) })]);
-    copied.then(
-      () => notify(pinned ? `Copied a link to ${version}` : "Copied a share link to the latest version"),
-      () => notify("Couldn't copy the share link", true),
-    );
+    copyShareLink(slug, notify, canvas ? "Copied a link to the canvas" : "Copied a link to the prototype", { canvas });
   };
 
   return (
@@ -92,11 +95,11 @@ export function ShareMenu({
         <div role="menu" className="flex flex-col">
           <button type="button" role="menuitem" onClick={() => copy(false)} className={item}>
             <LinkIcon />
-            Copy share link
+            Copy prototype link
           </button>
           <button type="button" role="menuitem" onClick={() => copy(true)} className={item}>
             <LinkIcon />
-            Copy link to {version}
+            Copy canvas link
           </button>
           {newTab ? (
             onOpenNew ? (

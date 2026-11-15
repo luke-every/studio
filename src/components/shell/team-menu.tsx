@@ -35,15 +35,54 @@ function useEntries() {
  */
 export function TeamRow() {
   const { entries } = useEntries();
+  const pathname = usePathname();
+  const onPulse = pathname === PULSE_HREF;
+  const onStorybook = pathname === STORYBOOK_HREF;
 
   return (
     <nav aria-label="Teams" className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none]">
       {entries.map((entry) => (
-        <IconButton key={entry.href} href={entry.href} className={entry.selected ? controlOn : ""}>
+        <IconButton key={entry.href} href={entry.href} className={entry.selected && !onPulse && !onStorybook ? controlOn : ""}>
           {entry.label}
         </IconButton>
       ))}
+      <IconButton href={PULSE_HREF} className={onPulse ? controlOn : ""}>
+        Weekly Pulse
+      </IconButton>
+      {SHOW_STORYBOOK ? (
+        <IconButton href={STORYBOOK_HREF} className={onStorybook ? controlOn : ""}>
+          Storybook
+        </IconButton>
+      ) : null}
     </nav>
+  );
+}
+
+const PULSE_HREF = "/pulse";
+const STORYBOOK_HREF = "/storybook";
+/** Local only: the tab is not built into the live studio. */
+const SHOW_STORYBOOK = process.env.NODE_ENV === "development";
+
+/** Weekly Pulse, beside the Home menu. */
+export function PulseLink() {
+  const onPulse = usePathname() === PULSE_HREF;
+
+  return (
+    <IconButton href={PULSE_HREF} className={onPulse ? controlOn : ""} aria-current={onPulse ? "page" : undefined}>
+      Weekly Pulse
+    </IconButton>
+  );
+}
+
+/** Storybook, beside Weekly Pulse. Development only. */
+export function StorybookLink() {
+  const onStorybook = usePathname() === STORYBOOK_HREF;
+  if (!SHOW_STORYBOOK) return null;
+
+  return (
+    <IconButton href={STORYBOOK_HREF} className={onStorybook ? controlOn : ""} aria-current={onStorybook ? "page" : undefined}>
+      Storybook
+    </IconButton>
   );
 }
 

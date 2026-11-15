@@ -265,6 +265,16 @@ export function FlowIcon(props: IconProps) {
   );
 }
 
+/** Where a screen ends and the page carries on below it. */
+export function FoldIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="3.25" y="1.75" width="9.5" height="12.5" rx="1.5" />
+      <path d="M3.25 9h9.5" strokeDasharray="2 1.5" />
+    </Frame>
+  );
+}
+
 export function ExpandIcon(props: IconProps) {
   return (
     <Frame {...props}>

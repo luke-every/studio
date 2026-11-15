@@ -1,7 +1,8 @@
 import { anchorAt, anchorOf, boxAt, elementAt, revealAnchor, scrollAt, spotOf, watchTaps, type Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
-import { describePart, painter, partIn } from "@/lib/edit-part";
+import { componentOf, describePart, painter, partIn } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
+import { findClip, isFind, setMarks } from "@/lib/handoff-clip";
 
 /**
  * Comments on, and edits to, a prototype the studio can't see into: a live version, running on its own dev server at
@@ -36,6 +37,8 @@ const ANYWAY_MS = 1000;
   const brush = painter();
   let edits: Edit[] = [];
   let following: string | null = null;
+  // The design system's component names, when the studio is editing: what is picked inside one of them is the component.
+  let components: string[] | undefined;
   let lastPart = "";
   const report = () => {
     raf = 0;
@@ -44,7 +47,7 @@ const ANYWAY_MS = 1000;
     if (edits.length) brush.keep([document], edits);
     if (following) {
       const element = partIn(document, following);
-      const part = element ? describePart(element) : null;
+      const part = element ? describePart(element, components) : null;
       const said = JSON.stringify(part);
       if (said !== lastPart) {
         lastPart = said;
@@ -76,7 +79,27 @@ const ANYWAY_MS = 1000;
   window.addEventListener("resize", later);
   window.setInterval(later, ANYWAY_MS);
 
+  // Whether the page has been scrolled down (and not back up since), said when it changes: for an app's bar that shrinks.
+  const lastTop = new WeakMap<EventTarget, number>();
+  let scrolledDown = false;
+  document.addEventListener(
+    "scroll",
+    (event) => {
+      const target = event.target as Document | Element;
+      const element = target.nodeType === Node.DOCUMENT_NODE ? (target as Document).scrollingElement : (target as Element);
+      const now = element?.scrollTop ?? 0;
+      const before = lastTop.get(target) ?? 0;
+      lastTop.set(target, now);
+      const down = now <= 0 || now < before - 4 ? false : now > before + 4 ? true : scrolledDown;
+      if (down === scrolledDown) return;
+      scrolledDown = down;
+      tell({ type: "studio:comments:scrolled", down });
+    },
+    LISTEN,
+  );
+
   let stop = () => {};
+  let stopClip = () => {};
   window.addEventListener("message", (event) => {
     const data = event.data;
     if (event.source !== window.parent || event.origin !== studio || typeof data?.type !== "string") return;
@@ -99,6 +122,7 @@ const ANYWAY_MS = 1000;
         return;
       case "studio:edits:follow":
         following = typeof data.selector === "string" ? data.selector : null;
+        components = Array.isArray(data.components) ? data.components : undefined;
         lastPart = "";
         later();
         return;
@@ -106,10 +130,19 @@ const ANYWAY_MS = 1000;
         if (point && document.body) scrollAt(document, data.x, data.y, Number(data.dx) || 0, Number(data.dy) || 0);
         return;
       case "studio:comments:ask":
-        if (data.what === "box") return answer(point && document.body ? boxAt(document, data.x, data.y) : null);
+        if (data.what === "box") {
+          const names = Array.isArray(data.components) ? new Set<string>(data.components) : null;
+          const hit = names && point && document.body ? elementAt(document, data.x, data.y) : null;
+          const found = hit && names ? componentOf(hit, names) : null;
+          if (found) {
+            const { left, top, width, height } = found.root.getBoundingClientRect();
+            return answer({ left, top, width, height, component: true });
+          }
+          return answer(point && document.body ? boxAt(document, data.x, data.y) : null);
+        }
         if (data.what === "part") {
           const element = point && document.body ? elementAt(document, data.x, data.y) : null;
-          return answer(element ? describePart(element) : null);
+          return answer(element ? describePart(element, Array.isArray(data.components) ? data.components : undefined) : null);
         }
         if (data.what === "anchorOf") {
           const element = typeof data.selector === "string" ? partIn(document, data.selector) : null;
@@ -119,6 +152,18 @@ const ANYWAY_MS = 1000;
         if (data.what === "anchor") {
           const owns = new Set<string>(Array.isArray(data.owns) ? data.owns : []);
           return answer(point && document.body ? anchorAt(document, data.x, data.y, (key) => owns.has(key)) : null);
+        }
+        // A handoff showing one of this page's elements: where it is, once it is in view.
+        if (data.what === "clip") {
+          stopClip();
+          if (!isFind(data.find)) return answer(null);
+          stopClip = findClip(window, data.find, answer);
+          return;
+        }
+        // A handoff outlining what it changed.
+        if (data.what === "mark") {
+          setMarks(document, Array.isArray(data.finds) ? data.finds.filter(isFind) : [], typeof data.colour === "string" ? data.colour : null);
+          return answer(true);
         }
         if (data.what === "reveal" && data.anchor) {
           stop();

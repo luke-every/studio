@@ -34,13 +34,19 @@ const sourceDir = join(process.cwd(), ".claude", "skills", "push");
 mkdirSync(skillDir, { recursive: true });
 copyFileSync(join(sourceDir, "SKILL.md"), join(skillDir, "SKILL.md"));
 copyFileSync(join(sourceDir, "FLOW.md"), join(skillDir, "FLOW.md"));
+copyFileSync(join(sourceDir, "REFERENCE.md"), join(skillDir, "REFERENCE.md"));
 copyFileSync(join(sourceDir, "push.mjs"), join(skillDir, "push.mjs"));
 rmSync(join(skillDir, "bundle.mjs"), { force: true }); // superseded by push.mjs
+
+// /handoff talks to the same studio with the same config.
+const handoffDir = join(home, ".claude", "skills", "handoff");
+mkdirSync(handoffDir, { recursive: true });
+for (const file of ["SKILL.md", "scan.mjs"]) copyFileSync(join(process.cwd(), ".claude", "skills", "handoff", file), join(handoffDir, file));
 
 mkdirSync(join(home, ".claude"), { recursive: true });
 writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
-console.log("Installed /push");
+console.log("Installed /push and /handoff");
 console.log(`  skill   ${skillDir}/SKILL.md`);
 console.log(`  upload  ${skillDir}/push.mjs`);
 console.log(`  studio  ${configPath}`);

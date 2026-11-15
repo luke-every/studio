@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { canHover, MotionPopover } from "@/components/motion";
-import { ChevronDownIcon } from "@/components/shell/nav-icons";
+import { ChevronDownIcon, CopyIcon } from "@/components/shell/nav-icons";
+import { copyShareLink } from "@/components/prototype/share-menu";
 import { menuItem } from "@/components/ui/menu-item";
 import { Stamp } from "@/components/ui/stamp";
+import { useStudio } from "@/lib/data/studio-store";
 import type { PrototypeVersion } from "@/lib/registry/types";
 
 /** A dev server is running: the version on screen is the app as it is now. */
@@ -74,6 +76,7 @@ export function VersionMenu({
   selectedId: string;
   onSelect: (version: PrototypeVersion) => void;
 }) {
+  const { notify } = useStudio();
   const [open, setOpen] = useState(false);
   const selected = versions.find((version) => version.id === selectedId) ?? versions[0];
 
@@ -120,26 +123,45 @@ export function VersionMenu({
           }
           return (
             <li key={version.id}>
-              <button
-                type="button"
+              {/* A row is the whole of what it selects; the copy button inside it is its own tap. */}
+              <div
                 role="option"
+                tabIndex={0}
                 aria-selected={on}
                 onClick={() => {
                   onSelect(version);
                   setOpen(false);
                 }}
-                className={`${menuItem} justify-between text-foreground ${on ? "bg-surface-hover" : ""}`}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  onSelect(version);
+                  setOpen(false);
+                }}
+                className={`${menuItem} cursor-pointer justify-between text-foreground ${on ? "bg-surface-hover" : ""}`}
               >
                 <span className="flex min-w-0 items-baseline gap-1.5">
                   <span>{version.version}</span>
+                  <button
+                    type="button"
+                    title={`Copy link to ${version.version}`}
+                    aria-label={`Copy link to ${version.version}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      copyShareLink(slug, notify, `Copied a link to ${version.version}`, { key: version.key });
+                    }}
+                    className="flex shrink-0 translate-y-0.5 text-foreground-subtle hover:text-foreground"
+                  >
+                    <CopyIcon className="size-3.5" />
+                  </button>
                   <span className="truncate text-sm text-foreground-subtle">
                     <Stamp iso={version.createdAt} />
                   </span>
                 </span>
                 {on ? (
-                  <span className="shrink-0 rounded-[var(--r-full)] bg-surface-inset px-1.5 py-0.5 text-xs font-medium text-foreground-muted">Currently viewing</span>
+                  <span className="shrink-0 rounded-[var(--r-full)] bg-surface-inset px-1.5 py-0.5 text-xs font-medium text-foreground-muted">Current</span>
                 ) : null}
-              </button>
+              </div>
             </li>
           );
         })}

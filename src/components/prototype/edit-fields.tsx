@@ -2,7 +2,7 @@
 
 import { useRef, useState, type ReactNode } from "react";
 
-import { CheckIcon } from "@/components/shell/nav-icons";
+import { CheckIcon, ChevronDownIcon } from "@/components/shell/nav-icons";
 import { toHex } from "@/lib/edit-dom";
 
 /**
@@ -95,6 +95,7 @@ export function NumberField({
   onCommit,
   unit = "px",
   caption,
+  trailing,
 }: {
   glyph: ReactNode;
   label: string;
@@ -103,6 +104,8 @@ export function NumberField({
   unit?: "px" | "opacity" | "number";
   /** Shown above the field. */
   caption?: string;
+  /** At the end of the field, inside it. */
+  trailing?: ReactNode;
 }) {
   const shown = unit === "opacity" ? String(Math.round(parseFloat(value || "1") * 100)) : unit === "number" ? value : pixels(value);
   const [draft, setDraft] = useState<string | null>(null);
@@ -156,8 +159,53 @@ export function NumberField({
         }}
         className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none"
       />
+      {trailing}
     </label>
     </Field>
+  );
+}
+
+/**
+ * How big something is along one axis, as one field: the size when it is fixed, "Fill" or "Hug" when it follows its
+ * surroundings or its content. The chevron at the end changes which; the size is only typed when it is fixed.
+ */
+export function SizeField({
+  glyph,
+  label,
+  mode,
+  value,
+  onCommit,
+  onMode,
+}: {
+  glyph: ReactNode;
+  label: string;
+  mode: "fixed" | "fill" | "hug";
+  value: string;
+  onCommit: (css: string) => void;
+  onMode: (mode: "fixed" | "fill" | "hug") => void;
+}) {
+  const menu = (
+    <span className="relative grid size-5 shrink-0 place-items-center text-foreground-subtle">
+      <ChevronDownIcon className="size-3.5" />
+      <select
+        aria-label={`${label} sizing`}
+        value={mode}
+        onChange={(event) => onMode(event.target.value as "fixed" | "fill" | "hug")}
+        className="absolute inset-0 size-full cursor-pointer opacity-0"
+      >
+        <option value="fixed">Fixed</option>
+        <option value="fill">Fill</option>
+        <option value="hug">Hug</option>
+      </select>
+    </span>
+  );
+  if (mode === "fixed") return <NumberField glyph={glyph} label={label} value={value} onCommit={onCommit} trailing={menu} />;
+  return (
+    <div className={`${well} relative flex h-7 items-center gap-1 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
+      <span className="flex w-5 shrink-0 items-center justify-center text-foreground-subtle">{glyph}</span>
+      <span className="min-w-0 flex-1 text-foreground">{mode === "fill" ? "Fill" : "Hug"}</span>
+      {menu}
+    </div>
   );
 }
 

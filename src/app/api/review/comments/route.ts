@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
       text: typeof body.text === "string" ? body.text : "",
       anchor: anchor.data,
       variant: typeof body.variant === "string" && body.variant ? body.variant : undefined,
+      device: typeof body.device === "string" && body.device ? body.device : undefined,
       by: typeof body.by === "string" ? body.by.slice(0, 40) : undefined,
       avatar: typeof body.avatar === "number" ? body.avatar : undefined,
     });

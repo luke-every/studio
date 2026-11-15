@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { layerExit, useOverlayBehaviour } from "@/lib/motion";
 
@@ -23,6 +23,10 @@ import { MotionScrim } from "./motion-scrim";
  *
  * Use it when the user must deal with something before continuing. If they do
  * not have to, it should not be a modal.
+ *
+ * `fill` is for a place to work rather than a question: it takes most of the
+ * window, and all of a phone's, and lays its children out as a column the
+ * height of the dialog, which scroll inside themselves.
  */
 export function MotionModal({
   open,
@@ -33,6 +37,8 @@ export function MotionModal({
   focusSelector,
   continuing,
   successor,
+  fill,
+  onKeyDown,
 }: {
   open: boolean;
   onClose: () => void;
@@ -45,6 +51,9 @@ export function MotionModal({
   continuing?: boolean;
   /** Handing over to another modal as this closes: the backdrop stays for it, and only the dialog leaves. */
   successor?: boolean;
+  fill?: boolean;
+  /** Keys pressed anywhere in the dialog, for its own shortcuts. */
+  onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
 }) {
   const container = useOverlayBehaviour({ open, onClose, focusSelector });
 
@@ -62,7 +71,7 @@ export function MotionModal({
 
   return (
     <div
-      className={`fixed inset-0 grid grid-cols-[minmax(0,1fr)] place-items-center p-4 ${leaving ? "pointer-events-none" : ""}`}
+      className={`fixed inset-0 grid grid-cols-[minmax(0,1fr)] place-items-center ${fill ? "sm:p-6" : "p-4"} ${leaving ? "pointer-events-none" : ""}`}
       style={{ zIndex: "var(--z-modal)" }}
     >
       {leaving && successor ? null : <MotionScrim onClick={onClose} continuing={continuing} leaving={leaving} />}
@@ -72,7 +81,12 @@ export function MotionModal({
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className={`${leaving ? "layer-out" : "layer-in"} relative max-h-full w-full min-w-0 max-w-[32rem] overflow-y-auto overscroll-contain rounded-[var(--r-xl)] bg-surface-elevated p-6 shadow-[var(--elev-overlay)] outline-none ${className ?? ""}`}
+        onKeyDown={onKeyDown}
+        className={`${leaving ? "layer-out" : "layer-in"} relative max-h-full w-full min-w-0 bg-surface-elevated shadow-[var(--elev-overlay)] outline-none ${
+          fill
+            ? "flex h-full max-w-[var(--modal-fill-width)] flex-col overflow-hidden sm:rounded-[var(--r-xl)]"
+            : "max-w-[32rem] overflow-y-auto overscroll-contain rounded-[var(--r-xl)] p-6"
+        } ${className ?? ""}`}
       >
         {children}
       </div>

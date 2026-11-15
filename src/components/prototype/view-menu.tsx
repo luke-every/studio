@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import { canHover, MotionPopover } from "@/components/motion";
 import { ChevronDownIcon, DesktopIcon, FitIcon, LargePhoneIcon, MinusIcon, PlusIcon, SmallPhoneIcon, TabletIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
-import { DEVICES, ZOOMS, type Device } from "@/lib/phone";
+import { DEVICES, IN_APPS, ZOOMS, type Device, type InApp } from "@/lib/phone";
 
 const percent = (zoom: number) => `${Math.round(zoom * 100)}%`;
 
@@ -28,6 +28,8 @@ export function ViewMenu({
   zoom,
   fit,
   fitted,
+  inApp,
+  onInApp,
   onDevice,
   onZoom,
   onFit,
@@ -37,6 +39,8 @@ export function ViewMenu({
   fit: boolean;
   /** While scaled to fit: the size that works out to. */
   fitted: number | null;
+  inApp: InApp;
+  onInApp: (app: InApp) => void;
   onDevice: (device: Device) => void;
   onZoom: (zoom: number) => void;
   onFit: (fit: boolean) => void;
@@ -63,7 +67,8 @@ export function ViewMenu({
       trigger={
         <IconButton onClick={() => setOpen((value) => canHover() || !value)} aria-haspopup="menu" aria-expanded={open}>
           <span>
-            {device.name} · {percent(now)}
+            {device.name}
+            {device.kind === "phone" && inApp.id !== "none" ? ` · ${inApp.name}` : ""} · {percent(now)}
           </span>
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
         </IconButton>
@@ -125,6 +130,35 @@ export function ViewMenu({
             );
           })}
         </div>
+
+        {/* In app: what a phone is opened inside, as from an ad. Only a phone has one. */}
+        {device.kind === "phone" ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="px-1 text-xs text-foreground-muted">Opened in</span>
+            <div role="radiogroup" aria-label="Opened in" className="grid grid-cols-3 gap-1.5">
+              {IN_APPS.map((option) => {
+                const on = option.id === inApp.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => {
+                      onInApp(option);
+                      setOpen(false);
+                    }}
+                    className={`h-8 rounded-[var(--r-lg)] px-2 text-xs font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${
+                      on ? "bg-surface-inset text-foreground ring-1 ring-border-strong" : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+                    }`}
+                  >
+                    {option.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
     </MotionPopover>
   );

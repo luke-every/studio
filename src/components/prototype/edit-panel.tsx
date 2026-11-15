@@ -2,10 +2,11 @@
 
 import { useReducer, type ReactNode } from "react";
 
+import { ComponentPanel } from "@/components/prototype/component-panel";
 import { PanelEmpty } from "@/components/prototype/panel-empty";
 import { PencilIcon } from "@/components/shell/nav-icons";
 import type { EditSession } from "@/components/prototype/use-edit-session";
-import { Check, Choice, ColorField, Field, Glyph, NumberField, PanelButton, Row, Section, SelectField } from "@/components/prototype/edit-fields";
+import { Check, Choice, ColorField, Field, Glyph, NumberField, PanelButton, Row, Section, SelectField, SizeField } from "@/components/prototype/edit-fields";
 import { parseShadow, rgbaOf, shadowCss, toRgba, type Axis, type Shadow, type Sizing } from "@/lib/edit-dom";
 import type { Part } from "@/lib/edit-part";
 
@@ -20,9 +21,11 @@ import type { Part } from "@/lib/edit-part";
  * so it is the same panel for a page the studio reads directly and for a live
  * version's, which describes its own parts from another address.
  */
-export function EditPanel({ part: element, session }: { part: Part | null; session: EditSession }) {
+export function EditPanel({ part: element, session, slug }: { part: Part | null; session: EditSession; slug: string }) {
   // Values are read from the page, so they are read again after each change.
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  // A design-system component instance (a live version) has its props to change, not styles.
+  if (element?.component) return <ComponentPanel part={{ ...element, component: element.component }} slug={slug} session={session} />;
 
   const read = (property: string) => element?.css[property] ?? "";
   const text = element ? element.text : null;
@@ -37,38 +40,17 @@ export function EditPanel({ part: element, session }: { part: Part | null; sessi
   const setShadow = (change: Partial<Shadow>) => set(["box-shadow", shadowCss({ ...(shadow ?? SHADOW), ...change })]);
   const blurOf = (property: string) => read(property).match(/blur\(([\d.]+)px\)/)?.[1] ?? "0";
   const sizing = (axis: Axis) => (element ? element.sizing[axis] : "fixed");
-  /** How big it is along an axis: its own size, or what it fills or hugs, as a mode with the number only when fixed. */
-  const dimension = (axis: Axis, caption: string) => {
-    const mode = sizing(axis);
-    return (
-      <>
-        <SelectField
-          caption={caption}
-          label={`${caption} sizing`}
-          value={mode}
-          onChange={(next) => element && set(...element.sizes[axis][next as Sizing])}
-          options={[
-            { value: "fixed", label: "Fixed" },
-            { value: "fill", label: "Fill" },
-            { value: "hug", label: "Hug" },
-          ]}
-        />
-        {mode === "fixed" ? (
-          <NumberField
-            caption=" "
-            glyph={<span className="text-xs">{axis === "width" ? "W" : "H"}</span>}
-            label={caption}
-            value={read(axis)}
-            onCommit={(value) => set([axis, value])}
-          />
-        ) : (
-          <Field caption=" ">
-            <span className="flex h-7 items-center px-1.5 text-xs text-foreground-muted">{Math.round(parseFloat(read(axis)) || 0)} px now</span>
-          </Field>
-        )}
-      </>
-    );
-  };
+  /** How big it is along an axis: a size when fixed, otherwise what it fills or hugs, in one field. */
+  const dimension = (axis: Axis, caption: string) => (
+    <SizeField
+      glyph={<span className="text-xs">{axis === "width" ? "W" : "H"}</span>}
+      label={caption}
+      mode={sizing(axis)}
+      value={read(axis)}
+      onCommit={(value) => set([axis, value])}
+      onMode={(next) => element && set(...element.sizes[axis][next])}
+    />
+  );
   const hasText = element ? element.hasText : false;
 
   /** Set one or more properties on the picked element. */
@@ -282,8 +264,10 @@ export function EditPanel({ part: element, session }: { part: Part | null; sessi
                   />
                 </Row>
               ) : null}
-              <Row>{dimension("width", "Width")}</Row>
-              <Row>{dimension("height", "Height")}</Row>
+              <Row>
+                {dimension("width", "Width")}
+                {dimension("height", "Height")}
+              </Row>
               <Check label="Clip content" checked={["hidden", "clip"].includes(read("overflow-x"))} onChange={(on) => set(["overflow", on ? "hidden" : "visible"])} />
             </Section>
 

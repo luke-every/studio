@@ -27,6 +27,8 @@ const nextConfig: NextConfig = {
     "/**": ["./registry/**/*.json"],
     // The /push skill, handed out by /skill/push/<file>.
     "/skill/push/[file]": ["./.claude/skills/push/*"],
+    // The /handoff skill, handed out by /skill/handoff/<file>.
+    "/skill/handoff/[file]": ["./.claude/skills/handoff/*"],
     // The Remix script, handed out inside /remix/<slug>/<version>.
     "/remix/[slug]/[version]": ["./scripts/remix.mjs"],
   },

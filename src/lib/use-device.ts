@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-import { DEFAULT_DEVICE, DEFAULT_ZOOM, DEVICES, type Device } from "./phone";
+import { DEFAULT_DEVICE, DEFAULT_ZOOM, DEVICES, IN_APPS, type Device, type InApp } from "./phone";
 
 const CHANGED = "proto:preference";
 
@@ -53,6 +53,13 @@ export function useDevice() {
   const [id, set] = useStored("proto.device");
   const device: Device = DEVICES.find((candidate) => candidate.id === id) ?? DEFAULT_DEVICE;
   return [device, (next: Device) => set(next.id)] as const;
+}
+
+/** Which app they preview a phone inside, if any (the Instagram browser an ad opens in). */
+export function useInApp() {
+  const [id, set] = useStored("proto.in-app");
+  const app: InApp = IN_APPS.find((candidate) => candidate.id === id) ?? IN_APPS[0];
+  return [app, (next: InApp) => set(next.id)] as const;
 }
 
 /** Whether they have the preview scaled to fit the frame, rather than at a size. On until somebody chooses a size. */

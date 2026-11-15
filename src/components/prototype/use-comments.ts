@@ -171,18 +171,18 @@ export function useComments(slug: string | undefined, version: string | undefine
    * Posts a comment; the comment, or null if it couldn't be saved. It is on the list at once, as a comment still being saved
    * (which breathes), and is swapped for the saved one when that lands or taken away again if it fails.
    */
-  const add = async (text: string, anchor: Anchor, setup?: string) => {
+  const add = async (text: string, anchor: Anchor, setup?: string, device?: string) => {
     if (!target) return null;
     const pendingId = `pending-${crypto.randomUUID()}`;
     const kept = setupOf(setup === undefined ? variant : setup);
     setLoaded((now) => {
       const list = now && now.key === key ? now.list : [];
       const n = Math.max(0, ...list.filter((item) => setupOf(item.variant) === kept).map((item) => item.n)) + 1;
-      const pending: Comment = { id: pendingId, n, author: { login: "pending", name: by || "Someone" }, at: new Date().toISOString(), text: text.trim(), anchor, variant: kept };
+      const pending: Comment = { id: pendingId, n, author: { login: "pending", name: by || "Someone" }, at: new Date().toISOString(), text: text.trim(), anchor, variant: kept, device };
       return { key, list: [...list, pending] };
     });
     setWorking(pendingId, true);
-    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: kept, by, avatar }) : addComment({ ...target, text, anchor, variant: kept, by, avatar })).finally(() => setWorking(pendingId, false));
+    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: kept, device, by, avatar }) : addComment({ ...target, text, anchor, variant: kept, device, by, avatar })).finally(() => setWorking(pendingId, false));
     if (!result.ok) {
       setLoaded((now) => (now && now.key === key ? { key, list: now.list.filter((item) => item.id !== pendingId) } : now));
       setError(result.error);

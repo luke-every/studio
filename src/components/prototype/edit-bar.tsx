@@ -6,10 +6,8 @@ import type { EditSession } from "@/components/prototype/use-edit-session";
 import { RedoIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
-import { applyEditsWithClaude, saveEdits } from "@/lib/registry/actions";
-import type { Comment } from "@/lib/comments";
+import { saveEdits } from "@/lib/registry/actions";
 
-import { pageOf } from "./frame-page";
 import { useUser } from "@/lib/use-user";
 
 const NAME_KEY = "studio.name";
@@ -28,9 +26,8 @@ const rememberedName = () => {
  * shown only when picked, so the version itself stays as it was. The first
  * time, a guest is asked whose edits these are, and it remembers.
  *
- * On a live version (`live`) there is no version to save: the edits are a
- * preview on the running page, and the button gives them to Claude to make in
- * the prototype's code, as a comment (see `applyEdits` in the registry).
+ * On a live version (`live`) there is no version to save: the edits are only
+ * a preview on the running page, so it keeps undo and redo and no Save.
  */
 export function EditBar({
   session,
@@ -47,11 +44,8 @@ export function EditBar({
   variantId?: string;
   /** No Save as variant: on the canvas an edit is drawn on every screen, which is what saving a version does and saving a variant would not. */
   versionOnly?: boolean;
-  /**
-   * A live version: the setup on screen, the frames it is on screen in, and what to tell once Claude has the edits
-   * (the comment that stands for them). `waiting` is Claude at work on them; `note` says where they stand otherwise.
-   */
-  live?: { setup?: string; frames: () => HTMLIFrameElement[]; onGiven: (comment: Comment) => void; waiting: boolean; note?: string };
+  /** A live version: nothing to save. */
+  live?: boolean;
 }) {
   const { notify } = useStudio();
   const user = useUser();
@@ -71,17 +65,6 @@ export function EditBar({
     }
     setSaving(true);
     setAsking(null);
-    if (live) {
-      // Pinned to the first thing changed, on whichever screen has it.
-      const changes = session.changes();
-      let anchor = null;
-      for (const frame of live.frames()) anchor ??= await pageOf(frame).anchorOf(changes[0].edit.selector);
-      const result = anchor ? await applyEditsWithClaude({ slug, changes, anchor, variant: live.setup, by: by.trim() }) : { ok: false as const, error: "What you edited isn't on the page any more, so there was nowhere to pin this." };
-      setSaving(false);
-      if (result.ok) live.onGiven(result.value);
-      else notify(result.error, true);
-      return;
-    }
     const form = new FormData();
     form.set("slug", slug);
     form.set("baseVersionId", baseVersionId);
@@ -116,15 +99,12 @@ export function EditBar({
     save(name, { id: `${slugged}-${Math.random().toString(36).slice(2, 6)}`, label });
   };
 
-  const busy = saving || !!live?.waiting;
-
   return (
     <div className="relative flex items-center gap-2">
-      {live?.note && !busy ? <span className="max-w-64 text-ui leading-[var(--leading-snug)] text-foreground-muted">{live.note}</span> : null}
-      <IconButton label="Undo (⌘Z)" onClick={session.undo} disabled={!session.canUndo || busy}>
+      <IconButton label="Undo (⌘Z)" onClick={session.undo} disabled={!session.canUndo || saving}>
         <UndoIcon />
       </IconButton>
-      <IconButton label="Redo (⌘⇧Z)" onClick={session.redo} disabled={!session.canRedo || busy}>
+      <IconButton label="Redo (⌘⇧Z)" onClick={session.redo} disabled={!session.canRedo || saving}>
         <RedoIcon />
       </IconButton>
       {versionOnly || live ? null : (
@@ -132,9 +112,11 @@ export function EditBar({
           Save as variant
         </IconButton>
       )}
-      <IconButton variant="primary" onClick={() => save(name)} disabled={!count || busy} loading={busy}>
-        {live ? "Apply with Claude" : "Save"}
-      </IconButton>
+      {live ? null : (
+        <IconButton variant="primary" onClick={() => save(name)} disabled={!count || saving} loading={saving}>
+          Save
+        </IconButton>
+      )}
 
       {asking ? (
         <form
@@ -177,7 +159,7 @@ export function EditBar({
             </>
           ) : null}
           <IconButton variant="primary" type="submit" disabled={asking === "variant" ? !variantName.trim() || !name.trim() : !name.trim()}>
-            {asking === "variant" ? "Save variant" : live ? "Apply with Claude" : "Save version"}
+            {asking === "variant" ? "Save variant" : "Save version"}
           </IconButton>
         </form>
       ) : null}
