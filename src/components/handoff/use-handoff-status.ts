@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { handoffStatusOf } from "@/lib/registry/actions";
 
-export type HandoffStatus = { total: number; left: number; signedBy: string | null; variants: string[] };
+export type HandoffStatus = { total: number; left: number; signedBy: string | null; variants: string[]; scannedAt: string };
 
 /** How often a running prototype's handoff is looked at, so a scan that has just finished appears without a refresh. */
 const EVERY_MS = 3000;

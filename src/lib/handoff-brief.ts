@@ -1,4 +1,4 @@
-import { andList, BUILT_FROM, differencesOf, list, text, type BuiltFrom } from "@/components/handoff/words";
+import { andList, differencesOf, list, text, type BuiltFrom } from "@/components/handoff/words";
 import type { Finding } from "@/lib/handoff";
 import { partsOf, type Part } from "@/lib/handoff-parts";
 import type { PublicHandoff } from "@/lib/handoff-public";
@@ -15,9 +15,14 @@ function verdict(finding: Finding) {
   const candidate = finding.decision?.candidate ?? finding.candidates[0]?.name;
   if (action === "extend") return `Extend production's \`${candidate}\` with what differs. Don't build a second one.`;
   if (action === "pick" || finding.kind === "near-match") return `Use production's \`${candidate}\` instead of the prototype's version.`;
-  if (finding.kind === "stand-in") return `Use production's \`${candidate}\`. The prototype's version is a front-end stand-in: no real data, other props.`;
+  if (finding.kind === "stand-in") return `Use production's \`${candidate}\`, not the prototype's.`;
   if (finding.kind === "new-reusable") return "A new component that could be reused, so it belongs with the shared components.";
   return "A new component, for this feature only.";
+}
+
+/** The components a piece of the prototype uses, each as an instruction: production's where it has one, a new one where it doesn't. */
+function uses(items: BuiltFrom[]) {
+  return ["", "## Uses components", ...items.map((item) => (item.from === "own" ? `- \`${item.name}\`: build it new (the prototype's is \`${item.importPath}\`).` : `- \`${item.name}\`: use production's (\`${item.importPath}\`), not the prototype's.`))];
 }
 
 const sourceLink = (ctx: Context, file: string) => `${ctx.origin}/p/${ctx.slug}/${ctx.folder}/_source/${file.split("/").map(encodeURIComponent).join("/")}`;
@@ -38,10 +43,18 @@ export type Context = {
 
 function head(data: PublicHandoff, ctx: Context, title: string) {
   const lines = [`# ${title}: handoff brief`];
-  lines.push(`From Test Kitchen: ${ctx.name} ${ctx.version}${data.signedBy ? `, handed off by ${data.signedBy}` : ""}${data.designSystem ? `, checked against production at ${data.designSystem.sha.slice(0, 7)}` : ""}.`);
+  lines.push(`${ctx.name} ${ctx.version}${data.signedBy ? `, handed off by ${data.signedBy}` : ""}.`);
   if (ctx.canvas) lines.push(`Where it is in the design: ${ctx.canvas}`);
   if (data.changedSince?.length) lines.push(`Note: ${data.changedSince.length} file(s) changed after the handoff was made, so check what you read against it.`);
   return lines;
+}
+
+/** Whether production already has this part, so the agent builds from its code and the prototype's own is no use to it. */
+function productionHas(part: Part | undefined) {
+  if (part?.kit) return true;
+  const finding = part?.finding;
+  if (!finding || finding.decision?.action === "extend") return false;
+  return finding.decision?.action === "pick" || finding.kind === "near-match" || finding.kind === "stand-in";
 }
 
 /** The part of a handoff that a file belongs to: the whole component it is, or the kit's. */
@@ -62,12 +75,9 @@ function aboutPart(part: Part | undefined, snippet?: string) {
     if (differences?.mine.length) lines.push(`- The prototype ${differences.mine.join(", ")}`);
     if (differences?.theirs.length) lines.push(`- Production ${differences.theirs.join(", ")}`);
     const builtFrom = list<BuiltFrom>(finding.mine.builtFrom).filter((item) => !snippet || snippet.includes(`<${item.name}`));
-    if (builtFrom.length) {
-      lines.push("", "## Built from");
-      for (const item of builtFrom) lines.push(`- \`${item.name}\`: ${BUILT_FROM[item.from]?.label ?? item.from} (\`${item.importPath}\`)`);
-    }
+    if (builtFrom.length) lines.push(...uses(builtFrom));
   } else if (part?.kit) {
-    lines.push(`Use production's component. The prototype's \`${part.name}\` is ${part.kit.kind === "stand-in" ? "a front-end version of it (plain props, no real data)" : "a copy that is behind production"}.`);
+    lines.push(`Use production's \`${part.name}\`, not the prototype's.`);
     lines.push(`Production: ${part.kit.production ?? "not found"}`);
     if (part.kit.removedProps.length) lines.push(`Production also takes ${andList(part.kit.removedProps.map((prop) => prop.name))}: wire these to real data.`);
   }
@@ -84,10 +94,7 @@ export function briefOf(data: PublicHandoff, selection: Selection, ctx: Context)
     const page = data.pages.find((item) => item.variants.includes(selection.screenId)) ?? data.pages[0];
     const lines = head(data, ctx, `Design ${selection.screenId}`);
     lines.push("", "## What this is", `The whole design${variants ? "" : " (the prototype's one design)"}. It is put together in ${page ? `\`${page.file}\`: ${sourceLink(ctx, page.file)}` : "the prototype's page file"}.`);
-    if (page?.builtFrom.length) {
-      lines.push("", "## Built from");
-      for (const item of page.builtFrom) lines.push(`- \`${item.name}\`: ${BUILT_FROM[item.from]?.label ?? item.from} (\`${item.importPath}\`)`);
-    }
+    if (page?.builtFrom.length) lines.push(...uses(page.builtFrom));
     const inDesign = partsOf(data).filter((part) => part.finding?.where.some((place) => !place.variants?.length || place.variants.includes(selection.screenId)) || part.kit);
     const named = [...new Map(inDesign.map((part) => [part.file, part])).values()].slice(0, MAX_PARTS);
     if (named.length) {
@@ -97,7 +104,6 @@ export function briefOf(data: PublicHandoff, selection: Selection, ctx: Context)
         lines.push(`- \`${part.name}\`: ${what} Brief: ${ctx.briefLink(`src:${part.file}:1-9999`)}`);
       }
     }
-    lines.push("", "Ask for a part's brief with its link rather than reading the whole prototype.");
     return `${lines.join("\n")}\n`;
   }
 
@@ -111,12 +117,14 @@ export function briefOf(data: PublicHandoff, selection: Selection, ctx: Context)
   const whole = line <= 1 && endLine >= 9999;
   const title = `${part?.name ?? base(file)}${whole ? "" : `, lines ${line} to ${last}`}`;
   const lines = head(data, ctx, title);
-  lines.push("", "## Where", `\`${file}\`${whole ? "" : `, lines ${line} to ${last}`}: ${sourceLink(ctx, file)}`);
+  const production = productionHas(part);
+  if (!production) lines.push("", "## Where", `\`${file}\`${whole ? "" : `, lines ${line} to ${last}`}: ${sourceLink(ctx, file)}`);
   lines.push("", "## What to do", ...(aboutPart(part, snippet ?? undefined).length ? aboutPart(part, snippet ?? undefined) : ["Build what this code draws, using production's components where the prototype uses them."]));
-  if (snippet) {
+  // Production's own code is the source for what it has, so the prototype's version of it is not sent.
+  if (!production && snippet) {
     const fence = "```";
     lines.push("", `## The code${rows && last - line + 1 > MAX_LINES ? ` (the first ${MAX_LINES} lines; the file has the rest)` : ""}`, `${fence}tsx`, snippet, fence);
-  } else lines.push("", "The source couldn't be read here: open the file at the link above.");
+  } else if (!production) lines.push("", "The source couldn't be read here: open the file at the link above.");
 
   const colours = data.findings.filter((item) => item.rule === "colours" && item.decision && item.decision.action !== "exception" && item.where.some((place) => place.file === file && place.line >= line && place.line <= last));
   if (colours.length) {

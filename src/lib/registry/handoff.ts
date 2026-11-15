@@ -50,7 +50,7 @@ export async function handoffPublic(slug: string, key: string) {
 /** How far a handoff has got, for the row on the prototype's page: small, since it is asked for every few seconds. */
 export async function handoffStatus(slug: string, key: string) {
   const current = await readHandoff(slug, key);
-  return current ? { total: current.findings.length, left: undecided(current), signedBy: current.signOff?.by ?? null, variants: current.scope.variants.map((variant) => variant.id) } : null;
+  return current ? { total: current.findings.length, left: undecided(current), signedBy: current.signOff?.by ?? null, variants: current.scope.variants.map((variant) => variant.id), scannedAt: current.scannedAt } : null;
 }
 
 async function update<T>(slug: string, key: string, change: (current: Handoff | null) => { next: Handoff; message: string; result: T }): Promise<T> {
