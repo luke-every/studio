@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { CloseIcon } from "@/components/shell/nav-icons";
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { partsOf, type Part } from "@/lib/handoff-parts";
 import type { PublicHandoff } from "@/lib/handoff-public";
@@ -40,21 +39,26 @@ function partOfFile(parts: Part[], file: string) {
 export function SelectionPanel({
   data,
   selection,
-  onClose,
   briefUrl,
   variantLabel,
   bare = false,
 }: {
   data: PublicHandoff;
   selection: Selection | null;
-  onClose: () => void;
-  /** The link that gives an agent the brief for a target. */
+  onClose?: () => void;
+  /** The link an agent fetches to get the brief for just a target. */
   briefUrl?: (target: string) => string | Promise<string>;
   variantLabel?: (id: string) => string;
   /** Inside a panel that is already a card: no card of its own. */
   bare?: boolean;
 }) {
-  const [copied, setCopied] = useState<"link" | "brief" | "failed" | null>(null);
+  const [copied, setCopied] = useState<"copying" | "copied" | "failed" | null>(null);
+  // The answer to a press shows for a moment, then the button is itself again.
+  useEffect(() => {
+    if (copied !== "copied" && copied !== "failed") return;
+    const timer = window.setTimeout(() => setCopied(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
   const parts = partsOf(data);
   const section = selection?.kind === "section" ? selection : null;
   const part = section ? partOfFile(parts, section.file) : undefined;
@@ -67,18 +71,11 @@ export function SelectionPanel({
   const role = finding ? ROLE[finding.kind] : null;
   const inDesign = selection?.kind === "frame" ? parts.filter((item) => item.kit || item.finding?.where.some((place) => !place.variants?.length || place.variants.includes(selection.screenId))) : [];
 
-  const title = !selection ? "Ready for dev" : selection.kind === "frame" ? `Design ${variantLabel?.(selection.screenId) ?? selection.screenId}` : `${part?.name ?? selection.file.split("/").pop()}`;
+  const title = !selection ? "Ready for dev" : selection.kind === "frame" ? null : `${part?.name ?? selection.file.split("/").pop()}`;
 
   return (
     <div className={`flex flex-col gap-4 ${bare ? "border-b border-divider p-4" : "h-full overflow-y-auto rounded-[var(--r-tile)] border border-border bg-surface-elevated p-4 shadow-floating [scrollbar-width:thin]"}`}>
-      <div className="flex items-start gap-2">
-        <h2 className="min-w-0 flex-1 text-ui font-medium text-foreground">{title}</h2>
-        {selection ? (
-          <IconButton label="Close" variant="ghost" size="sm" tooltipAlign="end" onClick={onClose}>
-            <CloseIcon className="size-4" />
-          </IconButton>
-        ) : null}
-      </div>
+      {title ? <h2 className="text-ui font-medium text-foreground">{title}</h2> : null}
 
       {!selection ? (
         <p className="text-ui text-foreground-muted">Handed off by {data.signedBy}. Tap anything in a design to get its code for your agent, or a design&apos;s name for the whole design.</p>
@@ -88,9 +85,7 @@ export function SelectionPanel({
             <p className="break-words text-sm text-foreground-muted">
               {section.file}, lines {section.line} to {section.endLine}
             </p>
-          ) : (
-            <p className="text-sm text-foreground-muted">The whole design, and what it is made of.</p>
-          )}
+          ) : null}
           <div className="flex flex-wrap items-center gap-1.5">
             {role ? <Chip tone={role.tone}>{role.label}</Chip> : null}
             {part?.kit ? <Chip tone={part.kit.kind === "stand-in" ? "existing" : "near"}>{part.kit.kind === "stand-in" ? "Front-end version of production's" : "Behind production"}</Chip> : null}
@@ -149,34 +144,19 @@ export function SelectionPanel({
 
           {data.preview ? <p className="text-sm text-foreground-subtle">The handoff isn&apos;t signed off yet. Engineers get a link and a brief once it is.</p> : null}
           {briefUrl && !data.preview ? (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                className="h-8 px-3"
-                onClick={() => {
-                  copy(Promise.resolve(briefUrl(targetOf(selection)))).then(
-                    () => setCopied("link"),
-                    () => setCopied("failed"),
-                  );
-                }}
-              >
-                {copied === "link" ? "Link copied" : "Copy link"}
-              </Button>
-              <Button
-                className="h-8 px-3"
-                onClick={() => {
-                  copy(
-                    Promise.resolve(briefUrl(targetOf(selection)))
-                      .then((url) => fetch(url))
-                      .then((response) => (response.ok ? response.text() : Promise.reject(new Error("not ok")))),
-                  ).then(
-                    () => setCopied("brief"),
-                    () => setCopied("failed"),
-                  );
-                }}
-              >
-                {copied === "brief" ? "Brief copied" : copied === "failed" ? "Couldn't copy" : "Copy brief"}
-              </Button>
-            </div>
+            <Button
+              className="h-8 self-start px-3"
+              loading={copied === "copying"}
+              onClick={() => {
+                setCopied("copying");
+                copy(Promise.resolve(briefUrl(targetOf(selection)))).then(
+                  () => setCopied("copied"),
+                  () => setCopied("failed"),
+                );
+              }}
+            >
+              {copied === "copying" ? "Copying" : copied === "copied" ? "Copied" : copied === "failed" ? "Couldn't copy" : "Copy link"}
+            </Button>
           ) : null}
         </>
       )}

@@ -216,6 +216,10 @@ Clarity, hierarchy, restraint, continuity and progressive disclosure from
 Apple. Warmth, storytelling and exploration from Airbnb. Neither one's visual
 styling.
 
+**No explanatory filler.** The interface does not describe itself: no line saying what a panel, a list or a button is, no
+"this is where you…", no restating the heading. A label, a count or a result is enough, and anything the person can see
+stays unexplained. Add a sentence only when without it they would do the wrong thing.
+
 It must not read as Linear, Notion, Jira, GitHub, a developer dashboard, or a
 generated SaaS template. Language in the interface is written the way the team
 talks — questions and reasoning, not tickets and metadata.
