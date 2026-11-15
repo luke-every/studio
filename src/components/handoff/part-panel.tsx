@@ -43,6 +43,7 @@ export function SelectionPanel({
   onClose,
   briefUrl,
   variantLabel,
+  bare = false,
 }: {
   data: PublicHandoff;
   selection: Selection | null;
@@ -50,6 +51,8 @@ export function SelectionPanel({
   /** The link that gives an agent the brief for a target. */
   briefUrl?: (target: string) => string | Promise<string>;
   variantLabel?: (id: string) => string;
+  /** Inside a panel that is already a card: no card of its own. */
+  bare?: boolean;
 }) {
   const [copied, setCopied] = useState<"link" | "brief" | "failed" | null>(null);
   const parts = partsOf(data);
@@ -67,7 +70,7 @@ export function SelectionPanel({
   const title = !selection ? "Ready for dev" : selection.kind === "frame" ? `Design ${variantLabel?.(selection.screenId) ?? selection.screenId}` : `${part?.name ?? selection.file.split("/").pop()}`;
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto rounded-[var(--r-tile)] border border-border bg-surface-elevated p-4 shadow-floating [scrollbar-width:thin]">
+    <div className={`flex flex-col gap-4 ${bare ? "border-b border-divider p-4" : "h-full overflow-y-auto rounded-[var(--r-tile)] border border-border bg-surface-elevated p-4 shadow-floating [scrollbar-width:thin]"}`}>
       <div className="flex items-start gap-2">
         <h2 className="min-w-0 flex-1 text-ui font-medium text-foreground">{title}</h2>
         {selection ? (
@@ -144,7 +147,8 @@ export function SelectionPanel({
             </Row>
           ) : null}
 
-          {briefUrl ? (
+          {data.preview ? <p className="text-sm text-foreground-subtle">The handoff isn&apos;t signed off yet. Engineers get a link and a brief once it is.</p> : null}
+          {briefUrl && !data.preview ? (
             <div className="flex flex-wrap gap-2">
               <Button
                 className="h-8 px-3"

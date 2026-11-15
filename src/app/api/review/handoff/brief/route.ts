@@ -4,9 +4,9 @@ import { join } from "node:path";
 import type { NextRequest } from "next/server";
 
 import { briefOf } from "@/lib/handoff-brief";
+import { mayReadHandoff } from "@/lib/handoff-access";
 import { publicHandoff } from "@/lib/handoff-public";
 import { parseTarget } from "@/lib/handoff-selection";
-import { checkReviewToken } from "@/lib/review";
 import { fetchPrototypeFile } from "@/lib/registry/github";
 import { findVersion, readHandoff } from "@/lib/registry/handoff";
 import { WORKING_SEGMENT, workingFolder } from "@/lib/registry/local-prototypes";
@@ -23,10 +23,10 @@ export async function GET(request: NextRequest) {
   const folder = params.get("version") ?? "";
   const token = params.get("token") ?? "";
   const selection = parseTarget(params.get("target") ?? "");
-  if (!checkReviewToken(token, slug, folder)) return say("This link has run out. Open the share link again for a new one.", 401);
   if (!selection) return say("That isn't something this handoff can give a brief for.", 400);
   try {
     const version = await findVersion(slug, folder.replace(/-/g, "."));
+    if (!(await mayReadHandoff(token, slug, folder, version.key))) return say("This link has run out. Open the share link again for a new one.", 401);
     const data = publicHandoff(await readHandoff(slug, version.key));
     if (!data.ready) return say("Nothing has been handed off for this version yet.", 404);
 

@@ -22,7 +22,11 @@ import { useMediaQuery } from "@/lib/use-media-query";
 import { DEFAULT_DEVICE } from "@/lib/phone";
 import { useDevice, useFit, useInApp, useZoom } from "@/lib/use-device";
 import { HandoffNotice } from "@/components/handoff/handoff-notice";
+import { SelectionPanel } from "@/components/handoff/part-panel";
+import { useHandoffData } from "@/components/handoff/use-handoff-data";
 import { useHandoffStatus } from "@/components/handoff/use-handoff-status";
+import type { Selection } from "@/lib/handoff-selection";
+import { reviewToken } from "@/lib/registry/actions";
 import { AvatarStack } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
 import { collaborators } from "@/lib/registry/select";
@@ -194,6 +198,10 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const handoffOpen = useUrlHash() === "handoff";
   // Asked again when the review is closed, and every few seconds on a running prototype (see the hook).
   const handoffStatus = useHandoffStatus(prototype.slug, selected.key, !!selected.live, handoffOpen);
+  // With a handoff, whatever is picked on the canvas (a design, or a section of its code) gets a link and a brief for an agent, in the side panel.
+  const handoffData = useHandoffData(prototype.slug, selected.key, !!handoffStatus, JSON.stringify(handoffStatus));
+  const [pickedSection, setPickedSection] = useState<Selection | null>(null);
+  const folder = (selected.url ?? "").split("/").pop() ?? "";
   const openHandoff = useCallback(() => setUrlHash("handoff"), []);
   const closeHandoff = useCallback(() => setUrlHash(""), []);
 
@@ -327,6 +335,25 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           flow={flow}
           variants={variantsCanvas}
           readyForDev={handoffStatus?.signedBy ? handoffStatus.variants : null}
+          handoffInspect={handoffData ? { elements: handoffData.elements, onSelect: setPickedSection } : undefined}
+          inspecting={!!pickedSection}
+          inspectInPanel
+          inspectPanel={
+            handoffData ? (
+              <SelectionPanel
+                bare
+                data={handoffData}
+                selection={pickedSection}
+                onClose={() => setPickedSection(null)}
+                variantLabel={(id) => variantsCanvas?.flow.screens.find((screen) => screen.id === id)?.name ?? id}
+                briefUrl={async (target) => {
+                  const minted = await reviewToken(prototype.slug, folder);
+                  if (!minted.ok) throw new Error(minted.error);
+                  return `${window.location.origin}/api/review/handoff/brief?${new URLSearchParams({ slug: prototype.slug, version: folder, token: minted.value, target })}`;
+                }}
+              />
+            ) : undefined
+          }
           flowOpen={flowOpen}
           onFlowOpen={setFlowOpen}
           mode={mode}

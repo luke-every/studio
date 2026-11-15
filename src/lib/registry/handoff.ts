@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { publicHandoff } from "@/lib/handoff-public";
 import { decisionProblem, handoffSchema, undecided, type Decision, type Handoff } from "@/lib/handoff";
 
 import { getPrototype } from "./index";
@@ -41,6 +42,11 @@ export async function readHandoff(slug: string, key: string): Promise<Handoff | 
   return text ? handoffSchema.parse(JSON.parse(text)) : null;
 }
 
+/** A handoff as an engineer would be given it, for the designer's own studio (signed off or not: see `PublicHandoff.preview`). */
+export async function handoffPublic(slug: string, key: string) {
+  return publicHandoff(await readHandoff(slug, key), { preview: true });
+}
+
 /** How far a handoff has got, for the row on the prototype's page: small, since it is asked for every few seconds. */
 export async function handoffStatus(slug: string, key: string) {
   const current = await readHandoff(slug, key);
@@ -73,7 +79,8 @@ export async function saveFindings(input: { slug: string; version: string; hando
   const version = await findVersion(input.slug, input.version);
   const scanned = handoffSchema.parse(input.handoff);
   return update(input.slug, version.key, (current) => {
-    if (current?.signOff) throw new Error(`${version.version} was signed off by ${current.signOff.by}. Push a new version to hand off again.`);
+    // A pushed version's signed-off handoff is what engineering was given, so it is never replaced; the one on the designer's own machine can be scanned again.
+    if (current?.signOff && !working(version.key)) throw new Error(`${version.version} was signed off by ${current.signOff.by}. Push a new version to hand off again.`);
     const before = new Map((current?.findings ?? []).map((finding) => [finding.id, finding.decision]));
     const next: Handoff = {
       ...scanned,
@@ -86,7 +93,8 @@ export async function saveFindings(input: { slug: string; version: string; hando
         const kept = before.get(finding.id);
         return { ...finding, decision: kept && !decisionProblem(finding, kept) ? kept : null };
       }),
-      signOff: null,
+      // Scanned again after being signed off: still signed off if it is the same findings, else it has to be looked at again.
+      signOff: current?.signOff && sameFindings(current, scanned) ? current.signOff : null,
     };
     return { next, message: `Handoff for ${input.slug} ${version.version}`, result: { version: version.version, findings: next.findings.length, kept: next.findings.length - undecided(next) } };
   });
@@ -106,6 +114,11 @@ export async function carryHandoff(input: { slug: string; version: string; hando
     return { next, message: `Handoff carried to ${input.slug} ${version.version}`, result: { version: version.version, signedOff: !!next.signOff, changedSince: next.changedSince?.length ?? 0 } };
   });
 }
+
+const sameFindings = (current: Handoff, scanned: Handoff) => {
+  const ids = new Set(current.findings.map((finding) => finding.id));
+  return ids.size === scanned.findings.length && scanned.findings.every((finding) => ids.has(finding.id));
+};
 
 /** A designer's decision on one finding, or null to take it back. Decisions can change until the handoff is signed off. */
 export async function decide(input: { slug: string; key: string; id: string; decision: Pick<Decision, "action" | "candidate" | "name" | "reason"> | null; by: string }) {

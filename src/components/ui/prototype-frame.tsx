@@ -95,6 +95,8 @@ export function PrototypeFrame({
   readyForDev,
   handoffInspect,
   inspectPanel,
+  inspectInPanel = false,
+  inspecting = false,
   flowOpen,
   onFlowOpen,
   mode,
@@ -164,6 +166,9 @@ export function PrototypeFrame({
   /** Engineers looking at a handed-off version: a tap on a canvas screen selects the part of the handoff under it; `inspectPanel` says what it is. */
   handoffInspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void };
   inspectPanel?: ReactNode;
+  /** The card for what is selected goes at the top of the side panel (the studio's own canvas) rather than floating on its own (a share page); `inspecting` is whether something is selected. */
+  inspectInPanel?: boolean;
+  inspecting?: boolean;
   flowOpen: boolean;
   onFlowOpen: (open: boolean) => void;
   /** Looking, editing or in dev mode. The last two replace the bar and bring a panel of their own. */
@@ -295,7 +300,9 @@ export function PrototypeFrame({
     return followPart(remoteFrame, remoteSelector, (heard) => setRemote((now) => (still(now) ? (heard ? { frame: remoteFrame, part: heard } : null) : now)));
   }, [remoteFrame, remoteSelector]);
   // On the canvas it opens for an element selected there, and closes when that is let go of.
-  const panelOpen = (dev && !showingFlow) || (editing && showingFlow && !!part) || (commenting && listing);
+  // What an engineer picked (a design, or a section of its code) gets the side panel on the canvas, with or without an element to edit.
+  const inspectShown = inspectInPanel && inspecting && showingFlow && !!inspectPanel;
+  const panelOpen = (dev && !showingFlow) || (editing && showingFlow && !!part) || (commenting && listing) || inspectShown;
   const [panelKind, setPanelKind] = useState<"dev" | "edit" | "comments">("dev");
   const wantedKind = editing ? "edit" : dev ? "dev" : "comments";
   if (panelOpen && panelKind !== wantedKind) setPanelKind(wantedKind);
@@ -885,7 +892,7 @@ export function PrototypeFrame({
           />
         </div>
       ) : null}
-      {showingFlow && inspectPanel ? <div className="absolute bottom-4 right-4 top-26 z-[var(--z-raised)] hidden w-[var(--dev-panel-width)] sm:block">{inspectPanel}</div> : null}
+      {showingFlow && inspectPanel && !inspectInPanel ? <div className="absolute bottom-4 right-4 top-26 z-[var(--z-raised)] hidden w-[var(--dev-panel-width)] sm:block">{inspectPanel}</div> : null}
     </div>
 
     {/* Its own panel beside the prototype, as tall as it without making it taller; over the canvas, which it never narrows, and starting below the bar so its buttons stay clear. It stays mounted so it can open and close. */}
@@ -905,7 +912,8 @@ export function PrototypeFrame({
           panelOpen ? "" : "translate-x-full opacity-0 motion-reduce:translate-x-0"
         }`}
       >
-        {panelKind === "edit" && edit ? (
+        {inspectShown ? inspectPanel : null}
+        {inspectShown && !(editing && part) ? null : panelKind === "edit" && edit ? (
           <EditPanel part={part} session={session} slug={edit.slug} />
         ) : panelKind === "comments" ? (
           <CommentsPanel groups={groups} currentKey={commentsOf?.version ?? ""} setupLabel={commentsOf?.setupLabel} replies={allReplies} selectedId={focus?.id ?? null} error={commentsError} onSelect={choose} onResolve={resolveComment} onDelete={deleteComment} onCopy={copyForClaude} />

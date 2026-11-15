@@ -265,6 +265,11 @@ export function FlowCanvas({
     const boxes = await Promise.all(others.map(async (item) => ({ copyId: item.id, box: frames.current.get(item.id) ? await find(frames.current.get(item.id)!) : null })));
     setEchoes(boxes.flatMap((item) => (item.box ? [{ key, copyId: item.copyId, box: item.box }] : [])));
   };
+  const inspecting = useRef(false);
+  const select = (selection: Selection | null) => {
+    inspecting.current = !!selection;
+    inspect?.onSelect(selection);
+  };
   const inspectAt = async (clientX: number, clientY: number) => {
     const found = inspect && pointIn(clientX, clientY);
     if (!inspect || !found) return;
@@ -273,7 +278,7 @@ export function FlowCanvas({
     setInspected(hit ? { id: key, copyId: found.copy.id, box: hit.box } : null);
     setEchoes([]);
     // Whatever is tapped is a section of the code; on bare page it is the screen itself.
-    inspect.onSelect(hit ? { kind: "section", file: hit.file, line: hit.line, endLine: hit.endLine } : { kind: "frame", screenId: found.copy.screen.id });
+    select(hit ? { kind: "section", file: hit.file, line: hit.line, endLine: hit.endLine } : { kind: "frame", screenId: found.copy.screen.id });
     if (hit) void echo(found.copy, key, (frame) => handoffPartBox(frame, hit.find, hit.index));
   };
   // The element selected to edit, and the screen it is on; only while it is still the one the page holds.
@@ -724,10 +729,10 @@ export function FlowCanvas({
       onPointerUp={(event) => {
         const done = drag.current;
         // A tap on the canvas around the screens lets go of an element selected to edit; a control or a pin pressed is not that.
-        if (done && !done.moved && !done.screen && inspected && !(event.target as Element).closest("button, [data-pin], textarea")) {
+        if (done && !done.moved && !done.screen && inspecting.current && !(event.target as Element).closest("button, [data-pin], textarea")) {
           setInspected(null);
           setEchoes([]);
-          inspect?.onSelect(null);
+          select(null);
         }
         if (done && !done.moved && !done.screen && picking?.target && !(event.target as Element).closest("button, [data-pin], textarea")) picking.onPick(null, null);
         if (done?.moved && done.screen && done.origin) {
@@ -740,7 +745,7 @@ export function FlowCanvas({
         if (inspect && done && !done.moved && done.screen && (event.target as Element).closest("[data-screen-name]")) {
           setInspected(null);
           setEchoes([]);
-          inspect.onSelect({ kind: "frame", screenId: screenOfCopy(done.screen) });
+          select({ kind: "frame", screenId: screenOfCopy(done.screen) });
         }
         window.setTimeout(() => (drag.current = null), 0);
       }}

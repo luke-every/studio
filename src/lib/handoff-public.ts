@@ -8,6 +8,8 @@ import type { SourceEl } from "@/lib/handoff-clip";
  */
 export type PublicHandoff = {
   ready: boolean;
+  /** Not signed off yet: given only to the designer, who sees what engineers will, but whose link and brief don't open until it is. */
+  preview?: boolean;
   signedBy?: string;
   signedAt?: string;
   variants: string[];
@@ -26,8 +28,8 @@ export type PublicHandoff = {
 
 const without = <T extends Record<string, unknown>>(record: T, keys: string[]) => Object.fromEntries(Object.entries(record).filter(([key]) => !keys.includes(key))) as T;
 
-export function publicHandoff(handoff: Handoff | null): PublicHandoff {
-  if (!handoff?.signOff) return { ready: false, variants: [], findings: [], kit: [], pages: [], lift: [], files: {}, graph: {}, elements: [] };
+export function publicHandoff(handoff: Handoff | null, { preview = false }: { preview?: boolean } = {}): PublicHandoff {
+  if (!handoff || (!handoff.signOff && !preview)) return { ready: false, variants: [], findings: [], kit: [], pages: [], lift: [], files: {}, graph: {}, elements: [] };
   const lean = (record: Record<string, unknown>) => {
     const rest = without(record, ["code", "module", "props", "modules"]);
     if (Array.isArray(rest.builtFrom)) rest.builtFrom = rest.builtFrom.map((item) => without(item as Record<string, unknown>, ["props"]));
@@ -35,8 +37,9 @@ export function publicHandoff(handoff: Handoff | null): PublicHandoff {
   };
   return {
     ready: true,
-    signedBy: handoff.signOff.by,
-    signedAt: handoff.signOff.at,
+    preview: !handoff.signOff || undefined,
+    signedBy: handoff.signOff?.by,
+    signedAt: handoff.signOff?.at,
     variants: handoff.scope.variants.map((variant) => variant.id),
     findings: handoff.findings.map((finding) => ({ ...finding, mine: lean(finding.mine), candidates: finding.candidates.map((candidate) => lean(candidate) as Finding["candidates"][number]) })),
     kit: handoff.kit ?? [],

@@ -210,6 +210,10 @@ export async function readHandoff(slug: string, key: string) {
   return attempt(() => handoff.readHandoff(slug, key), []);
 }
 
+export async function handoffPublicOf(slug: string, key: string) {
+  return attempt(() => handoff.handoffPublic(slug, key), []);
+}
+
 export async function handoffStatusOf(slug: string, key: string) {
   return attempt(() => handoff.handoffStatus(slug, key), []);
 }
