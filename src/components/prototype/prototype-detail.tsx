@@ -28,8 +28,6 @@ import { useHandoffStatus } from "@/components/handoff/use-handoff-status";
 import type { Selection } from "@/lib/handoff-selection";
 import { markHandoffComponent, reviewToken, unmarkHandoffComponent } from "@/lib/registry/actions";
 import { useUser } from "@/lib/use-user";
-import { suggestionsOf } from "@/lib/handoff-suggest";
-import { useDismissed } from "@/components/handoff/use-dismissed";
 import { AvatarStack } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
 import { collaborators } from "@/lib/registry/select";
@@ -206,7 +204,6 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const [markedAt, setMarkedAt] = useState(0);
   const handoffData = useHandoffData(prototype.slug, selected.key, !!handoffStatus, `${JSON.stringify(handoffStatus)}|${markedAt}`);
   const { name: me } = useUser();
-  const dismissed = useDismissed(`${prototype.slug}:${selected.key}`);
   const markers = handoffData && (!handoffStatus?.signedBy || selected.live)
     ? {
         onMark: async (mark: Parameters<typeof markHandoffComponent>[0]["mark"]) => {
@@ -221,7 +218,6 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
         },
       }
     : undefined;
-  const suggested = handoffData && markers ? suggestionsOf(handoffData).filter((item) => !dismissed.ids.includes(item.id)) : [];
   const [pickedSection, setPickedSection] = useState<Selection | null>(null);
   const folder = (selected.url ?? "").split("/").pop() ?? "";
   const openHandoff = useCallback(() => setUrlHash("handoff"), []);
@@ -358,7 +354,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           variants={variantsCanvas}
           readyForDev={handoffStatus?.signedBy ? handoffStatus.variants : null}
           handoffInspect={handoffData ? { elements: handoffData.elements, onSelect: setPickedSection, selection: pickedSection } : undefined}
-          handoffSheet={handoffData && (handoffData.marks.length || suggested.length) ? { marks: handoffData.marks, suggestions: suggested, onAccept: markers ? (item) => void markers.onMark({ name: item.name, file: item.file, line: item.line, endLine: item.endLine, find: item.find, screen: item.screen }) : undefined, onDismiss: dismissed.dismiss } : undefined}
+          handoffSheet={handoffData?.marks.length ? { marks: handoffData.marks } : undefined}
           inspecting={!!pickedSection}
           inspectInPanel
           inspectPanel={
