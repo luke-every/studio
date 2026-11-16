@@ -12,7 +12,7 @@ import type { Mark } from "@/lib/handoff";
 import type { PublicHandoff } from "@/lib/handoff-public";
 import { targetOf, type Selection } from "@/lib/handoff-selection";
 
-import { BUILT_FROM, DECISION, differencesOf, list, ROLE, summaryOf, text, type BuiltFrom } from "./words";
+import { STATUS, statusOf, text } from "./words";
 
 /** Copies text that is still on its way, so the browser still counts it as a result of the press (Safari insists). */
 function copy(value: Promise<string>) {
@@ -128,11 +128,10 @@ export function SelectionPanel({
   const section = selection?.kind === "section" ? selection : null;
   const part = section ? partOfFile(parts, section.file) : undefined;
   const finding = part?.finding;
-  const decision = finding?.decision ? DECISION[finding.decision.action] : null;
   const candidate = finding ? finding.candidates.find((item) => item.name === finding.decision?.candidate) ?? finding.candidates[0] : undefined;
-  const differences = finding && candidate ? differencesOf(finding, candidate) : null;
-  const builtFrom = finding ? list<BuiltFrom>(finding.mine.builtFrom) : [];
-  const role = finding ? ROLE[finding.kind] : null;
+  // One label: production has it (and which one it is), or it is new.
+  const status = part?.kit ? STATUS.production : finding ? statusOf(finding) : null;
+  const production = status === STATUS.production ? (part?.kit ? part.kit.production?.split("/").pop()?.replace(/\.[jt]sx?$/, "") : candidate?.name) : undefined;
   // Production has it: which one it is, and nothing about how the prototype's differs.
   const matched = productionHas(part);
   const inDesign =
@@ -168,12 +167,6 @@ export function SelectionPanel({
         <p className="text-ui text-foreground-muted">Handed off by {data.signedBy}. Tap anything in a design to get its code for your agent, or a design&apos;s name for the whole design.</p>
       ) : (
         <>
-          {section && !part?.kit ? (
-            <p className="break-words text-sm text-foreground-muted">
-              {section.file}
-              {section.line <= 1 && section.endLine >= 9999 ? "" : `, lines ${section.line} to ${section.endLine}`}
-            </p>
-          ) : null}
           {markable && section && markScreen ? (
             <MarkControl
               key={markId}
@@ -183,43 +176,11 @@ export function SelectionPanel({
               onRemove={() => marks!.onUnmark(markId)}
             />
           ) : null}
-          {matched ? (
-            <>
-              <div>
-                <Chip tone="system">Matched to production</Chip>
-              </div>
-              <p className="break-words text-sm text-foreground-muted">{part?.kit ? part.kit.production ?? "not found" : candidate ? text(candidate.source).split(":").slice(1).join(":") : null}</p>
-            </>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {role ? <Chip tone={role.tone}>{role.label}</Chip> : null}
-                {decision ? <Chip tone={decision.tone}>{decision.label}</Chip> : null}
-              </div>
-              {finding ? <p className="text-ui text-foreground-muted">{summaryOf(finding)}</p> : null}
-              {candidate ? (
-                <Row title="Production">
-                  <p className="break-words text-sm text-foreground-muted">
-                    {candidate.name} · {text(candidate.source).split(":").slice(1).join(":")}
-                  </p>
-                  {differences?.mine.length ? <p className="text-sm text-foreground-muted">The prototype {differences.mine.join(", ")}</p> : null}
-                  {differences?.theirs.length ? <p className="text-sm text-foreground-muted">Production {differences.theirs.join(", ")}</p> : null}
-                </Row>
-              ) : null}
-            </>
-          )}
-
-          {builtFrom.length ? (
-            <Row title="Built from">
-              <ul className="flex flex-col gap-1">
-                {builtFrom.map((item) => (
-                  <li key={item.file} className="flex flex-wrap items-center gap-x-2 text-sm text-foreground-muted">
-                    <Chip tone={BUILT_FROM[item.from]?.tone ?? "quiet"}>{item.name}</Chip>
-                    <span>{BUILT_FROM[item.from]?.label ?? item.from}</span>
-                  </li>
-                ))}
-              </ul>
-            </Row>
+          {status ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Chip tone={status.tone}>{status.label}</Chip>
+              {production ? <span className="text-sm text-foreground-muted">{production}</span> : null}
+            </div>
           ) : null}
 
           {inDesign.length ? (
@@ -235,7 +196,6 @@ export function SelectionPanel({
             </ul>
           ) : null}
 
-          {data.preview ? <p className="text-sm text-foreground-subtle">The handoff isn&apos;t signed off yet. Engineers get a link and a brief once it is.</p> : null}
           {briefUrl && !data.preview && !productionHas(part) ? (
             <Button
               className="h-8 self-start px-3"

@@ -19,7 +19,7 @@ import { FindingStage, type Context } from "./finding-stage";
 import { CheckStage } from "./check-stage";
 import { PackageView } from "./package-view";
 import { cssColour } from "./previews";
-import { canAdd, canExtend, canMarkNew, decisionOf, KINDS, mainChoice, mainLabel, nameOf, planOf, text, TIER, totalsOf, type Choice } from "./words";
+import { canAdd, canExtend, canMarkNew, decisionOf, groupsOf, mainChoice, mainLabel, nameOf, planOf, text, TIER, totalsOf, type Choice } from "./words";
 
 /**
  * A version's handoff, over its prototype: every finding in a queue, one at a time on a stage of mine beside the
@@ -66,8 +66,7 @@ export function HandoffModal({ prototype, version, controls, onClose }: { protot
   // The queue, grouped, in order: what "next" means.
   const groups = useMemo(() => {
     if (!handoff) return [];
-    const kinds = [...KINDS, ...[...new Set(handoff.findings.map((finding) => finding.kind))].filter((kind) => !KINDS.some((item) => item.kind === kind)).map((kind) => ({ kind, label: kind, tone: "quiet" as const }))];
-    return kinds.map((group) => ({ ...group, findings: handoff.findings.filter((finding) => finding.kind === group.kind) })).filter((group) => group.findings.length);
+    return groupsOf(handoff.findings);
   }, [handoff]);
   const ordered = groups.flatMap((group) => group.findings);
   const current = ordered.find((finding) => finding.id === currentId) ?? ordered.find((finding) => !finding.decision) ?? ordered[0];
@@ -255,13 +254,10 @@ export function HandoffModal({ prototype, version, controls, onClose }: { protot
               className={`${queueOpen ? "absolute inset-0 z-[var(--z-raised)] bg-surface-elevated" : "max-lg:hidden"} w-full shrink-0 overflow-y-auto overscroll-contain border-r border-divider p-2 [scrollbar-width:thin] lg:static lg:w-[var(--handoff-queue-width)]`}
             >
               {groups.map((group) => (
-                <section key={group.kind} className="pb-2">
-                  <h3 className="flex items-center justify-between px-2 pb-1 pt-2 text-sm text-foreground-subtle">
-                    <span className="flex items-center gap-1.5">
-                      <Dot tone={group.tone} />
-                      {group.label}
-                    </span>
-                    <span className="tabular-nums">
+                <section key={group.id} className="pb-2">
+                  <h3 className="flex items-center justify-between px-2 pb-1 pt-3 text-ui font-medium text-foreground">
+                    <span>{group.label}</span>
+                    <span className="text-sm font-normal tabular-nums text-foreground-subtle">
                       {group.findings.filter((finding) => finding.decision).length}/{group.findings.length}
                     </span>
                   </h3>
@@ -283,7 +279,7 @@ export function HandoffModal({ prototype, version, controls, onClose }: { protot
                               <span aria-hidden style={{ backgroundColor: cssColour(text(finding.mine.hex), typeof finding.mine.alpha === "number" ? finding.mine.alpha : 1) }} className="size-3 shrink-0 rounded-[var(--r-xs)] border border-border" />
                             ) : null}
                             <span className="min-w-0 flex-1 truncate">{nameOf(finding)}</span>
-                            {finding.tier !== "none" ? <span className={`shrink-0 text-xs ${finding.tier === "exact" ? "text-tone-match" : "text-tone-near"}`}>{TIER[finding.tier].label}</span> : null}
+                            {finding.rule === "colours" && finding.tier !== "none" ? <span className={`shrink-0 text-xs ${finding.tier === "exact" ? "text-tone-match" : "text-tone-near"}`}>{TIER[finding.tier].label}</span> : null}
                           </button>
                         </li>
                       );

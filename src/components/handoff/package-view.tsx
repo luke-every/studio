@@ -8,7 +8,7 @@ import type { Finding, Handoff } from "@/lib/handoff";
 
 import { MinePreview, type Context } from "./finding-stage";
 import { cssColour, Swatch } from "./previews";
-import { andList, BUILT_FROM, DECISION, decisionOf, decisionText, differencesOf, KINDS, nameOf, plural, SYSTEM_TONE, text, totalsOf } from "./words";
+import { andList, BUILT_FROM, DECISION, decisionOf, decisionText, differencesOf, groupsOf, nameOf, plural, SYSTEM_TONE, text, totalsOf } from "./words";
 
 /**
  * The package, once signed off: what engineering builds from, laid out to look at. The same data as the file the
@@ -79,7 +79,6 @@ export function PackageView({ handoff, name, context }: { handoff: Handoff; name
   const extending = handoff.findings.filter((finding) => finding.decision?.action === "extend");
   const markedNew = handoff.findings.filter((finding) => finding.decision?.action === "new");
   const tokens = handoff.findings.filter((finding) => finding.decision?.action === "add");
-  const kinds = [...KINDS, ...[...new Set(handoff.findings.map((finding) => finding.kind))].filter((kind) => !KINDS.some((item) => item.kind === kind)).map((kind) => ({ kind, label: kind }))];
   const totals = totalsOf(handoff.findings);
 
   return (
@@ -110,11 +109,10 @@ export function PackageView({ handoff, name, context }: { handoff: Handoff; name
         </div>
       </header>
 
-      {kinds.map(({ kind, label }) => {
-        const findings = handoff.findings.filter((finding) => finding.kind === kind);
+      {groupsOf(handoff.findings).map(({ id, label, findings }) => {
         return (
-          <Section key={kind} title={label} count={findings.length}>
-            <ul className={kind === "colour" ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" : grid}>
+          <Section key={id} title={label} count={findings.length}>
+            <ul className={id === "colour" ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" : grid}>
               {findings.map((finding) => (
                 <Card key={finding.id} finding={finding} context={context} priority={handoff.findings.indexOf(finding)} />
               ))}

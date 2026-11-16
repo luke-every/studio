@@ -11,28 +11,43 @@ export type Candidate = Finding["candidates"][number];
 export type Prop = { name: string; optional?: boolean; type?: string };
 export type Choice = Pick<Decision, "action" | "candidate" | "name" | "reason">;
 
-/** The queue's groups, in the order they are worth deciding. A kind a new rule adds goes after them, under its own name. */
-export const KINDS: { kind: string; label: string; tone: Tone }[] = [
-  { kind: "stand-in", label: "Stand-ins", tone: "existing" },
-  { kind: "near-match", label: "Near matches", tone: "near" },
-  { kind: "new-reusable", label: "New, reusable", tone: "new" },
-  { kind: "feature-only", label: "New, one feature", tone: "quiet" },
-  { kind: "colour", label: "Colours", tone: "quiet" },
+/** A component is one of two things to an engineer: production already has it, or it is new. Anything else has no label. */
+export const STATUS = {
+  production: { label: "In production", tone: "existing" },
+  new: { label: "New", tone: "new" },
+} as const satisfies Record<string, { label: string; tone: Tone }>;
+
+/** What a component finding is: in production (a stand-in, or the prototype's own version of one), or new. Null for what isn't one, or was ignored. */
+export function statusOf(finding: Finding) {
+  if (finding.rule !== "components") return null;
+  const action = finding.decision?.action;
+  if (action === "new") return STATUS.new;
+  if (action === "exception" && (finding.kind === "new-reusable" || finding.kind === "feature-only")) return null;
+  if (finding.kind === "stand-in" || finding.kind === "near-match") return STATUS.production;
+  if (finding.kind === "new-reusable" || finding.kind === "feature-only") return STATUS.new;
+  return null;
+}
+
+/** The queue's groups, in the order they are worth deciding: what production has, what is new, the colours. A kind a new rule adds goes after them, under its own name. */
+const GROUPS: { id: string; label: string; tone: Tone; kinds: string[] }[] = [
+  { id: "production", label: STATUS.production.label, tone: STATUS.production.tone, kinds: ["stand-in", "near-match"] },
+  { id: "new", label: STATUS.new.label, tone: STATUS.new.tone, kinds: ["new-reusable", "feature-only"] },
+  { id: "colour", label: "Colours", tone: "quiet", kinds: ["colour"] },
 ];
+
+export function groupsOf(findings: Finding[]) {
+  const known = new Set(GROUPS.flatMap((group) => group.kinds));
+  const more = [...new Set(findings.filter((finding) => !known.has(finding.kind)).map((finding) => finding.kind))].map((kind) => ({ id: kind, label: kind, tone: "quiet" as Tone, kinds: [kind] }));
+  return [...GROUPS, ...more].map((group) => ({ ...group, findings: findings.filter((finding) => group.kinds.includes(finding.kind)) })).filter((group) => group.findings.length);
+}
 /** A design-system component used as it is: not a finding, but listed in the package. */
 export const SYSTEM_TONE: Tone = "system";
 
-export const ROLE: Record<string, { label: string; tone: Tone }> = {
-  "stand-in": { label: "Stand-in", tone: "existing" },
-  "near-match": { label: "Near match", tone: "near" },
-  "new-reusable": { label: "New, reusable", tone: "new" },
-  "feature-only": { label: "New, one feature", tone: "quiet" },
-};
-
+/** How close a colour is to a token. Only colours say it: a component is in production or it is new. */
 export const TIER: Record<Finding["tier"], { label: string; tone: Tone }> = {
-  exact: { label: "Exact", tone: "match" },
-  near: { label: "Near", tone: "near" },
-  none: { label: "No match", tone: "quiet" },
+  exact: { label: "Same", tone: "match" },
+  near: { label: "Close", tone: "near" },
+  none: { label: "No token", tone: "quiet" },
 };
 
 export const DECISION: Record<DecisionAction | "undecided", { label: string; tone: Tone }> = {
@@ -94,13 +109,12 @@ export function summaryOf(finding: Finding) {
   const match = finding.candidates[0]?.name;
   switch (finding.kind) {
     case "near-match":
-      return finding.mine.edited ? `An edited copy of the system's ${match}` : `Rebuilds ${match}`;
+      return finding.mine.edited ? `An edited copy of production's ${match}` : `Production's ${match}`;
     case "stand-in":
-      return `Stands in for production's ${match}`;
+      return `Production's ${match}`;
     case "new-reusable":
-      return "A new component production doesn't have, and could reuse";
     case "feature-only":
-      return "A new component, used by this feature only";
+      return "Not in production";
     case "colour":
       return finding.tier === "exact" ? `The same as ${match}` : finding.tier === "near" ? `Close to ${match}` : "No token is close";
     default:

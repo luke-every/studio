@@ -7,7 +7,7 @@ import type { Finding, Handoff } from "@/lib/handoff";
 import { isFind } from "@/lib/handoff-clip";
 
 import { MatchPreview, ModulePreview, PageClip, Swatch } from "./previews";
-import { BUILT_FROM, colourDistance, decisionOf, differencesOf, list, nameOf, ROLE, summaryOf, text, TIER, whereOf, type BuiltFrom, type Candidate, type Prop } from "./words";
+import { BUILT_FROM, colourDistance, decisionOf, differencesOf, list, nameOf, STATUS, statusOf, summaryOf, text, TIER, whereOf, type BuiltFrom, type Candidate, type Prop } from "./words";
 
 /** What a preview needs from the prototype: its page for a finding's variants, its theme, where its files are. */
 export type Context = {
@@ -21,15 +21,16 @@ export type Context = {
 
 /** The chips that say what a finding is: its kind (or, for a colour, nothing more), how close its match is, and the decision. */
 export function FindingChips({ finding }: { finding: Finding }) {
-  const role = ROLE[finding.kind];
+  const status = statusOf(finding);
   const decision = decisionOf(finding);
   return (
     <span className="flex flex-wrap items-center gap-1.5">
-      {role ? <Chip tone={role.tone}>{role.label}</Chip> : null}
-      {finding.tier !== "none" || finding.rule === "colours" ? <Chip tone={TIER[finding.tier].tone}>{TIER[finding.tier].label}</Chip> : null}
-      <Chip tone={decision.tone} hollow={!finding.decision}>
-        {decision.label}
-      </Chip>
+      {status ? <Chip tone={status.tone}>{status.label}</Chip> : null}
+      {finding.rule === "colours" ? <Chip tone={TIER[finding.tier].tone}>{TIER[finding.tier].label}</Chip> : null}
+      {/* What was decided, unless it only says the label again: "New" on something that is new. */}
+      {finding.decision && !(finding.decision.action === "new" && status === STATUS.new) ? (
+        <Chip tone={decision.tone}>{decision.label}</Chip>
+      ) : null}
     </span>
   );
 }
