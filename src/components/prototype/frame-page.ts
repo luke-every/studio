@@ -1,6 +1,6 @@
-import { anchorAt, anchorOf, boxAt, elementAt, ownedBy, revealAnchor, scrollAt, spotOf, WAIT_FOR, type Box, type Spot } from "@/lib/anchor";
+import { anchorAt, anchorOf, boxAt, elementAt, ownedBy, revealAnchor, scrollAt, spotOf, WAIT_FOR, type Box, type Reach, type Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
-import { componentOf, describePart, partIn, type painter, type Part } from "@/lib/edit-part";
+import { componentOf, describePart, partIn, reachFrom, type From, type painter, type Part } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
 import { findClip, partBox, setMarks, sourceAt, type Clip, type Find, type SourceEl, type SourceHit } from "@/lib/handoff-clip";
 
@@ -18,9 +18,9 @@ export type FramePage = {
   /** The anchor for a click at (x, y) in the page's own pixels. Null when the page can't say. */
   anchorAt(x: number, y: number): Promise<Anchor | null>;
   /** The box of the element a comment at (x, y) would be pinned to, in the page's own pixels; null on the bare page. */
-  boxAt(x: number, y: number): Promise<Box | null>;
+  boxAt(x: number, y: number, reach?: Reach): Promise<Box | null>;
   /** The part at (x, y), described for the edit panel (see `edit-part.ts`). Null on the bare page, or when the page can't say. */
-  partAt(x: number, y: number): Promise<Part | null>;
+  partAt(x: number, y: number, deep?: boolean, from?: From): Promise<Part | null>;
   /** An anchor for the middle of the element a selector names, for a comment about it. Null when it isn't on the page. */
   anchorOf(selector: string): Promise<Anchor | null>;
   /** Scrolls what is under (x, y) by (dx, dy), all in the page's own pixels. */
@@ -111,9 +111,9 @@ function near(frame: HTMLIFrameElement): FramePage {
       const page = doc();
       return page ? hitting(frame, () => anchorAt(page, x, y, ownedBy(frame))) : null;
     },
-    partAt: async (x, y) => {
+    partAt: async (x, y, deep = true, from) => {
       const page = doc();
-      const element = page ? hitting(frame, () => elementAt(page, x, y)) : null;
+      const element = page ? hitting(frame, () => reachFrom(page, elementAt(page, x, y), from) ?? (from?.into ? null : elementAt(page, x, y, deep))) : null;
       return element ? describePart(element) : null;
     },
     anchorOf: async (selector) => {
@@ -121,14 +121,14 @@ function near(frame: HTMLIFrameElement): FramePage {
       const element = page ? partIn(page, selector) : null;
       return page && element ? anchorOf(page, element, ownedBy(frame)) : null;
     },
-    boxAt: async (x, y) => {
+    boxAt: async (x, y, reach = {}) => {
       const page = doc();
       if (!page) return null;
-      // A design system component is outlined whole, as the bridge does on another address.
+      // A design system component is outlined whole when reaching in (⌘), as the bridge does on another address.
       return hitting(frame, () => {
-        const element = designSystem ? elementAt(page, x, y) : null;
+        const element = designSystem && reach.deep !== false ? elementAt(page, x, y) : null;
         const found = element && designSystem ? componentOf(element, new Set(designSystem)) : null;
-        if (!found) return boxAt(page, x, y);
+        if (!found) return boxAt(page, x, y, reach);
         const { left, top, width, height } = found.root.getBoundingClientRect();
         return { left, top, width, height, component: true };
       });
@@ -180,7 +180,7 @@ function near(frame: HTMLIFrameElement): FramePage {
 /** How long a question is waited for before the page is taken not to know (it may not have the helper). */
 const ASK_MS = 1500;
 
-type Ask = { id: number; what: "anchor" | "box" | "reveal" | "part" | "anchorOf" | "clip" | "mark" | "sourceAt" | "handoffPartBox" | "selectorBox"; x?: number; y?: number; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; find?: Find; finds?: Find[]; colour?: string | null; elements?: SourceEl[]; part?: Find; index?: number };
+type Ask = { id: number; what: "anchor" | "box" | "reveal" | "part" | "anchorOf" | "clip" | "mark" | "sourceAt" | "handoffPartBox" | "selectorBox"; x?: number; y?: number; deep?: boolean; groups?: boolean; from?: From; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; find?: Find; finds?: Find[]; colour?: string | null; elements?: SourceEl[]; part?: Find; index?: number };
 type Link = {
   /** The page's own address, once it has said hello; questions wait until then. */
   origin: string | null;
@@ -362,8 +362,8 @@ function across(frame: HTMLIFrameElement): FramePage {
   return {
     // The keys the studio put in the frame's address are its own, whatever the page adds (see `ownedBy`).
     anchorAt: (x, y) => ask<Anchor | null>({ what: "anchor", x, y, owns: [...new URL(frame.src, window.location.href).searchParams.keys()] }, ASK_MS, null),
-    boxAt: (x, y) => ask<Box | null>({ what: "box", x, y, components: designSystem ?? undefined }, ASK_MS, null),
-    partAt: (x, y) => ask<Part | null>({ what: "part", x, y, components: designSystem ?? undefined }, ASK_MS, null).then(heardPart),
+    boxAt: (x, y, reach = {}) => ask<Box | null>({ what: "box", x, y, deep: reach.deep !== false, groups: reach.groups, components: designSystem ?? undefined }, ASK_MS, null),
+    partAt: (x, y, deep = true, from) => ask<Part | null>({ what: "part", x, y, deep, from, components: designSystem ?? undefined }, ASK_MS, null).then(heardPart),
     anchorOf: (selector) => ask<Anchor | null>({ what: "anchorOf", selector, owns: [...new URL(frame.src, window.location.href).searchParams.keys()] }, ASK_MS, null),
     scrollAt: (x, y, dx, dy) => {
       if (win) send(win, linkOf(win), { type: "studio:comments:scroll", x, y, dx, dy });

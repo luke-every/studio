@@ -276,14 +276,16 @@ function Shared({
           flow={flow}
           variants={variantsCanvas}
           readyForDev={handoff ? handoff.variants : null}
-          handoffInspect={handoff ? { elements: handoff.elements, onSelect: setSection } : undefined}
+          handoffInspect={handoff ? { elements: handoff.elements, onSelect: setSection, selection: section } : undefined}
+          handoffSheet={handoff?.components.length && typeof window !== "undefined" ? { items: handoff.components, theme: handoff.theme, fontBase: `${window.location.origin}${version.url}/` } : undefined}
           inspectPanel={
             handoff ? (
               <SelectionPanel
                 data={handoff}
                 selection={section}
                 onClose={() => setSection(null)}
-                variantLabel={(id) => variantsCanvas?.flow.screens.find((screen) => screen.id === id)?.name ?? id}
+                onSelect={setSection}
+                variantLabel={(id) => [variantsCanvas?.flow, flow].flatMap((one) => one?.screens.find((screen) => screen.id === id)?.name ?? [])[0] ?? id}
                 briefUrl={(target) => `${window.location.origin}/api/review/handoff/brief?${new URLSearchParams({ slug, version: version.url.split("/").pop() ?? "", token, target, ref: `${window.location.origin}${window.location.pathname}` })}`}
               />
             ) : undefined

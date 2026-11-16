@@ -1,14 +1,15 @@
 "use client";
 
-import { useReducer, type ReactNode } from "react";
+import { useEffect, useReducer, useState, type ReactNode } from "react";
 
 import { ComponentPanel } from "@/components/prototype/component-panel";
 import { PanelEmpty } from "@/components/prototype/panel-empty";
-import { PencilIcon } from "@/components/shell/nav-icons";
+import { CheckIcon, CopyIcon, PencilIcon } from "@/components/shell/nav-icons";
 import type { EditSession } from "@/components/prototype/use-edit-session";
-import { Check, Choice, ColorField, Field, Glyph, NumberField, PanelButton, Row, Section, SelectField, SizeField } from "@/components/prototype/edit-fields";
-import { parseShadow, rgbaOf, shadowCss, toRgba, type Axis, type Shadow, type Sizing } from "@/lib/edit-dom";
+import { AlignGrid, Check, Choice, ColourField, Glyph, NumberField, PanelButton, Row, Section, SelectField, SizeField, TokenField, type TokenOption } from "@/components/prototype/edit-fields";
+import { parseShadow, rgbaOf, shadowCss, toHex, toRgba, type Axis, type Shadow, type Sizing } from "@/lib/edit-dom";
 import type { Part } from "@/lib/edit-part";
+import { designTokensOf } from "@/lib/registry/actions";
 
 /**
  * Edit mode's side panel: the part of the prototype that was clicked, as
@@ -21,9 +22,36 @@ import type { Part } from "@/lib/edit-part";
  * so it is the same panel for a page the studio reads directly and for a live
  * version's, which describes its own parts from another address.
  */
+const CORNERS = ["border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius"];
+const SPACING = ["padding-top", "padding-right", "padding-bottom", "padding-left", "margin-top", "margin-right", "margin-bottom", "margin-left"];
+
+/** The minus at the end of an applied section's title: takes it off the part, and the section folds away. */
+const removeButton = (label: string, onClick: () => void) => (
+  <PanelButton label={label} onClick={onClick}>
+    <Glyph><path d="M3.5 8h9" /></Glyph>
+  </PanelButton>
+);
+
 export function EditPanel({ part: element, session, slug }: { part: Part | null; session: EditSession; slug: string }) {
   // Values are read from the page, so they are read again after each change.
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  // Whether the corners are shown one by one: they always are while they differ.
+  const [apart, setApart] = useState(false);
+  // Spacing is shown for each side, not for top and bottom, left and right together; it always is while a pair differs.
+  const [spread, setSpread] = useState(false);
+  // The words were just copied: the button says so for a moment.
+  const [copied, setCopied] = useState(false);
+  // The design system's colours, from its stylesheet: the page can't say them (see `designTokens`).
+  const [palette, setPalette] = useState<{ slug: string; colours: { name: string; value: string }[] } | null>(null);
+  useEffect(() => {
+    let stale = false;
+    void designTokensOf(slug).then((result) => {
+      if (!stale && result.ok) setPalette({ slug, colours: result.value });
+    });
+    return () => {
+      stale = true;
+    };
+  }, [slug]);
   // A design-system component instance (a live version) has its props to change, not styles.
   if (element?.component) return <ComponentPanel part={{ ...element, component: element.component }} slug={slug} session={session} />;
 
@@ -52,6 +80,17 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
     />
   );
   const hasText = element ? element.hasText : false;
+  // A section is open when the part has what it is about, and a plus when it doesn't.
+  const px = (property: string) => parseFloat(read(property)) || 0;
+  const radii = CORNERS.map(px);
+  const cornersApart = apart || radii.some((value) => value !== radii[0]);
+  const rounded = radii.some((value) => value > 0);
+  const spaced = SPACING.some((property) => px(property) > 0);
+  const mismatch = [["padding-top", "padding-bottom"], ["padding-left", "padding-right"], ["margin-top", "margin-bottom"], ["margin-left", "margin-right"]].some(([a, b]) => px(a) !== px(b));
+  const sidesApart = spread || mismatch;
+  const filled = !["transparent", "rgba(0, 0, 0, 0)"].includes(read("background-color")) || !["", "none"].includes(read("background-image"));
+  const bordered = px("border-top-width") > 0 && read("border-top-style") !== "none";
+  const blurred = parseFloat(blurOf("filter")) > 0 || parseFloat(blurOf("backdrop-filter")) > 0;
 
   /** Set one or more properties on the picked element. */
   const set = (...pairs: [string, string][]) => {
@@ -59,35 +98,6 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
     session.setStyles(element, Object.fromEntries(pairs));
     bump();
   };
-  /**
-   * One value that stands for several properties (both sides, all corners)
-   * while they agree, and one field each when they don't, so every one of them
-   * can be seen and changed.
-   */
-  const linked = (glyph: ReactNode, label: string, parts: { property: string; tag: string; name: string }[], caption?: string) => {
-    const values = parts.map((part) => (read(part.property) === "normal" ? "0px" : read(part.property)));
-    if (values.every((value) => value === values[0])) {
-      return (
-        <NumberField
-          glyph={glyph}
-          label={label}
-          caption={caption}
-          value={values[0]}
-          onCommit={(value) => set(...parts.map((part): [string, string] => [part.property, value]))}
-        />
-      );
-    }
-    return parts.map((part, i) => (
-      <NumberField
-        key={part.property}
-        glyph={<span className="text-xs">{part.tag}</span>}
-        label={`${label.split(",")[0]}, ${part.name}`}
-        value={values[i]}
-        onCommit={(value) => set([part.property, value])}
-      />
-    ));
-  };
-
   const border = (change: { width?: string; style?: string; color?: string }) => {
     const width = change.width ?? read("border-top-width");
     const style = change.style ?? (read("border-top-style") === "none" ? "solid" : read("border-top-style"));
@@ -95,23 +105,67 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
     set(["border", `${width} ${style} ${color}`]);
   };
 
+  // Colours, radii and spacing are chosen from the page's design tokens; a value of any other kind is "Custom", last in the menu.
+  const tokens = element?.tokens ?? { colours: [], radii: [], spacing: [] };
+  const near = (token: { value: string }, pixels: number) => Math.abs(parseFloat(token.value) - pixels) < 0.01;
+  const spaceOptions: TokenOption[] = tokens.spacing.map((token) => ({ key: token.name, label: `${token.value}px`, css: token.css }));
+  const radiusOptions: TokenOption[] = [
+    { key: "none", label: "None · 0", css: "0px" },
+    ...tokens.radii.filter((token) => parseFloat(token.value) > 0).map((token) => ({ key: token.name, label: parseFloat(token.value) >= 9999 ? "Full" : `${token.name} · ${token.value}px`, css: token.css })),
+  ];
+  /** A typed size as CSS: a bare number is pixels. */
+  const sizeCss = (text: string) => (/^-?[\d.]+$/.test(text.trim()) ? `${parseFloat(text)}px` : text.trim());
+  /** A size on one or two properties together, from the tokens. Two numbers typed with a comma ("24, 32") are one for each. */
+  const sized = (kind: "space" | "radius", glyph: ReactNode, label: string, properties: string[], value: string) => {
+    const pixels = parseFloat(value) || 0;
+    const key = kind === "space" ? (tokens.spacing.find((token) => near(token, pixels))?.name ?? null) : pixels === 0 ? "none" : (tokens.radii.find((token) => near(token, pixels))?.name ?? null);
+    return (
+      <TokenField
+        glyph={glyph}
+        label={label}
+        options={kind === "space" ? spaceOptions : radiusOptions}
+        selected={key}
+        onPick={(option) => set(...properties.map((property): [string, string] => [property, option.css]))}
+        custom={(menu) => (
+          <NumberField
+            glyph={glyph}
+            label={label}
+            value={value === "normal" ? "0px" : value}
+            trailing={menu}
+            onCommit={(text) => {
+              const typed = text.split(/[,\s]+/).filter(Boolean);
+              if (properties.length === 2 && typed.length === 2) set([properties[0], sizeCss(typed[0])], [properties[1], sizeCss(typed[1])]);
+              else set(...properties.map((property): [string, string] => [property, sizeCss(typed[0] ?? text)]));
+            }}
+          />
+        )}
+      />
+    );
+  };
+  const clear = (value: string) => value === "transparent" || /rgba\(.*,\s*0\)$/.test(value);
+  /** Any CSS colour as the `#rrggbb` it is. */
+  const hexOfCss = (css: string) => {
+    const canvas = document.createElement("canvas").getContext("2d");
+    if (!canvas) return css;
+    canvas.fillStyle = "#000000";
+    canvas.fillStyle = css;
+    return canvas.fillStyle.startsWith("#") ? canvas.fillStyle : toHex(canvas.fillStyle);
+  };
+  // The stylesheet's colours when they came; otherwise any the page itself defines.
+  const colours = palette?.slug === slug && palette.colours.length ? palette.colours.map((token) => ({ name: token.name, css: hexOfCss(token.value), value: hexOfCss(token.value) })) : tokens.colours;
+  /** A colour from the tokens. `none` offers no colour; `alpha` false matches a token whatever the colour's own opacity. */
+  const coloured = (label: string, value: string, pick: (option: TokenOption) => void, commit: (css: string) => void, { none = false, alpha = true } = {}) => {
+    const options: TokenOption[] = [...(none ? [{ key: "none", label: "None", css: "transparent" }] : []), ...colours.map((token) => ({ key: token.name, label: token.name, css: token.css, hex: token.value }))];
+    const hex = toHex(value);
+    const key = clear(value) ? (none ? "none" : null) : alpha && rgbaOf(value)[3] < 1 ? null : (colours.find((token) => token.value.toLowerCase() === hex)?.name ?? null);
+    return <ColourField label={label} options={options} selected={key} value={value} onPick={pick} onCommit={commit} />;
+  };
+
   const alignment = [
     { value: "left", title: "Left", icon: <Glyph><path d="M2.5 4h11M2.5 8h7M2.5 12h9" /></Glyph> },
     { value: "center", title: "Centre", icon: <Glyph><path d="M2.5 4h11M4.5 8h7M3.5 12h9" /></Glyph> },
     { value: "right", title: "Right", icon: <Glyph><path d="M2.5 4h11M6.5 8h7M4.5 12h9" /></Glyph> },
   ];
-  // Bars standing for the items, placed as the choice would place them. They are drawn
-  // for a row and turned a quarter for a column.
-  const bars = (xs: number[], y: number, h: number) => (
-    <span className={column ? "rotate-90" : ""}>
-      <Glyph>
-        {xs.map((x) => (
-          <rect key={x} x={x} y={y} width="2.5" height={h} rx="0.75" />
-        ))}
-      </Glyph>
-    </span>
-  );
-
   return (
     <div className="flex min-h-full flex-col">
       <div className="flex flex-1 flex-col">
@@ -133,7 +187,25 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
             </div>
 
             {text !== null ? (
-              <Section title="Copy">
+              <Section
+                title="Copy"
+                action={
+                  <PanelButton
+                    label={copied ? "Copied" : "Copy text"}
+                    onClick={() => {
+                      navigator.clipboard.writeText(text).then(
+                        () => {
+                          setCopied(true);
+                          window.setTimeout(() => setCopied(false), 1500);
+                        },
+                        () => {},
+                      );
+                    }}
+                  >
+                    {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+                  </PanelButton>
+                }
+              >
                 <textarea
                   key={`text:${text}`}
                   defaultValue={text}
@@ -169,80 +241,35 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
             ) : null}
 
             <Section title="Layout">
-              <SelectField
-                caption="Display"
-                label="Display"
-                value={read("display")}
-                onChange={(value) => set(["display", value])}
-                options={[
-                  { value: "block", label: "Block" },
-                  { value: "flex", label: "Flex" },
-                  { value: "grid", label: "Grid" },
-                  { value: "inline-block", label: "Inline block" },
-                  { value: "inline", label: "Inline" },
-                  { value: "none", label: "Hidden" },
-                ]}
-              />
-              {flex ? (
-                <>
-                  <Choice
-                    caption="Flow"
-                    label="Direction"
-                    value={column ? "column" : "row"}
-                    onChange={(value) => set(["flex-direction", value])}
-                    options={[
-                      { value: "row", title: "Row", icon: <Glyph><path d="M2.5 8h11M10.5 5l3 3-3 3" /></Glyph> },
-                      { value: "column", title: "Column", icon: <Glyph><path d="M8 2.5v11M5 10.5l3 3 3-3" /></Glyph> },
-                    ]}
-                  />
-                  <Choice
-                    caption="Justify"
-                    label="Justify"
-                    value={read("justify-content")}
-                    onChange={(value) => set(["justify-content", value])}
-                    options={[
-                      { value: "flex-start", title: "Start", icon: bars([2, 5.5], 4, 8) },
-                      { value: "center", title: "Centre", icon: bars([5.5, 8.5], 4, 8) },
-                      { value: "flex-end", title: "End", icon: bars([8.5, 11.5], 4, 8) },
-                      { value: "space-between", title: "Space between", icon: bars([2, 11.5], 4, 8) },
-                      { value: "space-around", title: "Space around", icon: bars([4, 9.5], 4, 8) },
-                    ]}
-                  />
-                  <Choice
-                    caption="Align"
-                    label="Align"
-                    value={read("align-items")}
-                    onChange={(value) => set(["align-items", value])}
-                    options={[
-                      { value: "flex-start", title: "Start", icon: bars([4.5, 9], 2, 6) },
-                      { value: "center", title: "Centre", icon: bars([4.5, 9], 5, 6) },
-                      { value: "flex-end", title: "End", icon: bars([4.5, 9], 8, 6) },
-                      { value: "stretch", title: "Stretch", icon: bars([4.5, 9], 2, 12) },
-                    ]}
-                  />
-                  <SelectField
-                    caption="Wrap"
-                    label="Wrap"
-                    value={read("flex-wrap")}
-                    onChange={(value) => set(["flex-wrap", value])}
-                    options={[
-                      { value: "nowrap", label: "No wrap" },
-                      { value: "wrap", label: "Wrap" },
-                      { value: "wrap-reverse", label: "Wrap reverse" },
-                    ]}
-                  />
-                  <Row>
-                    {linked(<Glyph><rect x="2" y="5" width="3.5" height="6" rx="0.75" /><rect x="10.5" y="5" width="3.5" height="6" rx="0.75" /></Glyph>, "Gap", [
-                      { property: "column-gap", tag: "↔", name: "between columns" },
-                      { property: "row-gap", tag: "↕", name: "between rows" },
-                    ], "Gap")}
-                  </Row>
-                </>
+              <Row>
+                {dimension("width", "Width")}
+                {dimension("height", "Height")}
+              </Row>
+              <Row>
+                <SelectField
+                  label="Position"
+                  value={read("position")}
+                  onChange={(value) => set(["position", value])}
+                  options={["static", "relative", "absolute", "fixed", "sticky"].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))}
+                />
+                <NumberField unit="number" glyph={<span className="text-xs">Z</span>} label="Layer (z-index)" value={read("z-index")} onCommit={(value) => set(["z-index", value])} />
+              </Row>
+              {positioned ? (
+                <Row>
+                  {(["top", "right", "bottom", "left"] as const).map((side) => (
+                    <NumberField
+                      key={side}
+                      glyph={<span className="text-xs">{side[0].toUpperCase()}</span>}
+                      label={`Offset from ${side}`}
+                      value={read(side)}
+                      onCommit={(value) => set([side, value])}
+                    />
+                  ))}
+                </Row>
               ) : null}
               {inFlexParent ? (
                 <Row>
                   <NumberField
-                    caption="Grow"
                     unit="number"
                     glyph={<Glyph><path d="M2.5 8h11M5 5.5 2.5 8 5 10.5M11 5.5 13.5 8 11 10.5" /></Glyph>}
                     label="Flex grow"
@@ -250,7 +277,6 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
                     onCommit={(value) => set(["flex-grow", value])}
                   />
                   <SelectField
-                    caption="Align self"
                     label="Align self"
                     value={read("align-self")}
                     onChange={(value) => set(["align-self", value])}
@@ -264,203 +290,35 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
                   />
                 </Row>
               ) : null}
-              <Row>
-                {dimension("width", "Width")}
-                {dimension("height", "Height")}
-              </Row>
               <Check label="Clip content" checked={["hidden", "clip"].includes(read("overflow-x"))} onChange={(on) => set(["overflow", on ? "hidden" : "visible"])} />
             </Section>
 
-            <Section title="Position">
-              <Row>
-                <SelectField
-                  caption="Position"
-                  label="Position"
-                  value={read("position")}
-                  onChange={(value) => set(["position", value])}
-                  options={["static", "relative", "absolute", "fixed", "sticky"].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))}
-                />
-                <NumberField caption="Layer" unit="number" glyph={<span className="text-xs">Z</span>} label="Layer (z-index)" value={read("z-index")} onCommit={(value) => set(["z-index", value])} />
-              </Row>
-              {positioned ? (
-                <Row>
-                  {(["top", "right", "bottom", "left"] as const).map((side) => (
-                    <NumberField
-                      key={side}
-                      caption={side[0].toUpperCase() + side.slice(1)}
-                      glyph={<span className="text-xs">{side[0].toUpperCase()}</span>}
-                      label={`Offset from ${side}`}
-                      value={read(side)}
-                      onCommit={(value) => set([side, value])}
-                    />
-                  ))}
-                </Row>
-              ) : null}
-            </Section>
-
-            <Section title="Spacing">
-              <Row>
-                {(
-                  [
-                    ["top", "M3 2.5h10M8 5.5v5"],
-                    ["right", "M13.5 3v10M10.5 8h-5"],
-                    ["bottom", "M3 13.5h10M8 5.5v5"],
-                    ["left", "M2.5 3v10M5.5 8h5"],
-                  ] as const
-                ).map(([side, path]) => (
-                  <NumberField
-                    key={side}
-                    caption={`Padding ${side}`}
-                    glyph={<Glyph><path d={path} /></Glyph>}
-                    label={`Padding, ${side}`}
-                    value={read(`padding-${side}`)}
-                    onCommit={(value) => set([`padding-${side}`, value])}
+            <Section title="Flex" applied={flex} onAdd={() => set(["display", "flex"])} action={removeButton("Remove flex", () => set(["display", "block"]))}>
+              <div className="flex gap-2">
+                <AlignGrid column={column} justify={read("justify-content")} align={read("align-items")} onChange={(justify, align) => set(["justify-content", justify], ["align-items", align])} />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <Choice
+                    label="Direction"
+                    value={column ? "column" : "row"}
+                    onChange={(value) => set(["flex-direction", value])}
+                    options={[
+                      { value: "row", title: "Row", icon: <Glyph><path d="M2.5 8h11M10.5 5l3 3-3 3" /></Glyph> },
+                      { value: "column", title: "Column", icon: <Glyph><path d="M8 2.5v11M5 10.5l3 3 3-3" /></Glyph> },
+                    ]}
                   />
-                ))}
-              </Row>
-              <Row>
-                {linked(<Glyph><path d="M2.5 3v10M13.5 3v10M5.5 8h5" /></Glyph>, "Margin, left and right", [
-                  { property: "margin-left", tag: "L", name: "left" },
-                  { property: "margin-right", tag: "R", name: "right" },
-                ], "Horizontal margin")}
-                {linked(<Glyph><path d="M3 2.5h10M3 13.5h10M8 5.5v5" /></Glyph>, "Margin, top and bottom", [
-                  { property: "margin-top", tag: "T", name: "top" },
-                  { property: "margin-bottom", tag: "B", name: "bottom" },
-                ], "Vertical margin")}
-              </Row>
-            </Section>
-
-            <Section
-              title="Appearance"
-              action={
-                <PanelButton label={read("visibility") === "hidden" ? "Show" : "Hide"} onClick={() => set(["visibility", read("visibility") === "hidden" ? "visible" : "hidden"])}>
-                  <Glyph>
-                    <path d="M1.5 8s2.25-4.25 6.5-4.25S14.5 8 14.5 8 12.25 12.25 8 12.25 1.5 8 1.5 8Z" />
-                    {read("visibility") === "hidden" ? <path d="m3 13 10-10" /> : <circle cx="8" cy="8" r="1.75" />}
-                  </Glyph>
-                </PanelButton>
-              }
-            >
-              <Row>
-                {linked(<Glyph><path d="M3 13V8a5 5 0 0 1 5-5h5" /></Glyph>, "Corner radius", [
-                  { property: "border-top-left-radius", tag: "TL", name: "top left" },
-                  { property: "border-top-right-radius", tag: "TR", name: "top right" },
-                  { property: "border-bottom-right-radius", tag: "BR", name: "bottom right" },
-                  { property: "border-bottom-left-radius", tag: "BL", name: "bottom left" },
-                ], "Corner radius")}
-                <NumberField
-                  caption="Opacity"
-                  glyph={<Glyph><circle cx="8" cy="8" r="5.25" /><path d="M8 2.75a5.25 5.25 0 0 1 0 10.5Z" fill="currentColor" /></Glyph>}
-                  label="Opacity, percent"
-                  unit="opacity"
-                  value={read("opacity")}
-                  onCommit={(value) => set(["opacity", value])}
-                />
-              </Row>
-            </Section>
-
-            <Section
-              title="Fill"
-              action={
-                <PanelButton label="Remove fill" onClick={() => set(["background-color", "transparent"])}>
-                  <Glyph><path d="M3.5 8h9" /></Glyph>
-                </PanelButton>
-              }
-            >
-              <ColorField label="Background" value={read("background-color")} onCommit={(value) => set(["background-color", value])} />
-            </Section>
-
-            <Section
-              title="Shadow"
-              action={
-                shadow ? (
-                  <PanelButton label="Remove shadow" onClick={() => set(["box-shadow", "none"])}>
-                    <Glyph><path d="M3.5 8h9" /></Glyph>
-                  </PanelButton>
-                ) : (
-                  <PanelButton label="Add shadow" onClick={() => setShadow({})}>
-                    <Glyph><path d="M8 3.5v9M3.5 8h9" /></Glyph>
-                  </PanelButton>
-                )
-              }
-            >
-              {shadow ? (
-                <>
-                  <Row>
-                    <NumberField caption="X" glyph={<span className="text-xs">X</span>} label="Shadow x" value={`${shadow.x}px`} onCommit={(value) => setShadow({ x: parseFloat(value) || 0 })} />
-                    <NumberField caption="Y" glyph={<span className="text-xs">Y</span>} label="Shadow y" value={`${shadow.y}px`} onCommit={(value) => setShadow({ y: parseFloat(value) || 0 })} />
-                    <NumberField caption="Blur" glyph={<Glyph><circle cx="8" cy="8" r="4" strokeDasharray="1.5 2" /></Glyph>} label="Shadow blur" value={`${shadow.blur}px`} onCommit={(value) => setShadow({ blur: Math.max(0, parseFloat(value) || 0) })} />
-                    <NumberField caption="Spread" glyph={<Glyph><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" /></Glyph>} label="Shadow spread" value={`${shadow.spread}px`} onCommit={(value) => setShadow({ spread: parseFloat(value) || 0 })} />
-                  </Row>
-                  <Row>
-                    <ColorField
-                      caption="Colour"
-                      label="Shadow colour"
-                      value={shadow.color}
-                      onCommit={(hex) => {
-                        const n = parseInt(hex.slice(1, 7), 16);
-                        setShadow({ color: toRgba((n >> 16) & 255, (n >> 8) & 255, n & 255, rgbaOf(shadow.color)[3]) });
-                      }}
-                    />
-                    <NumberField
-                      caption="Opacity"
-                      unit="opacity"
-                      glyph={<Glyph><circle cx="8" cy="8" r="5.25" /><path d="M8 2.75a5.25 5.25 0 0 1 0 10.5Z" fill="currentColor" /></Glyph>}
-                      label="Shadow opacity, percent"
-                      value={String(rgbaOf(shadow.color)[3])}
-                      onCommit={(alpha) => {
-                        const [r, g, b] = rgbaOf(shadow.color);
-                        setShadow({ color: toRgba(r, g, b, parseFloat(alpha)) });
-                      }}
-                    />
-                  </Row>
-                </>
-              ) : (
-                <p className="text-xs text-foreground-muted">No shadow. Add one with the plus.</p>
-              )}
-            </Section>
-
-            <Section title="Blur">
-              <Row>
-                <NumberField
-                  caption="Layer"
-                  glyph={<Glyph><circle cx="8" cy="8" r="4" strokeDasharray="1.5 2" /></Glyph>}
-                  label="Layer blur"
-                  value={`${blurOf("filter")}px`}
-                  onCommit={(value) => set(["filter", parseFloat(value) > 0 ? `blur(${parseFloat(value)}px)` : "none"])}
-                />
-                <NumberField
-                  caption="Background"
-                  glyph={<Glyph><rect x="3" y="3" width="10" height="10" rx="2" strokeDasharray="1.5 2" /></Glyph>}
-                  label="Background blur"
-                  value={`${blurOf("backdrop-filter")}px`}
-                  onCommit={(value) => set(["backdrop-filter", parseFloat(value) > 0 ? `blur(${parseFloat(value)}px)` : "none"])}
-                />
-              </Row>
-            </Section>
-
-            <Section title="Stroke">
-              <Row>
-                <ColorField caption="Colour" label="Border colour" value={read("border-top-color")} onCommit={(color) => border({ color })} />
-                <NumberField
-                  caption="Weight"
-                  glyph={<Glyph><path d="M2.5 4h11M2.5 8h11M2.5 12.25h11" strokeWidth="2" /></Glyph>}
-                  label="Border width"
-                  value={read("border-top-width")}
-                  onCommit={(width) => border({ width })}
-                />
-              </Row>
-              <Choice
-                caption="Style"
-                label="Border style"
-                value={read("border-top-style")}
-                onChange={(style) => border({ style })}
-                options={[
-                  { value: "solid", title: "Solid", icon: <Glyph><path d="M2.5 8h11" /></Glyph> },
-                  { value: "dashed", title: "Dashed", icon: <Glyph><path d="M2.5 8h2.5M6.75 8h2.5M11 8h2.5" /></Glyph> },
-                  { value: "dotted", title: "Dotted", icon: <Glyph><path d="M3 8h.01M6 8h.01M9 8h.01M12 8h.01" strokeWidth="2" /></Glyph> },
-                ]}
-              />
+                  {sized("space", <Glyph><rect x="2" y="5" width="3.5" height="6" rx="0.75" /><rect x="10.5" y="5" width="3.5" height="6" rx="0.75" /></Glyph>, "Gap", ["column-gap", "row-gap"], read(column ? "row-gap" : "column-gap"))}
+                  <Choice
+                    label="Wrap"
+                    value={read("flex-wrap") === "nowrap" ? "nowrap" : "wrap"}
+                    onChange={(value) => set(["flex-wrap", value])}
+                    options={[
+                      { value: "nowrap", title: "No wrap", icon: <Glyph><path d="M2.5 8h11" /></Glyph> },
+                      { value: "wrap", title: "Wrap", icon: <Glyph><path d="M2.5 5h11M2.5 11h7" /></Glyph> },
+                    ]}
+                  />
+                </div>
+              </div>
+              <Check label="Space between" checked={read("justify-content") === "space-between"} onChange={(on) => set(["justify-content", on ? "space-between" : "flex-start"])} />
             </Section>
 
             {hasText ? (
@@ -531,9 +389,192 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
                     ]}
                   />
                 </Row>
-                <ColorField caption="Colour" label="Text colour" value={read("color")} onCommit={(value) => set(["color", value])} />
+                {coloured("Text colour", read("color"), (option) => set(["color", option.css]), (value) => set(["color", value]))}
               </Section>
             ) : null}
+            <Section
+              title="Spacing"
+              applied={spaced}
+              onAdd={() => set(["padding-top", "8px"], ["padding-right", "8px"], ["padding-bottom", "8px"], ["padding-left", "8px"])}
+              action={
+                <>
+                  {mismatch ? null : (
+                    <PanelButton label={spread ? "Top and bottom, left and right together" : "Each side on its own"} onClick={() => setSpread(!spread)}>
+                      <Glyph><path d="M2.5 6V4a1.5 1.5 0 0 1 1.5-1.5h2M10 2.5h2A1.5 1.5 0 0 1 13.5 4v2M13.5 10v2a1.5 1.5 0 0 1-1.5 1.5h-2M6 13.5H4A1.5 1.5 0 0 1 2.5 12v-2" /></Glyph>
+                    </PanelButton>
+                  )}
+                  {removeButton("Remove spacing", () => set(...SPACING.map((property): [string, string] => [property, "0px"])))}
+                </>
+              }
+            >
+              {(["padding", "margin"] as const).map((kind) => {
+                const sides = {
+                  top: { path: kind === "padding" ? "M3 2.5h10M8 5.5v5" : "M3 2.5h10M3 13.5h10M8 5.5v5" },
+                  right: { path: kind === "padding" ? "M13.5 3v10M10.5 8h-5" : "M2.5 3v10M13.5 3v10M5.5 8h5" },
+                  bottom: { path: kind === "padding" ? "M3 13.5h10M8 5.5v5" : "M3 2.5h10M3 13.5h10M8 5.5v5" },
+                  left: { path: kind === "padding" ? "M2.5 3v10M5.5 8h5" : "M2.5 3v10M13.5 3v10M5.5 8h5" },
+                };
+                const name = kind[0].toUpperCase() + kind.slice(1);
+                const glyph = (side: keyof typeof sides) => <Glyph><path d={sides[side].path} /></Glyph>;
+                return sidesApart ? (
+                  <Row key={kind}>
+                    {(["top", "right", "bottom", "left"] as const).map((side) => (
+                      <div key={side}>{sized("space", glyph(side), `${name}, ${side}`, [`${kind}-${side}`], read(`${kind}-${side}`))}</div>
+                    ))}
+                  </Row>
+                ) : (
+                  <Row key={kind}>
+                    <div>{sized("space", glyph("top"), `${name}, top and bottom`, [`${kind}-top`, `${kind}-bottom`], read(`${kind}-top`))}</div>
+                    <div>{sized("space", glyph("left"), `${name}, left and right`, [`${kind}-left`, `${kind}-right`], read(`${kind}-left`))}</div>
+                  </Row>
+                );
+              })}
+            </Section>
+
+            <Section
+              title="Radius"
+              applied={rounded}
+              onAdd={() => set(...CORNERS.map((property): [string, string] => [property, "8px"]))}
+              action={
+                <>
+                  <PanelButton label={cornersApart ? "One radius for all corners" : "A radius for each corner"} onClick={() => setApart(!cornersApart)}>
+                    <Glyph><path d="M2.5 6V4a1.5 1.5 0 0 1 1.5-1.5h2M10 2.5h2A1.5 1.5 0 0 1 13.5 4v2M13.5 10v2a1.5 1.5 0 0 1-1.5 1.5h-2M6 13.5H4A1.5 1.5 0 0 1 2.5 12v-2" /></Glyph>
+                  </PanelButton>
+                  {removeButton("Remove radius", () => set(...CORNERS.map((property): [string, string] => [property, "0px"])))}
+                </>
+              }
+            >
+              {cornersApart ? (
+                <Row>
+                  {(
+                    [
+                      ["border-top-left-radius", "TL", "top left"],
+                      ["border-top-right-radius", "TR", "top right"],
+                      ["border-bottom-left-radius", "BL", "bottom left"],
+                      ["border-bottom-right-radius", "BR", "bottom right"],
+                    ] as const
+                  ).map(([property, tag, name]) => (
+                    <div key={property}>{sized("radius", <span className="text-xs">{tag}</span>, `Radius, ${name}`, [property], read(property))}</div>
+                  ))}
+                </Row>
+              ) : (
+                sized("radius", <Glyph><path d="M3 13V8a5 5 0 0 1 5-5h5" /></Glyph>, "Corner radius", CORNERS, read(CORNERS[0]))
+              )}
+            </Section>
+
+            <Section
+              title="Blending"
+              action={
+                <PanelButton label={read("visibility") === "hidden" ? "Show" : "Hide"} onClick={() => set(["visibility", read("visibility") === "hidden" ? "visible" : "hidden"])}>
+                  <Glyph>
+                    <path d="M1.5 8s2.25-4.25 6.5-4.25S14.5 8 14.5 8 12.25 12.25 8 12.25 1.5 8 1.5 8Z" />
+                    {read("visibility") === "hidden" ? <path d="m3 13 10-10" /> : <circle cx="8" cy="8" r="1.75" />}
+                  </Glyph>
+                </PanelButton>
+              }
+            >
+              <Row>
+                <NumberField
+                  glyph={<Glyph><circle cx="8" cy="8" r="5.25" /><path d="M8 2.75a5.25 5.25 0 0 1 0 10.5Z" fill="currentColor" /></Glyph>}
+                  label="Opacity, percent"
+                  unit="opacity"
+                  value={read("opacity")}
+                  onCommit={(value) => set(["opacity", value])}
+                />
+                <SelectField
+                  label="Blend mode"
+                  value={read("mix-blend-mode")}
+                  onChange={(value) => set(["mix-blend-mode", value])}
+                  options={["normal", "multiply", "screen", "overlay", "darken", "lighten", "difference"].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))}
+                />
+              </Row>
+            </Section>
+
+            <Section
+              title="Fill"
+              applied={filled}
+              onAdd={() => set(["background-color", "#ffffff"])}
+              action={removeButton("Remove fill", () => set(["background-color", "transparent"], ["background-image", "none"]))}
+            >
+              {coloured("Background", read("background-color"), (option) => set(["background-color", option.css]), (value) => set(["background-color", value]), { none: true })}
+            </Section>
+
+            <Section
+              title="Border"
+              applied={bordered}
+              onAdd={() => border({ width: "1px", style: "solid", color: "#000000" })}
+              action={removeButton("Remove border", () => set(["border", "none"]))}
+            >
+              <Row>
+                {coloured("Border colour", read("border-top-color"), (option) => border({ color: option.css }), (color) => border({ color }))}
+                <NumberField
+                  glyph={<Glyph><path d="M2.5 4h11M2.5 8h11M2.5 12.25h11" strokeWidth="2" /></Glyph>}
+                  label="Border width"
+                  value={read("border-top-width")}
+                  onCommit={(width) => border({ width })}
+                />
+              </Row>
+              <Choice
+                label="Border style"
+                value={read("border-top-style")}
+                onChange={(style) => border({ style })}
+                options={[
+                  { value: "solid", title: "Solid", icon: <Glyph><path d="M2.5 8h11" /></Glyph> },
+                  { value: "dashed", title: "Dashed", icon: <Glyph><path d="M2.5 8h2.5M6.75 8h2.5M11 8h2.5" /></Glyph> },
+                  { value: "dotted", title: "Dotted", icon: <Glyph><path d="M3 8h.01M6 8h.01M9 8h.01M12 8h.01" strokeWidth="2" /></Glyph> },
+                ]}
+              />
+            </Section>
+
+            <Section title="Shadow" applied={!!shadow} onAdd={() => setShadow({})} action={removeButton("Remove shadow", () => set(["box-shadow", "none"]))}>
+              {shadow ? (
+                <>
+                  <Row>
+                    <NumberField glyph={<span className="text-xs">X</span>} label="Shadow x" value={`${shadow.x}px`} onCommit={(value) => setShadow({ x: parseFloat(value) || 0 })} />
+                    <NumberField glyph={<span className="text-xs">Y</span>} label="Shadow y" value={`${shadow.y}px`} onCommit={(value) => setShadow({ y: parseFloat(value) || 0 })} />
+                    <NumberField glyph={<Glyph><circle cx="8" cy="8" r="4" strokeDasharray="1.5 2" /></Glyph>} label="Shadow blur" value={`${shadow.blur}px`} onCommit={(value) => setShadow({ blur: Math.max(0, parseFloat(value) || 0) })} />
+                    <NumberField glyph={<Glyph><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" /></Glyph>} label="Shadow spread" value={`${shadow.spread}px`} onCommit={(value) => setShadow({ spread: parseFloat(value) || 0 })} />
+                  </Row>
+                  <Row>
+                    {(() => {
+                      // A shadow's colour is written out with its opacity, so a token is put in as its colour.
+                      const colour = (hex: string) => {
+                        const n = parseInt(hex.slice(1, 7), 16);
+                        setShadow({ color: toRgba((n >> 16) & 255, (n >> 8) & 255, n & 255, rgbaOf(shadow.color)[3]) });
+                      };
+                      return coloured("Shadow colour", shadow.color, (option) => colour(option.hex ?? "#000000"), colour, { alpha: false });
+                    })()}
+                    <NumberField
+                      unit="opacity"
+                      glyph={<Glyph><circle cx="8" cy="8" r="5.25" /><path d="M8 2.75a5.25 5.25 0 0 1 0 10.5Z" fill="currentColor" /></Glyph>}
+                      label="Shadow opacity, percent"
+                      value={String(rgbaOf(shadow.color)[3])}
+                      onCommit={(alpha) => {
+                        const [r, g, b] = rgbaOf(shadow.color);
+                        setShadow({ color: toRgba(r, g, b, parseFloat(alpha)) });
+                      }}
+                    />
+                  </Row>
+                </>
+              ) : null}
+            </Section>
+
+            <Section title="Filters" applied={blurred} onAdd={() => set(["filter", "blur(4px)"])} action={removeButton("Remove filters", () => set(["filter", "none"], ["backdrop-filter", "none"]))}>
+              <Row>
+                <NumberField
+                  glyph={<Glyph><circle cx="8" cy="8" r="4" strokeDasharray="1.5 2" /></Glyph>}
+                  label="Layer blur"
+                  value={`${blurOf("filter")}px`}
+                  onCommit={(value) => set(["filter", parseFloat(value) > 0 ? `blur(${parseFloat(value)}px)` : "none"])}
+                />
+                <NumberField
+                  glyph={<Glyph><rect x="3" y="3" width="10" height="10" rx="2" strokeDasharray="1.5 2" /></Glyph>}
+                  label="Background blur"
+                  value={`${blurOf("backdrop-filter")}px`}
+                  onCommit={(value) => set(["backdrop-filter", parseFloat(value) > 0 ? `blur(${parseFloat(value)}px)` : "none"])}
+                />
+              </Row>
+            </Section>
           </>
         ) : (
           <PanelEmpty icon={<PencilIcon />}>

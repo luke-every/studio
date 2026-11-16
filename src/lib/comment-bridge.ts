@@ -1,6 +1,6 @@
 import { anchorAt, anchorOf, boxAt, elementAt, revealAnchor, scrollAt, spotOf, watchTaps, type Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
-import { componentOf, describePart, painter, partIn } from "@/lib/edit-part";
+import { componentOf, describePart, painter, partIn, reachFrom } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
 import { findClip, isFind, partBox, setMarks, sourceAt } from "@/lib/handoff-clip";
 
@@ -132,16 +132,19 @@ const ANYWAY_MS = 1000;
       case "studio:comments:ask":
         if (data.what === "box") {
           const names = Array.isArray(data.components) ? new Set<string>(data.components) : null;
-          const hit = names && point && document.body ? elementAt(document, data.x, data.y) : null;
+          const reach = { deep: data.deep !== false, groups: data.groups === true };
+          // A component is picked whole only when reaching in (⌘); otherwise it is the top-level group that is.
+          const hit = names && reach.deep && point && document.body ? elementAt(document, data.x, data.y) : null;
           const found = hit && names ? componentOf(hit, names) : null;
           if (found) {
             const { left, top, width, height } = found.root.getBoundingClientRect();
             return answer({ left, top, width, height, component: true });
           }
-          return answer(point && document.body ? boxAt(document, data.x, data.y) : null);
+          return answer(point && document.body ? boxAt(document, data.x, data.y, reach) : null);
         }
         if (data.what === "part") {
-          const element = point && document.body ? elementAt(document, data.x, data.y) : null;
+          const from = data.from && typeof data.from.selector === "string" ? { selector: data.from.selector, into: !!data.from.into } : undefined;
+          const element = point && document.body ? reachFrom(document, elementAt(document, data.x, data.y), from) ?? (from?.into ? null : elementAt(document, data.x, data.y, data.deep !== false)) : null;
           return answer(element ? describePart(element, Array.isArray(data.components) ? data.components : undefined) : null);
         }
         if (data.what === "anchorOf") {

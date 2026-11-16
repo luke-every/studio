@@ -94,6 +94,7 @@ export function PrototypeFrame({
   variants,
   readyForDev,
   handoffInspect,
+  handoffSheet,
   inspectPanel,
   inspectInPanel = false,
   inspecting = false,
@@ -164,7 +165,9 @@ export function PrototypeFrame({
   /** The handoff has been signed off for these designs (a design is a variant's id): the canvas marks their screens Ready for dev. Null when it hasn't. */
   readyForDev?: string[] | null;
   /** Engineers looking at a handed-off version: a tap on a canvas screen selects the part of the handoff under it; `inspectPanel` says what it is. */
-  handoffInspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void };
+  handoffInspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void; selection: Selection | null };
+  /** The handed-off version's new and extended components, drawn in a frame after the canvas's last screen. */
+  handoffSheet?: React.ComponentProps<typeof FlowCanvas>["sheet"];
   inspectPanel?: ReactNode;
   /** The card for what is selected goes at the top of the side panel (the studio's own canvas) rather than floating on its own (a share page); `inspecting` is whether something is selected. */
   inspectInPanel?: boolean;
@@ -872,6 +875,7 @@ export function PrototypeFrame({
           <FlowCanvas
             fold={fold}
             inspect={handoffInspect}
+            sheet={handoffSheet}
             // The variants canvas marks the designs that were handed off; a flow of steps is one design, so every step.
             ready={readyForDev ? (canvas.setups ? (id: string) => readyForDev.includes(id) : () => true) : undefined}
             // The two canvases are different layouts of different screens, so each starts afresh.

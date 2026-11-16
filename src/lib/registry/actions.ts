@@ -202,6 +202,11 @@ export async function designSystemOf(slug: string, name?: string) {
   return attempt(() => system.designSystem(slug, name), []);
 }
 
+/** A version's colour tokens, from its design system's stylesheet (see `designTokens`). */
+export async function designTokensOf(slug: string) {
+  return attempt(() => system.designTokens(slug), []);
+}
+
 /**
  * A version's handoff (see `handoff.ts`), and the designer's decisions on it. Read by the browser, like comments, so the
  * page stays prerendered; nothing prerendered shows it, so nothing is revalidated. `key` is the version's stored key.

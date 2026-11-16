@@ -72,7 +72,6 @@
   --focus-ring: var(--ink-900);
   --scrim: color-mix(in oklab, var(--ink-900) 32%, transparent);
   /* The element a comment would be pinned to: a faint dark fill inside a dark edge. It lies over a prototype's page, not the studio's, so it is the same in every theme. */
-  --pin-target-fill: color-mix(in oklab, var(--ink-900) 10%, transparent);
   --pin-target-edge: color-mix(in oklab, var(--ink-900) 70%, transparent);
   /* A design-system component instance picked in edit mode: drawn over the prototype's page too, so the same in every theme. */
   --inapp-chrome: var(--instagram-chrome);
@@ -80,6 +79,10 @@
   --inapp-light: var(--paper-50);
   --inapp-light-foreground: var(--ink-800);
   --component: var(--violet-500);
+  /* The frame of new and extended components beside the flow: dark, so each component is the light thing on it. */
+  --sheet: var(--ink-850);
+  --sheet-foreground: var(--paper-50);
+  --sheet-muted: color-mix(in oklab, var(--paper-50) 60%, transparent);
   --component-muted: color-mix(in oklab, var(--violet-500) 14%, transparent);
 
   /* Handoff tones (see src/components/ui/chip.tsx): each a colour for a dot and a chip's words, and its tint behind them.

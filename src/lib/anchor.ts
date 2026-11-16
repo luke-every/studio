@@ -11,7 +11,9 @@ import { selectorFor } from "@/lib/edit-dom";
  */
 
 export type Spot = { x: number; y: number };
-export type Box = { left: number; top: number; width: number; height: number; /** The element is a design-system component instance (edit mode on a live version). */ component?: boolean };
+export type Box = { left: number; top: number; width: number; height: number; /** The element is a design-system component instance (edit mode on a live version). */ component?: boolean; /** The groups directly inside it, outlined dashed while it is hovered. */ children?: Box[] };
+/** How a point picks an element: `deep` is the one at the very bottom (⌘ held), otherwise the top-level group; `groups` also boxes what is directly inside it. */
+export type Reach = { deep?: boolean; groups?: boolean };
 /** Whether a key in the prototype's address is the studio's (a control, a variant, the review token) rather than the prototype's own. */
 export type StudioOwns = (key: string) => boolean;
 
@@ -98,16 +100,66 @@ export function watchTaps(doc: Document) {
   return () => doc.removeEventListener("click", heard, true);
 }
 
-/** The element a comment at (x, y) in a document's own pixels is pinned to, or null on the bare page. */
-export function elementAt(doc: Document, x: number, y: number) {
+/** The element a comment at (x, y) in a document's own pixels is pinned to, or null on the bare page. Not `deep`: the top-level group it is in, as Figma picks before ⌘. */
+export function elementAt(doc: Document, x: number, y: number, deep = true) {
   const hit = doc.elementFromPoint(x, y);
-  return hit && hit !== doc.body && hit !== doc.documentElement ? hit : null;
+  if (!hit || hit === doc.body || hit === doc.documentElement) return null;
+  return deep ? hit : topGroup(doc, hit);
+}
+
+const drawn = (element: Element) => {
+  const rect = element.getBoundingClientRect();
+  return rect.width >= 8 && rect.height >= 8 && element.ownerDocument.defaultView!.getComputedStyle(element).display !== "contents";
+};
+
+/** The page's real root: below the wrappers (`#__next`, a layout div) that hold one child and nothing else. */
+function rootOf(doc: Document) {
+  let root: Element = doc.body;
+  for (;;) {
+    const inside = [...root.children].filter(drawn);
+    if (inside.length !== 1) return root;
+    root = inside[0];
+  }
+}
+
+/** The child of the page's root that holds an element: the section of the page it is part of. */
+function topGroup(doc: Document, hit: Element) {
+  const root = rootOf(doc);
+  if (hit === root || hit.contains(root)) return hit;
+  let top = hit;
+  while (top.parentElement && top.parentElement !== root && top.parentElement !== doc.body) top = top.parentElement;
+  return top;
+}
+
+const MAX_GROUPS = 24;
+
+/** The groups directly inside an element: a child that is the whole of its parent is looked through to what it holds. */
+function groupsIn(element: Element, depth = 0): Element[] {
+  const own = element.getBoundingClientRect();
+  const found: Element[] = [];
+  for (const child of element.children) {
+    if (!drawn(child)) continue;
+    const rect = child.getBoundingClientRect();
+    if (rect.width < own.width * 0.98 || rect.height < own.height * 0.98) found.push(child);
+    else if (depth < 3) found.push(...groupsIn(child, depth + 1));
+  }
+  return found;
 }
 
 /** The box of that element, in the document's own pixels, for the studio to outline while somebody chooses where to comment. */
-export function boxAt(doc: Document, x: number, y: number): Box | null {
-  const rect = elementAt(doc, x, y)?.getBoundingClientRect();
-  return rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null;
+export function boxAt(doc: Document, x: number, y: number, { deep = true, groups = false }: Reach = {}): Box | null {
+  const element = elementAt(doc, x, y, deep);
+  if (!element) return null;
+  const { left, top, width, height } = element.getBoundingClientRect();
+  if (!groups) return { left, top, width, height };
+  const children = groupsIn(element).slice(0, MAX_GROUPS).map((child) => {
+    const rect = child.getBoundingClientRect();
+    // What overflows or scrolls out of its parent is drawn only as far as the parent shows it.
+    const l = Math.max(rect.left, left);
+    const t = Math.max(rect.top, top);
+    return { left: l, top: t, width: Math.min(rect.right, left + width) - l, height: Math.min(rect.bottom, top + height) - t };
+  }).filter((box) => box.width >= 8 && box.height >= 8);
+  return { left, top, width, height, children };
 }
 
 /** The anchor for a click at (x, y) in a document's own pixels. */

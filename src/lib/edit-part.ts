@@ -1,4 +1,4 @@
-import { pictureOf, selectorFor, setPicture, sizeProperties, sizingOf, textOf, writeText, type Axis, type Sizing } from "@/lib/edit-dom";
+import { pictureOf, selectorFor, setPicture, sizeProperties, sizingOf, textOf, toHex, writeText, type Axis, type Sizing } from "@/lib/edit-dom";
 import type { Edit } from "@/lib/edits";
 
 /**
@@ -11,16 +11,99 @@ import type { Edit } from "@/lib/edits";
 
 /** Every property the edit panel reads. One it reads that isn't here comes back empty, so add it here first. */
 const PROPERTIES = [
-  "align-items", "align-self", "backdrop-filter", "background-color", "border-bottom-left-radius", "border-bottom-right-radius",
+  "align-items", "align-self", "backdrop-filter", "background-color", "background-image", "border-bottom-left-radius", "border-bottom-right-radius",
   "border-top-color", "border-top-left-radius", "border-top-right-radius", "border-top-style", "border-top-width", "bottom",
   "box-shadow", "color", "column-gap", "display", "filter", "flex-direction", "flex-grow", "flex-wrap", "font-family", "font-size",
   "font-style", "font-weight", "height", "justify-content", "left", "letter-spacing", "line-height", "margin-bottom", "margin-left",
-  "margin-right", "margin-top", "opacity", "overflow-x", "padding-bottom", "padding-left", "padding-right", "padding-top", "position",
+  "margin-right", "margin-top", "mix-blend-mode", "opacity", "overflow-x", "padding-bottom", "padding-left", "padding-right", "padding-top", "position",
   "right", "row-gap", "text-align", "text-decoration-line", "text-transform", "top", "visibility", "width", "z-index",
 ];
 
 const AXES: Axis[] = ["width", "height"];
 const SIZINGS: Sizing[] = ["fixed", "fill", "hug"];
+
+/** A design token of the page: its name, what to set to use it (`var(--color-dark)`), and its value (a `#rrggbb` for a colour, pixels for a size). */
+export type Token = { name: string; css: string; value: string };
+export type Tokens = { colours: Token[]; radii: Token[]; spacing: Token[] };
+
+/** Tailwind's own scale, used for what a page doesn't define itself. Steps are multiples of the spacing unit. */
+const SPACING_STEPS = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64];
+const RADII = [["sm", 4], ["md", 6], ["lg", 8], ["xl", 12], ["2xl", 16], ["3xl", 24], ["full", 9999]] as const;
+
+const tokenCache = new WeakMap<Document, { sheets: number; tokens: Tokens }>();
+
+/** The custom properties a page's stylesheets set on its root, by name. */
+function rootProperties(doc: Document) {
+  const names = new Set<string>();
+  const walk = (rules: CSSRuleList) => {
+    for (const rule of rules) {
+      const { selectorText, style } = rule as CSSStyleRule;
+      if (style && /:root|:host|^html\b/.test(selectorText ?? "")) for (const name of style) if (name.startsWith("--")) names.add(name);
+      const inner = (rule as CSSGroupingRule).cssRules;
+      if (inner) walk(inner);
+    }
+  };
+  for (const sheet of doc.styleSheets) {
+    try {
+      walk(sheet.cssRules);
+    } catch {
+      // A sheet from another address can't be read.
+    }
+  }
+  return [...names];
+}
+
+/**
+ * The page's own design tokens, so the panel offers what the design system has and not whatever a number can be: its
+ * colours (`--color-*`), radii (`--radius-*`) and spacing (`--spacing`, a unit the scale is multiples of), read from its stylesheets and
+ * resolved to values. Where a page defines no radii or spacing, Tailwind's scale stands in, as plain pixels.
+ */
+export function tokensOf(doc: Document): Tokens {
+  const cached = tokenCache.get(doc);
+  if (cached && cached.sheets === doc.styleSheets.length) return cached.tokens;
+  const win = doc.defaultView!;
+  const names = rootProperties(doc);
+  const tokens: Tokens = { colours: [], radii: [], spacing: [] };
+  if (!doc.body) return tokens;
+  const probe = doc.createElement("div");
+  probe.setAttribute("aria-hidden", "true");
+  probe.style.cssText = "position:fixed;left:-9999px;top:0;visibility:hidden;pointer-events:none";
+  doc.body.appendChild(probe);
+  const resolve = (property: "color" | "borderTopLeftRadius" | "width", value: string) => {
+    probe.style[property] = "";
+    probe.style[property] = value;
+    return win.getComputedStyle(probe)[property];
+  };
+  const canvas = doc.createElement("canvas").getContext("2d");
+  const hexOf = (css: string) => {
+    if (!canvas) return toHex(css);
+    canvas.fillStyle = "#000000";
+    canvas.fillStyle = css;
+    return canvas.fillStyle.startsWith("#") ? canvas.fillStyle : toHex(canvas.fillStyle);
+  };
+  try {
+    for (const name of names) {
+      // A reset (`--color-*: initial`) isn't a token.
+      const colour = name.match(/^--color-([^*]+)$/);
+      const radius = name.match(/^--radius-([^*]+)$/);
+      if (colour) {
+        tokens.colours.push({ name: colour[1], css: `var(${name})`, value: hexOf(resolve("color", `var(${name})`)) });
+      } else if (radius) {
+        const px = parseFloat(resolve("borderTopLeftRadius", `var(${name})`));
+        if (px >= 0) tokens.radii.push({ name: radius[1], css: `var(${name})`, value: String(px) });
+      }
+    }
+    const hasUnit = names.includes("--spacing");
+    const unit = hasUnit ? parseFloat(resolve("width", "var(--spacing)")) || 4 : 4;
+    tokens.spacing = SPACING_STEPS.map((step) => ({ name: String(step), css: hasUnit ? `calc(var(--spacing) * ${step})` : `${step * unit}px`, value: String(step * unit) }));
+  } finally {
+    probe.remove();
+  }
+  if (!tokens.radii.length) tokens.radii = RADII.map(([name, px]) => ({ name, css: `${px}px`, value: String(px) }));
+  tokens.radii.sort((a, b) => parseFloat(a.value) - parseFloat(b.value));
+  tokenCache.set(doc, { sheets: doc.styleSheets.length, tokens });
+  return tokens;
+}
 
 /** A part as the panel needs it: what it is, how it looks now, and what each choice of sizing would set. Plain data, so it can be sent from a page on another address. */
 export type Part = {
@@ -38,6 +121,8 @@ export type Part = {
   sizing: Record<Axis, Sizing>;
   /** The properties each sizing along each axis would set (see `sizeProperties`). */
   sizes: Record<Axis, Record<Sizing, [string, string][]>>;
+  /** The page's design tokens, which colours, radii and spacing are chosen from. */
+  tokens: Tokens;
   /** Where it is in its page's window, in the page's own pixels. */
   box: { left: number; top: number; width: number; height: number };
   /** Set when it is the root of a design-system component instance (a live version): what it is, and its props that are plain values. */
@@ -152,6 +237,7 @@ export function describePart(picked: Element, names?: string[]): Part {
     picture: picture ? selectorFor(picture) : null,
     sizing: each((axis) => sizingOf(element, axis)),
     sizes: each((axis) => Object.fromEntries(SIZINGS.map((mode) => [mode, sizeProperties(element, axis, mode, parseFloat(css[axis]) || 0)])) as Record<Sizing, [string, string][]>),
+    tokens: tokensOf(element.ownerDocument),
     box: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
     component: found ? { name: found.name, props: found.props, preview: !!rendererOf() } : undefined,
   };
@@ -164,6 +250,22 @@ export function partIn(doc: Document, selector: string) {
   } catch {
     return null;
   }
+}
+
+/** Where a selection reaches from: an element already selected (by selector), and whether to dive a level into it. */
+export type From = { selector: string; into: boolean };
+
+/**
+ * What a point means to someone who has an element selected: that element while the point is inside it, or, diving
+ * (`into`), the child of it that holds the point, one level down. Null when it doesn't apply, and the point is read as usual.
+ */
+export function reachFrom(doc: Document, hit: Element | null, from: From | undefined) {
+  const selected = from && hit ? partIn(doc, from.selector) : null;
+  if (!from || !hit || !selected || !selected.contains(hit)) return null;
+  if (!from.into) return selected;
+  let child = hit;
+  while (child.parentElement && child.parentElement !== selected) child = child.parentElement;
+  return child === selected ? null : child;
 }
 
 type Original = { style: string | null; html: string; src: string | null };

@@ -335,7 +335,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           flow={flow}
           variants={variantsCanvas}
           readyForDev={handoffStatus?.signedBy ? handoffStatus.variants : null}
-          handoffInspect={handoffData ? { elements: handoffData.elements, onSelect: setPickedSection } : undefined}
+          handoffInspect={handoffData ? { elements: handoffData.elements, onSelect: setPickedSection, selection: pickedSection } : undefined}
+          handoffSheet={handoffData?.components.length && typeof window !== "undefined" ? { items: handoffData.components, theme: handoffData.theme, fontBase: `${window.location.origin}${selected.url ?? ""}/` } : undefined}
           inspecting={!!pickedSection}
           inspectInPanel
           inspectPanel={
@@ -345,7 +346,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
                 data={handoffData}
                 selection={pickedSection}
                 onClose={() => setPickedSection(null)}
-                variantLabel={(id) => variantsCanvas?.flow.screens.find((screen) => screen.id === id)?.name ?? id}
+                onSelect={setPickedSection}
+                variantLabel={(id) => [variantsCanvas?.flow, flow].flatMap((one) => one?.screens.find((screen) => screen.id === id)?.name ?? [])[0] ?? id}
                 briefUrl={async (target) => {
                   const minted = await reviewToken(prototype.slug, folder);
                   if (!minted.ok) throw new Error(minted.error);

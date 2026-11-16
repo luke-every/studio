@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CodeIcon, FitIcon, PlayIcon } from "@/components/shell/nav-icons";
+import type { Handoff } from "@/lib/handoff";
 import type { SourceEl } from "@/lib/handoff-clip";
-import type { Selection } from "@/lib/handoff-selection";
+import type { PublicComponent } from "@/lib/handoff-public";
+import { targetOf, type Selection } from "@/lib/handoff-selection";
 import { IconButton } from "@/components/ui/button";
 import type { Spot } from "@/lib/anchor";
 import { setupOf, type Anchor } from "@/lib/comments";
@@ -13,6 +15,7 @@ import type { Device } from "@/lib/phone";
 import { applyEmbed } from "@/lib/embed";
 import { embedded, PREVIEW_QUERY } from "@/lib/controls";
 
+import { ComponentsFrame } from "./components-frame";
 import { Card, CommentCard, Composer, DraftPin, Pin, PinTarget, type CommentsUi } from "./comment-parts";
 import type { Part } from "@/lib/edit-part";
 
@@ -38,7 +41,17 @@ const SETTLE_MS = 80;
 const INTERACT = { top: 52, margin: 24 };
 /** How long a screen takes to grow into the middle and back, matching `--dur-deliberate`. */
 const INTERACT_MS = 460;
-type Box = { left: number; top: number; width: number; height: number; component?: boolean };
+/** The outermost element each component file draws (the whole of a production one): what hovering inside a component outlines. The app's own page isn't one. */
+function componentRoots(elements: SourceEl[]) {
+  const biggest = new Map<string, SourceEl>();
+  for (const item of elements) {
+    const best = biggest.get(item.file);
+    if (!/^(src\/)?app\//.test(item.file) && (!best || item.endLine - item.line > best.endLine - best.line)) biggest.set(item.file, item);
+  }
+  return [...biggest.values()];
+}
+
+type Box = { left: number; top: number; width: number; height: number; component?: boolean; children?: Box[] };
 /** A screen moved by hand: where it was, and where it was put. */
 type Move = { id: string; from: { x: number; y: number }; to: { x: number; y: number } };
 /** A page is measured this long after it loads, and again later, since it may still be settling. */
@@ -107,6 +120,7 @@ export function FlowCanvas({
   fold = false,
   ready,
   inspect,
+  sheet,
   picking,
 }: {
   flow: Flow;
@@ -128,7 +142,9 @@ export function FlowCanvas({
   /** Which screens have been handed off to engineering (see `Ready for dev`): each is marked beside its name. */
   ready?: (screenId: string) => boolean;
   /** Engineers looking at a handed-off version: a tap on a screen selects the part of the handoff under it (outlined), and says which. */
-  inspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void };
+  inspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void; /** What is selected now: one made elsewhere (the panel's list) is outlined on the screens too. */ selection: Selection | null };
+  /** A handed-off version's new and extended components: drawn in a frame after the last screen, at each device that is on. */
+  sheet?: { items: PublicComponent[]; theme: Handoff["theme"]; fontBase: string };
   /**
    * The version can be edited: a click on a screen selects the part under it as well. `target` is the one selected, as
    * its page describes it; `onPick` is told the next and the frame it is in, or null when it is let go of; `onText` is
@@ -190,8 +206,13 @@ export function FlowCanvas({
   const tallest = (id: string) => Math.max(...devices.map((on) => heightOf(copyKey(on.id, id))));
   const laid = layoutFlow(flow, { width: group + GAP.x, height: 0 }, Infinity, (id) => tallest(id) + GAP.y + LABEL_HEIGHT);
   const placed = spreadCopies(laid.placed, devices.map((on) => ({ id: on.id, width: on.width * SCREEN_SCALE })), DEVICE_GAP);
-  const width = laid.width - GAP.x;
-  const height = laid.height - GAP.y;
+  const flowWidth = laid.width - GAP.x;
+  const flowHeight = laid.height - GAP.y;
+  // The frame of components stands after the last screen, and is fitted with them once it has said how big it is.
+  const [sheetSize, setSheetSize] = useState({ width: 0, height: 0 });
+  const withSheet = !!sheet?.items.length;
+  const width = withSheet ? flowWidth + GAP.x + sheetSize.width : flowWidth;
+  const height = withSheet ? Math.max(flowHeight, sheetSize.height) : flowHeight;
   // How far each screen has been dragged from where the layout put it, in the canvas's own units.
   const [offsets, setOffsets] = useState<Record<string, { x: number; y: number }>>({});
   // Each finished move, so ⌘Z puts a screen back where it was and ⇧⌘Z (or ⌘Y) moves it again.
@@ -266,10 +287,33 @@ export function FlowCanvas({
     setEchoes(boxes.flatMap((item) => (item.box ? [{ key, copyId: item.copyId, box: item.box }] : [])));
   };
   const inspecting = useRef(false);
+  // What the canvas itself last selected: a different selection arriving is made elsewhere, and is outlined here too.
+  const chosen = useRef("");
   const select = (selection: Selection | null) => {
     inspecting.current = !!selection;
+    chosen.current = selection ? targetOf(selection) : "";
     inspect?.onSelect(selection);
   };
+  const wanted = inspect?.selection ? targetOf(inspect.selection) : "";
+  useEffect(() => {
+    const selection = inspect?.selection;
+    if (!inspect || wanted === chosen.current) return;
+    chosen.current = wanted;
+    inspecting.current = !!selection;
+    let alive = true;
+    const row = selection?.kind === "section" ? (selection.line <= 1 && selection.endLine >= 9999 ? componentRoots(inspect.elements).find((item) => item.file === selection.file) : inspect.elements.find((item) => item.file === selection.file && item.line === selection.line && item.endLine === selection.endLine)) : undefined;
+    void Promise.all(copies.map(async (copy) => ({ copy, box: row && frames.current.get(copy.id) ? await handoffPartBox(frames.current.get(copy.id)!, row.find, 0) : null }))).then((found) => {
+      if (!alive) return;
+      const shown = found.filter((item) => item.box);
+      const first = shown[0];
+      setInspected(first && row ? { id: `${row.file}:${row.line}`, copyId: first.copy.id, box: first.box! } : null);
+      setEchoes(first && row ? shown.slice(1).map((item) => ({ key: `${row.file}:${row.line}`, copyId: item.copy.id, box: item.box! })) : []);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted]);
   const inspectAt = async (clientX: number, clientY: number) => {
     const found = inspect && pointIn(clientX, clientY);
     if (!inspect || !found) return;
@@ -632,10 +676,15 @@ export function FlowCanvas({
     setDraft({ copyId: found.copy.id, anchor: setups ? anchor : { ...anchor, flowScreen: found.copy.screen.id } });
   };
   // A tap on a screen selects the element under it too; one on a page's bare background lets go of what was.
-  const pick = async (clientX: number, clientY: number) => {
+  // A second tap goes a level into what is selected (`into`), or types over its words when there is no level left.
+  const pick = async (clientX: number, clientY: number, deep: boolean, into = false) => {
     const found = picking && pointIn(clientX, clientY);
     if (!picking || !found) return;
-    const part = await pageOf(found.frame).partAt(found.x, found.y);
+    // A tap inside the selected element keeps it; otherwise the same element hover outlined: the top-level group, or with ⌘ the one at the bottom.
+    const from = picked && !deep && !inspect && picked.copyId === found.copy.id ? { selector: picked.part.selector, into } : undefined;
+    if (into && !from) return void type(clientX, clientY);
+    const part = await pageOf(found.frame).partAt(found.x, found.y, deep || !!inspect, from);
+    if (into && !part) return void type(clientX, clientY);
     setPickedOn(part ? { selector: part.selector, copyId: found.copy.id } : null);
     setEchoes([]);
     if (part) void echo(found.copy, part.selector, (frame) => selectorBox(frame, part.selector));
@@ -652,7 +701,15 @@ export function FlowCanvas({
   const outline = (key: string, copyId: string, box: Box, component?: boolean) => {
     const corner = onCanvas(copyId, { x: box.left, y: box.top });
     const scale = SCREEN_SCALE * view.scale;
-    return <PinTarget key={key} left={corner.x} top={corner.y} width={box.width * scale} height={box.height * scale} component={component} />;
+    return (
+      <Fragment key={key}>
+        <PinTarget left={corner.x} top={corner.y} width={box.width * scale} height={box.height * scale} component={component} />
+        {box.children?.map((child, index) => {
+          const inside = onCanvas(copyId, { x: child.left, y: child.top });
+          return <PinTarget key={index} dashed left={inside.x} top={inside.y} width={child.width * scale} height={child.height * scale} />;
+        })}
+      </Fragment>
+    );
   };
   // While placing, the element a click would pin to is outlined under the pointer, in its screen's own pixels so it
   // stays on it as the canvas moves. Asked for at most once a frame; a late answer is dropped if the pointer has moved on.
@@ -660,8 +717,11 @@ export function FlowCanvas({
   const target = aimed && copyOf.has(aimed.copyId) ? aimed : null;
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const asking = useRef(0);
-  const point = (at: { x: number; y: number } | null) => {
+  // ⌘ held: reach the element at the very bottom, not the top-level group (as in Figma).
+  const reaching = useRef(false);
+  const point = (at: { x: number; y: number } | null, deep = false) => {
     pointer.current = at;
+    reaching.current = deep;
     if (!at) {
       cancelAnimationFrame(asking.current);
       asking.current = 0;
@@ -674,12 +734,38 @@ export function FlowCanvas({
       const now = pointer.current;
       const found = now && pointIn(now.x, now.y);
       if (!found) return setTarget(null);
-      void pageOf(found.frame).boxAt(found.x, found.y).then((box) => {
-        if (pointer.current === now) setTarget(box ? { copyId: found.copy.id, box } : null);
+      // Components are told by where the handoff found them, as a page's React tree can't say for the ones the server draws.
+      const wholes = inspect ? componentRoots(inspect.elements) : [];
+      // Placing a comment pins to the deepest element, and handoff picks by section, so both reach all the way in; only editing starts at the group.
+      const deep = reaching.current || placing || !!inspect;
+      void Promise.all([pageOf(found.frame).boxAt(found.x, found.y, { deep, groups: !placing }), wholes.length ? handoffSourceAt(found.frame, found.x, found.y, wholes) : null]).then(([box, whole]) => {
+        if (pointer.current !== now) return;
+        const shown = whole ? { ...whole.box, component: true } : box;
+        setTarget(shown ? { copyId: found.copy.id, box: shown } : null);
       });
     });
   };
   useEffect(() => () => cancelAnimationFrame(asking.current), []);
+  // Pressing or letting go of ⌘ with the pointer still re-picks under it. Kept current by an effect, as `point` closes over the view.
+  const repoint = useRef(point);
+  useEffect(() => {
+    repoint.current = point;
+  });
+  useEffect(() => {
+    if (!selecting || placing) return;
+    const change = (event: KeyboardEvent | FocusEvent) => {
+      if (event instanceof KeyboardEvent && event.key !== "Meta" && event.key !== "Control") return;
+      if (pointer.current) repoint.current(pointer.current, event instanceof KeyboardEvent && event.type === "keydown");
+    };
+    window.addEventListener("keydown", change);
+    window.addEventListener("keyup", change);
+    window.addEventListener("blur", change);
+    return () => {
+      window.removeEventListener("keydown", change);
+      window.removeEventListener("keyup", change);
+      window.removeEventListener("blur", change);
+    };
+  }, [selecting, placing]);
   if (!placing && !selecting && aimed) setTarget(null);
   // Where a spot inside a screen is, on the canvas as it is now and in the window.
   const onCanvas = (copyId: string, spot: Spot) => toScreen(at(copyId).x + spot.x * SCREEN_SCALE, at(copyId).y + spot.y * SCREEN_SCALE);
@@ -772,7 +858,7 @@ export function FlowCanvas({
               type="button"
               onPointerDown={(event) => grab(event, id)}
               // The element a tap would select is outlined under the pointer; not while anything is pressed (a screen being moved, the canvas panned).
-              onPointerMove={selecting && !placing ? (event) => point(event.buttons ? null : { x: event.clientX, y: event.clientY }) : undefined}
+              onPointerMove={selecting && !placing ? (event) => point(event.buttons ? null : { x: event.clientX, y: event.clientY }, event.metaKey || event.ctrlKey) : undefined}
               onPointerLeave={selecting && !placing ? () => point(null) : undefined}
               onPointerUp={(event) => {
                 if (drag.current?.moved) return;
@@ -781,14 +867,14 @@ export function FlowCanvas({
                 drag.current = null;
                 setSelected(id);
                 // The first tap selects the part under it as well; a second on the same screen, soon after (a double-click, a
-                // double-tap: there is no double-click event on every touch screen), types over its words.
+                // double-tap: there is no double-click event on every touch screen), goes a level into what is selected, and types over its words when it can't.
                 const now = performance.now();
                 if (lastTap.current?.id === id && now - lastTap.current.at < DOUBLE_TAP_MS) {
                   lastTap.current = null;
-                  void type(event.clientX, event.clientY);
+                  void pick(event.clientX, event.clientY, event.metaKey || event.ctrlKey, true);
                 } else {
                   lastTap.current = { id, at: now };
-                  void pick(event.clientX, event.clientY);
+                  void pick(event.clientX, event.clientY, event.metaKey || event.ctrlKey);
                   void inspectAt(event.clientX, event.clientY);
                 }
               }}
@@ -836,6 +922,7 @@ export function FlowCanvas({
             </button>
           );
         }) : null}
+        {size && sheet && withSheet ? <ComponentsFrame items={sheet.items} theme={sheet.theme} fontBase={sheet.fontBase} devices={devices} scale={SCREEN_SCALE} onSize={setSheetSize} left={flowWidth + GAP.x} /> : null}
       </div>
 
       {/* While the pages load: a quiet loader in the middle, which gives way as they arrive. */}

@@ -58,7 +58,7 @@ const inScript = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003
  * The frame's document. `fontBase` is where the prototype's files are served (its fonts are under it); `id` is sent
  * back with every message, so the studio knows which frame is talking.
  */
-export function sandboxDocument({ module, name, props, theme, fontBase, id }: { module: string; name: string; props: Prop[]; theme: Handoff["theme"]; fontBase: string; id: string }) {
+export function sandboxDocument({ module, name, props, theme, fontBase, id, width = SANDBOX_WIDTH }: { module: string; name: string; props: Prop[]; theme: Handoff["theme"]; fontBase: string; id: string; /** The width it is laid out at: a breakpoint's, where one is drawn. */ width?: number }) {
   const families = [...new Set((theme?.fonts ?? []).map((font) => font.variable))];
   const faces = (theme?.fonts ?? [])
     .map((font) => `@font-face{font-family:"hf${families.indexOf(font.variable)}";src:url(${JSON.stringify(new URL(font.file, fontBase).href)});font-weight:${Number(font.weight) || 400};font-style:${font.style === "italic" ? "italic" : "normal"};}`)
@@ -66,11 +66,11 @@ export function sandboxDocument({ module, name, props, theme, fontBase, id }: { 
   const variables = families.map((variable, index) => `${variable}:"hf${index}";`).join("");
   // `@variant` at the top was early Tailwind 4's way of declaring one; the in-browser build only knows `@custom-variant`.
   const css = (theme?.css ?? "").replace(/^@variant\s/gm, "@custom-variant ");
-  const data = { module, name, examples: examplesFor(props), id, width: SANDBOX_WIDTH };
+  const data = { module, name, examples: examplesFor(props), id, width };
 
   return `<!doctype html><html><head><meta charset="utf-8">
 <script src="${REACT}"></script><script src="${REACT_DOM}"></script><script src="${TAILWIND}"></script>
-<style>${faces}:root{${variables}}html,body{margin:0;background:transparent}#root{width:${SANDBOX_WIDTH}px;padding:16px;box-sizing:border-box;display:flex;flex-direction:column;align-items:flex-start}</style>
+<style>${faces}:root{${variables}}html,body{margin:0;background:transparent}#root{width:${width}px;padding:16px;box-sizing:border-box;display:flex;flex-direction:column;align-items:flex-start}</style>
 <style type="text/tailwindcss">${css.replace(/<\/style/gi, "<\\/style")}</style>
 </head><body><div id="root"></div><script>
 (function () {

@@ -255,15 +255,15 @@ export function DraftPin({ left, top }: { left: number; top: number }) {
 }
 
 /**
- * The element a comment would be pinned to, marked while somebody chooses where to leave one: a dark edge with
- * rounded corners around a faint dark fill, so what is under it stays readable. It never takes a click.
+ * The element a comment would be pinned to, marked while somebody chooses where to leave one: a thin edge with
+ * rounded corners and no fill, so what is under it stays readable. A group inside the hovered one is dashed. It never takes a click.
  */
-export function PinTarget({ left, top, width, height, component }: { left: number; top: number; width: number; height: number; /** A design-system component instance: drawn in its own colour. */ component?: boolean }) {
+export function PinTarget({ left, top, width, height, component, dashed }: { left: number; top: number; width: number; height: number; /** A design-system component instance: drawn in its own colour. */ component?: boolean; /** A group inside the one hovered: dashed and quieter. */ dashed?: boolean }) {
   return (
     <span
       aria-hidden
       style={{ left, top, width, height }}
-      className={`pointer-events-none absolute rounded-[var(--r-lg)] border ${component ? "border-[var(--component)] bg-[var(--component-muted)]" : "border-[var(--pin-target-edge)] bg-[var(--pin-target-fill)]"}`}
+      className={`pointer-events-none absolute border ${dashed ? "rounded-[var(--r-sm)] border-dashed opacity-60" : "rounded-[var(--r-lg)]"} ${component ? "border-[var(--component)]" : "border-[var(--pin-target-edge)]"}`}
     />
   );
 }

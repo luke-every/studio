@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
-import { CheckIcon, ChevronDownIcon } from "@/components/shell/nav-icons";
+import { CheckIcon, ChevronDownIcon, PlusIcon } from "@/components/shell/nav-icons";
 import { toHex } from "@/lib/edit-dom";
 
 /**
@@ -16,16 +17,60 @@ import { toHex } from "@/lib/edit-dom";
 
 const well = "bg-surface-inset rounded-[var(--r-md)]";
 
-/** A titled group, full width with a hairline under it. `action` sits at the end of the title row. */
-export function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+/**
+ * A titled group, full width with a hairline under it. `action` sits at the end of the title row. A section that
+ * isn't applied (`applied` false) is only its title and a plus; the plus applies it (`onAdd`) and it opens.
+ */
+export function Section({ title, action, children, applied = true, onAdd }: { title: string; action?: ReactNode; children?: ReactNode; applied?: boolean; onAdd?: () => void }) {
+  if (!applied) {
+    return (
+      <button
+        type="button"
+        aria-label={`Add ${title.toLowerCase()}`}
+        onClick={onAdd}
+        className="flex h-10 w-full items-center justify-between border-b border-divider px-4 text-xs text-foreground-muted transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:text-foreground"
+      >
+        {title}
+        <PlusIcon className="size-4" />
+      </button>
+    );
+  }
   return (
     <section className="flex flex-col border-b border-divider pb-3">
       <div className="flex h-10 items-center justify-between gap-2 px-4">
         <h3 className="text-xs font-medium text-foreground">{title}</h3>
-        {action}
+        <div className="flex items-center gap-1">{action}</div>
       </div>
-      <div className="flex flex-col gap-3 px-4">{children}</div>
+      <div className="flex flex-col gap-2 px-4">{children}</div>
     </section>
+  );
+}
+
+/** How a flex container places its items: nine dots, the lit one is where they sit. Turned a quarter for a column. */
+export function AlignGrid({ column, justify, align, onChange }: { column: boolean; justify: string; align: string; onChange: (justify: string, align: string) => void }) {
+  const ends = ["flex-start", "center", "flex-end"];
+  const place = (value: string) => (value === "start" ? 0 : value === "end" ? 2 : ends.indexOf(value));
+  const [along, across] = [place(justify), place(align)];
+  return (
+    <div role="group" aria-label="Alignment" className={`${well} grid size-20 shrink-0 grid-cols-3 grid-rows-3`}>
+      {Array.from({ length: 9 }, (_, index) => {
+        const [x, y] = [index % 3, Math.floor(index / 3)];
+        const [j, a] = column ? [y, x] : [x, y];
+        const on = along === j && across === a;
+        return (
+          <button
+            key={index}
+            type="button"
+            aria-label={`${["Top", "Middle", "Bottom"][y]} ${["left", "centre", "right"][x]}`}
+            aria-pressed={on}
+            onClick={() => onChange(ends[j], ends[a])}
+            className="group grid place-items-center"
+          >
+            <span className={`rounded-full transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${on ? "size-2 bg-accent" : "size-1 bg-foreground-subtle group-hover:bg-foreground-muted"}`} />
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -287,7 +332,7 @@ export function Choice({
 const transparent = (color: string) => color === "transparent" || /rgba\(.*,\s*0\)$/.test(color);
 
 /** A colour: its swatch, which opens the picker, and its hex, which can be typed. */
-export function ColorField({ label, value, onCommit, caption }: { label: string; value: string; onCommit: (css: string) => void; caption?: string }) {
+export function ColorField({ label, value, onCommit, caption, trailing, onChip }: { label: string; value: string; onCommit: (css: string) => void; caption?: string; trailing?: ReactNode; /** Tapping the swatch does this, in place of opening the system colour picker. */ onChip?: () => void }) {
   const none = transparent(value);
   const hex = none ? "" : toHex(value);
   const [draft, setDraft] = useState<string | null>(null);
@@ -307,13 +352,17 @@ export function ColorField({ label, value, onCommit, caption }: { label: string;
         className={`relative size-4 shrink-0 overflow-hidden rounded-[var(--r-sm)] border border-border ${none ? "bg-surface" : ""}`}
       >
         {none ? <span aria-hidden className="absolute inset-x-0 top-1/2 h-px -rotate-45 bg-foreground-subtle" /> : null}
-        <input
-          type="color"
-          aria-label={`${label} picker`}
-          value={hex || "#ffffff"}
-          onChange={(event) => onCommit(event.target.value)}
-          className="absolute inset-0 size-full cursor-pointer opacity-0"
-        />
+        {onChip ? (
+          <button type="button" aria-label={`${label}, colours`} onClick={onChip} className="absolute inset-0 size-full cursor-pointer" />
+        ) : (
+          <input
+            type="color"
+            aria-label={`${label} picker`}
+            value={hex || "#ffffff"}
+            onChange={(event) => onCommit(event.target.value)}
+            className="absolute inset-0 size-full cursor-pointer opacity-0"
+          />
+        )}
       </span>
       <input
         type="text"
@@ -328,7 +377,202 @@ export function ColorField({ label, value, onCommit, caption }: { label: string;
         }}
         className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none"
       />
+      {trailing}
     </label>
     </Field>
+  );
+}
+
+/** One of a page's design tokens, to choose from. `css` is what choosing it sets; `hex` is its colour, for a swatch. */
+export type TokenOption = { key: string; label: string; css: string; hex?: string };
+
+const CUSTOM = "\0custom";
+
+/**
+ * A value chosen from the page's design tokens: the field shows the token the part has now and a menu of the rest,
+ * with "Custom" last. A value that is no token's is shown as typed, in `custom` (the free field for that kind of
+ * value, given the menu to put at its end), so it can still be changed or put back on a token. Tokens are the way;
+ * custom is the way out.
+ */
+export function TokenField({
+  glyph,
+  label,
+  options,
+  selected,
+  onPick,
+  custom,
+}: {
+  glyph: ReactNode;
+  label: string;
+  options: TokenOption[];
+  /** The key of the token the part has now, or null when its value is none of them. */
+  selected: string | null;
+  onPick: (option: TokenOption) => void;
+  custom: (menu: ReactNode) => ReactNode;
+}) {
+  const [typing, setTyping] = useState(false);
+  const chevron = <ChevronDownIcon className="size-3.5" />;
+  const choose = (key: string) => {
+    if (key === CUSTOM) return setTyping(true);
+    const option = options.find((item) => item.key === key);
+    if (!option) return;
+    setTyping(false);
+    onPick(option);
+  };
+  const menu = (cover: string) => (
+    <select aria-label={`${label}, tokens`} value={selected ?? CUSTOM} onChange={(event) => choose(event.target.value)} className={`absolute cursor-pointer opacity-0 ${cover}`}>
+      {options.map((option) => (
+        <option key={option.key} value={option.key}>
+          {option.label}
+        </option>
+      ))}
+      <option value={CUSTOM}>Custom</option>
+    </select>
+  );
+  if (!options.length) return custom(null);
+  if (typing || selected === null) {
+    return custom(
+      <span className="relative grid size-5 shrink-0 place-items-center text-foreground-subtle">
+        {chevron}
+        {menu("inset-0 size-full")}
+      </span>,
+    );
+  }
+  const chosen = options.find((option) => option.key === selected);
+  return (
+    <div className={`${well} relative flex h-7 items-center gap-1 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
+      <span className="flex w-5 shrink-0 items-center justify-center text-foreground-subtle">
+        {chosen?.hex ? <span style={{ backgroundColor: chosen.hex }} className="size-4 rounded-[var(--r-sm)] border border-border" /> : glyph}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-foreground">{chosen?.label}</span>
+      <span className="grid size-5 shrink-0 place-items-center text-foreground-subtle">{chevron}</span>
+      {menu("inset-0 size-full")}
+    </div>
+  );
+}
+
+/**
+ * A colour chosen from the design system's: the swatch (or the field) opens a list of every colour with its swatch
+ * and name, and "Custom" last, which turns the field into a hex to type. Tokens are the way; custom is the way out.
+ */
+export function ColourField({
+  label,
+  options,
+  selected,
+  value,
+  onPick,
+  onCommit,
+}: {
+  label: string;
+  options: TokenOption[];
+  /** The key of the colour the part has now, or null when it is none of them. */
+  selected: string | null;
+  /** The colour as the page has it now, for a swatch of one that is none of them. */
+  value: string;
+  onPick: (option: TokenOption) => void;
+  onCommit: (css: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const anchor = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<{ left: number; top: number; width: number; up: boolean } | null>(null);
+  const show = () => {
+    const box = anchor.current?.getBoundingClientRect();
+    if (!box) return;
+    const up = window.innerHeight - box.bottom < 280 && box.top > window.innerHeight - box.bottom;
+    setPlace({ left: box.left, top: up ? box.top - 4 : box.bottom + 4, width: box.width, up });
+    setOpen(true);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const key = (event: KeyboardEvent) => event.key === "Escape" && close();
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", key);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+  if (!options.length) return <ColorField label={label} value={value} onCommit={onCommit} />;
+
+  const chosen = options.find((option) => option.key === selected);
+  const custom = typing || selected === null;
+  const list =
+    open && place
+      ? createPortal(
+          <div
+            // A press inside it is not "outside": the list closes on its own choices.
+            onPointerDown={(event) => event.stopPropagation()}
+            style={{ left: place.left, top: place.top, width: place.width, transform: place.up ? "translateY(-100%)" : undefined }}
+            role="listbox"
+            aria-label={label}
+            className="fixed z-[var(--z-popover)] max-h-64 overflow-y-auto rounded-[var(--r-md)] border border-border bg-surface-elevated py-1 text-xs shadow-floating"
+          >
+            {options.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                role="option"
+                aria-selected={option.key === selected && !typing}
+                onClick={() => {
+                  setTyping(false);
+                  setOpen(false);
+                  onPick(option);
+                }}
+                className="flex h-8 w-full items-center gap-2 px-2 text-left text-foreground hover:bg-surface-hover"
+              >
+                <span style={option.hex ? { backgroundColor: option.hex } : undefined} className="size-4 shrink-0 rounded-[var(--r-sm)] border border-border" />
+                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                {option.key === selected && !typing ? <CheckIcon className="size-3.5 text-foreground-muted" /> : null}
+              </button>
+            ))}
+            <button
+              type="button"
+              role="option"
+              aria-selected={custom}
+              onClick={() => {
+                setTyping(true);
+                setOpen(false);
+              }}
+              className="mt-1 flex h-8 w-full items-center gap-2 border-t border-divider px-2 text-left text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+            >
+              <span className="size-4 shrink-0" />
+              Custom
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <div ref={anchor}>
+      {custom ? (
+        <ColorField
+          label={label}
+          value={value}
+          onCommit={onCommit}
+          onChip={show}
+          trailing={
+            <button type="button" aria-label={`${label}, colours`} onClick={show} className="grid size-5 shrink-0 place-items-center text-foreground-subtle">
+              <ChevronDownIcon className="size-3.5" />
+            </button>
+          }
+        />
+      ) : (
+        <button type="button" aria-label={`${label}, colours`} aria-expanded={open} onClick={show} className={`${well} flex h-7 w-full items-center gap-2 pl-1.5 pr-1 text-xs focus-visible:ring-1 focus-visible:ring-[var(--focus-ring)] focus-visible:outline-none`}>
+          <span style={chosen?.hex ? { backgroundColor: chosen.hex } : undefined} className="relative size-4 shrink-0 overflow-hidden rounded-[var(--r-sm)] border border-border">
+            {chosen?.hex ? null : <span aria-hidden className="absolute inset-x-0 top-1/2 h-px -rotate-45 bg-foreground-subtle" />}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-left text-foreground">{chosen?.label}</span>
+          <span className="grid size-5 shrink-0 place-items-center text-foreground-subtle">
+            <ChevronDownIcon className="size-3.5" />
+          </span>
+        </button>
+      )}
+      {list}
+    </div>
   );
 }

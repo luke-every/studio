@@ -18,6 +18,15 @@ function copy(value: Promise<string>) {
   return navigator.clipboard.write([new ClipboardItem({ "text/plain": value.then((text) => new Blob([text], { type: "text/plain" })) })]);
 }
 
+/** The purple square that says a thing is a component. */
+function ComponentMark() {
+  return (
+    <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--component)] text-accent-foreground">
+      <ComponentIcon className="size-3.5" />
+    </span>
+  );
+}
+
 function Row({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-1.5">
@@ -42,12 +51,15 @@ export function SelectionPanel({
   data,
   selection,
   briefUrl,
+  onSelect,
   variantLabel,
   bare = false,
 }: {
   data: PublicHandoff;
   selection: Selection | null;
   onClose?: () => void;
+  /** Picks a part from the list of what a design is made of. */
+  onSelect?: (selection: Selection) => void;
   /** The link an agent fetches to get the brief for just a target. */
   briefUrl?: (target: string) => string | Promise<string>;
   variantLabel?: (id: string) => string;
@@ -69,23 +81,28 @@ export function SelectionPanel({
   const candidate = finding ? finding.candidates.find((item) => item.name === finding.decision?.candidate) ?? finding.candidates[0] : undefined;
   const differences = finding && candidate ? differencesOf(finding, candidate) : null;
   const builtFrom = finding ? list<BuiltFrom>(finding.mine.builtFrom) : [];
-  const lift = section ? data.lift.filter((item) => item.file === section.file && item.line >= section.line && item.line <= section.endLine) : [];
   const role = finding ? ROLE[finding.kind] : null;
   // Production has it: which one it is, and nothing about how the prototype's differs.
   const matched = productionHas(part);
-  const inDesign = selection?.kind === "frame" ? parts.filter((item) => item.kit || item.finding?.where.some((place) => !place.variants?.length || place.variants.includes(selection.screenId))) : [];
+  const inDesign =
+    selection?.kind === "frame"
+      ? [
+          ...data.pages.filter((item) => item.variants.includes(selection.screenId)),
+          ...parts.filter((item) => item.kit || item.finding?.where.some((place) => !place.variants?.length || place.variants.includes(selection.screenId))),
+        ].filter((item, index, all) => all.findIndex((other) => other.file === item.file) === index)
+      : [];
 
-  const title = !selection ? "Ready for dev" : selection.kind === "frame" ? null : `${part?.name ?? selection.file.split("/").pop()}`;
+  // The prototype's own component, picked as a whole: its file is one of the handed-off ones and the pick spans everything drawn in it.
+  const rows = section ? data.elements.filter((item) => item.file === section.file) : [];
+  const wholeOwn = !!section && !!data.files[section.file] && rows.length > 0 && section.line <= Math.min(...rows.map((item) => item.line)) && section.endLine >= Math.max(...rows.map((item) => item.endLine));
+  const isComponent = !!part || wholeOwn;
+  const title = !selection ? "Ready for dev" : selection.kind === "frame" ? (variantLabel?.(selection.screenId) ?? selection.screenId) : (part?.name ?? selection.file.split("/").pop()?.replace(/\.[jt]sx?$/, ""));
 
   return (
     <div className={`flex flex-col gap-4 ${bare ? "border-b border-divider p-4" : "h-full overflow-y-auto rounded-[var(--r-tile)] border border-border bg-surface-elevated p-4 shadow-floating [scrollbar-width:thin]"}`}>
       {title ? (
         <h2 className="flex items-center gap-2 text-ui font-medium text-foreground">
-          {part ? (
-            <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--component)] text-accent-foreground">
-              <ComponentIcon className="size-3.5" />
-            </span>
-          ) : null}
+          {isComponent ? <ComponentMark /> : null}
           {title}
         </h2>
       ) : null}
@@ -140,23 +157,16 @@ export function SelectionPanel({
           ) : null}
 
           {inDesign.length ? (
-            <Row title="Its parts">
-              <ul className="flex flex-col gap-1 text-sm text-foreground-muted">
-                {inDesign.map((item) => (
-                  <li key={item.id}>{item.name}</li>
-                ))}
-              </ul>
-            </Row>
-          ) : null}
-
-          {lift.length ? (
-            <Row title="To wire up">
-              <ul className="flex flex-col gap-1 text-sm text-foreground-muted">
-                {lift.map((item) => (
-                  <li key={`${item.file}:${item.line}`}>{item.text.replace(/^TODO\(lift\):\s*/, "")}</li>
-                ))}
-              </ul>
-            </Row>
+            <ul className="flex flex-col gap-1 text-ui">
+              {inDesign.map((item) => (
+                <li key={item.file}>
+                  <button type="button" onClick={() => onSelect?.({ kind: "section", file: item.file, line: 1, endLine: 9999 })} className="-mx-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2 rounded-[var(--r-sm)] px-1.5 py-1 text-left text-[var(--component)] hover:bg-[var(--component-muted)]">
+                    <ComponentMark />
+                    {item.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : null}
 
           {data.preview ? <p className="text-sm text-foreground-subtle">The handoff isn&apos;t signed off yet. Engineers get a link and a brief once it is.</p> : null}
