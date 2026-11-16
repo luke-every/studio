@@ -28,6 +28,8 @@ import { useHandoffStatus } from "@/components/handoff/use-handoff-status";
 import type { Selection } from "@/lib/handoff-selection";
 import { markHandoffComponent, reviewToken, unmarkHandoffComponent } from "@/lib/registry/actions";
 import { useUser } from "@/lib/use-user";
+import { suggestionsOf } from "@/lib/handoff-suggest";
+import { useDismissed } from "@/components/handoff/use-dismissed";
 import { AvatarStack } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
 import { collaborators } from "@/lib/registry/select";
@@ -204,6 +206,22 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const [markedAt, setMarkedAt] = useState(0);
   const handoffData = useHandoffData(prototype.slug, selected.key, !!handoffStatus, `${JSON.stringify(handoffStatus)}|${markedAt}`);
   const { name: me } = useUser();
+  const dismissed = useDismissed(`${prototype.slug}:${selected.key}`);
+  const markers = handoffData && !handoffStatus?.signedBy
+    ? {
+        onMark: async (mark: Parameters<typeof markHandoffComponent>[0]["mark"]) => {
+          const result = await markHandoffComponent({ slug: prototype.slug, key: selected.key, mark, by: me ?? "" });
+          if (!result.ok) notify(result.error, true);
+          setMarkedAt((n) => n + 1);
+        },
+        onUnmark: async (id: string) => {
+          const result = await unmarkHandoffComponent({ slug: prototype.slug, key: selected.key, id });
+          if (!result.ok) notify(result.error, true);
+          setMarkedAt((n) => n + 1);
+        },
+      }
+    : undefined;
+  const suggested = handoffData && markers ? suggestionsOf(handoffData).filter((item) => !dismissed.ids.includes(item.id)) : [];
   const [pickedSection, setPickedSection] = useState<Selection | null>(null);
   const folder = (selected.url ?? "").split("/").pop() ?? "";
   const openHandoff = useCallback(() => setUrlHash("handoff"), []);
@@ -340,7 +358,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           variants={variantsCanvas}
           readyForDev={handoffStatus?.signedBy ? handoffStatus.variants : null}
           handoffInspect={handoffData ? { elements: handoffData.elements, onSelect: setPickedSection, selection: pickedSection } : undefined}
-          handoffSheet={handoffData?.marks.length ? { marks: handoffData.marks } : undefined}
+          handoffSheet={handoffData && (handoffData.marks.length || suggested.length) ? { marks: handoffData.marks, suggestions: suggested, onAccept: markers ? (item) => void markers.onMark({ name: item.name, file: item.file, line: item.line, endLine: item.endLine, find: item.find, screen: item.screen }) : undefined, onDismiss: dismissed.dismiss } : undefined}
           inspecting={!!pickedSection}
           inspectInPanel
           inspectPanel={
@@ -351,22 +369,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
                 selection={pickedSection}
                 onClose={() => setPickedSection(null)}
                 onSelect={setPickedSection}
-                marks={
-                  handoffStatus?.signedBy
-                    ? undefined
-                    : {
-                        onMark: async (mark) => {
-                          const result = await markHandoffComponent({ slug: prototype.slug, key: selected.key, mark, by: me ?? "" });
-                          if (!result.ok) notify(result.error, true);
-                          setMarkedAt((n) => n + 1);
-                        },
-                        onUnmark: async (id) => {
-                          const result = await unmarkHandoffComponent({ slug: prototype.slug, key: selected.key, id });
-                          if (!result.ok) notify(result.error, true);
-                          setMarkedAt((n) => n + 1);
-                        },
-                      }
-                }
+                marks={markers}
                 variantLabel={(id) => [variantsCanvas?.flow, flow].flatMap((one) => one?.screens.find((screen) => screen.id === id)?.name ?? [])[0] ?? id}
                 briefUrl={async (target) => {
                   const minted = await reviewToken(prototype.slug, folder);

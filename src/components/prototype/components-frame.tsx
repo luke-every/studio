@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLoadSlot } from "@/components/handoff/preview-queue";
 import { clipOf } from "@/components/prototype/frame-page";
 import type { Mark } from "@/lib/handoff";
+import type { Suggestion } from "@/lib/handoff-suggest";
 import type { Clip } from "@/lib/handoff-clip";
 import type { Device } from "@/lib/phone";
 
@@ -24,7 +25,7 @@ const TILE_PAD = 24;
 const START_HEIGHT = 160;
 
 /** One mark at one breakpoint: the element as that design draws it, at that width, on a light ground. */
-function Tile({ mark, src, device, scale, priority }: { mark: Mark; src: string | undefined; device: Device; scale: number; priority: number }) {
+function Tile({ mark, src, device, scale, priority }: { mark: Pick<Mark, "name" | "find">; src: string | undefined; device: Device; scale: number; priority: number }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const { go, done } = useLoadSlot(priority);
   const [clip, setClip] = useState<Clip | "missing" | null>(src ? null : "missing");
@@ -81,8 +82,27 @@ function Tile({ mark, src, device, scale, priority }: { mark: Mark; src: string 
   );
 }
 
+/** A button in the frame's own units: it zooms with everything else. */
+function FrameButton({ children, onClick, solid = false }: { children: string; onClick: () => void; solid?: boolean }) {
+  return (
+    <button
+      type="button"
+      // The canvas pans from a press anywhere on it; this is a press on a button.
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={onClick}
+      style={{ fontSize: 20, padding: "8px 24px" }}
+      className={`rounded-[var(--r-full)] font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${solid ? "bg-[var(--sheet-foreground)] text-[var(--sheet)] hover:opacity-90" : "text-[var(--sheet-muted)] hover:text-[var(--sheet-foreground)]"}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function ComponentsFrame({
   marks,
+  suggestions = [],
+  onAccept,
+  onDismiss,
   pages,
   devices,
   scale,
@@ -90,6 +110,10 @@ export function ComponentsFrame({
   left,
 }: {
   marks: Mark[];
+  /** What the scan thinks is new and isn't marked: shown faded, to add or turn away. */
+  suggestions?: Suggestion[];
+  onAccept?: (suggestion: Suggestion) => void;
+  onDismiss?: (id: string) => void;
   /** The address of each design's page, by the design's id. */
   pages: Record<string, string>;
   devices: Device[];
@@ -132,6 +156,34 @@ export function ComponentsFrame({
                   {device.name}
                 </figcaption>
                 <Tile mark={mark} src={pages[mark.screen]} device={device} scale={scale} priority={row} />
+              </figure>
+            ))}
+          </div>
+        </section>
+      ))}
+      {suggestions.map((suggestion, index) => (
+        <section key={suggestion.id} className="flex flex-col" style={{ gap: TILE_GAP }}>
+          <h3 style={{ fontSize: 24, gap: 24 }} className="flex items-center font-medium">
+            <span className="flex items-baseline" style={{ gap: 16 }}>
+              {suggestion.name}
+              <span style={{ fontSize: 20 }} className="font-normal text-[var(--sheet-muted)]">
+                Suggested
+              </span>
+            </span>
+            <span className="flex items-center" style={{ gap: 8 }}>
+              <FrameButton solid onClick={() => onAccept?.(suggestion)}>
+                Add
+              </FrameButton>
+              <FrameButton onClick={() => onDismiss?.(suggestion.id)}>Dismiss</FrameButton>
+            </span>
+          </h3>
+          <div className="flex items-start opacity-60" style={{ gap: TILE_GAP }}>
+            {devices.map((device) => (
+              <figure key={device.id} className="flex flex-col" style={{ gap: 16 }}>
+                <figcaption style={{ fontSize: 20 }} className="text-[var(--sheet-muted)]">
+                  {device.name}
+                </figcaption>
+                <Tile mark={suggestion} src={pages[suggestion.screen]} device={device} scale={scale} priority={marks.length + index} />
               </figure>
             ))}
           </div>

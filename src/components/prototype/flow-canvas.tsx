@@ -4,6 +4,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CodeIcon, FitIcon, PlayIcon } from "@/components/shell/nav-icons";
 import type { Mark } from "@/lib/handoff";
+import type { Suggestion } from "@/lib/handoff-suggest";
 import type { SourceEl } from "@/lib/handoff-clip";
 import { targetOf, type Selection } from "@/lib/handoff-selection";
 import { IconButton } from "@/components/ui/button";
@@ -143,7 +144,7 @@ export function FlowCanvas({
   /** Engineers looking at a handed-off version: a tap on a screen selects the part of the handoff under it (outlined), and says which. */
   inspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void; /** What is selected now: one made elsewhere (the panel's list) is outlined on the screens too. */ selection: Selection | null };
   /** A handed-off version's components marked as new: drawn in a frame after the last screen, at each device that is on. */
-  sheet?: { marks: Mark[] };
+  sheet?: { marks: Mark[]; suggestions?: Suggestion[]; onAccept?: (suggestion: Suggestion) => void; onDismiss?: (id: string) => void };
   /**
    * The version can be edited: a click on a screen selects the part under it as well. `target` is the one selected, as
    * its page describes it; `onPick` is told the next and the frame it is in, or null when it is let go of; `onText` is
@@ -209,7 +210,7 @@ export function FlowCanvas({
   const flowHeight = laid.height - GAP.y;
   // The frame of components stands after the last screen, and is fitted with them once it has said how big it is.
   const [sheetSize, setSheetSize] = useState({ width: 0, height: 0 });
-  const withSheet = !!sheet?.marks.length;
+  const withSheet = !!(sheet?.marks.length || sheet?.suggestions?.length);
   const width = withSheet ? flowWidth + GAP.x + sheetSize.width : flowWidth;
   const height = withSheet ? Math.max(flowHeight, sheetSize.height) : flowHeight;
   // How far each screen has been dragged from where the layout put it, in the canvas's own units.
@@ -921,7 +922,7 @@ export function FlowCanvas({
             </button>
           );
         }) : null}
-        {size && sheet && withSheet ? <ComponentsFrame marks={sheet.marks} pages={Object.fromEntries(flow.screens.map((screen) => [screen.id, `${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`]))} devices={devices} scale={SCREEN_SCALE} onSize={setSheetSize} left={flowWidth + GAP.x} /> : null}
+        {size && sheet && withSheet ? <ComponentsFrame marks={sheet.marks} suggestions={sheet.suggestions} onAccept={sheet.onAccept} onDismiss={sheet.onDismiss} pages={Object.fromEntries(flow.screens.map((screen) => [screen.id, `${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`]))} devices={devices} scale={SCREEN_SCALE} onSize={setSheetSize} left={flowWidth + GAP.x} /> : null}
       </div>
 
       {/* While the pages load: a quiet loader in the middle, which gives way as they arrive. */}
