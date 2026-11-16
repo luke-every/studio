@@ -157,7 +157,8 @@ export async function markComponent(input: { slug: string; key: string; mark: Pi
   if (!name) throw new Error("Give the component a name.");
   return update(input.slug, input.key, (current) => {
     if (!current) throw new Error("There is nothing handed off for this version yet.");
-    if (current.signOff) throw new Error("This handoff is signed off, so its components are final.");
+    // A pushed version's signed-off handoff is what engineering was given; the one on the designer's own machine can still change.
+    if (current.signOff && !working(input.key)) throw new Error("This handoff is signed off, so its components are final.");
     const { file, line, endLine } = input.mark;
     // Only what the scan found in the prototype's own code can be marked.
     if (!current.scope.elements?.[file]?.some((row) => row[0] === line && row[1] === endLine)) throw new Error("That isn't part of the prototype. Reload the page.");
@@ -171,7 +172,8 @@ export async function markComponent(input: { slug: string; key: string; mark: Pi
 export async function unmarkComponent(input: { slug: string; key: string; id: string }) {
   return update(input.slug, input.key, (current) => {
     if (!current) throw new Error("There is nothing handed off for this version yet.");
-    if (current.signOff) throw new Error("This handoff is signed off, so its components are final.");
+    // A pushed version's signed-off handoff is what engineering was given; the one on the designer's own machine can still change.
+    if (current.signOff && !working(input.key)) throw new Error("This handoff is signed off, so its components are final.");
     const next = { ...current, marks: (current.marks ?? []).filter((item) => item.id !== input.id) };
     return { next, message: `Unmarked a component in ${input.slug} ${current.prototype?.version ?? input.key}`, result: next.marks };
   });

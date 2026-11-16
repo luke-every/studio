@@ -207,7 +207,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const handoffData = useHandoffData(prototype.slug, selected.key, !!handoffStatus, `${JSON.stringify(handoffStatus)}|${markedAt}`);
   const { name: me } = useUser();
   const dismissed = useDismissed(`${prototype.slug}:${selected.key}`);
-  const markers = handoffData && !handoffStatus?.signedBy
+  const markers = handoffData && (!handoffStatus?.signedBy || selected.live)
     ? {
         onMark: async (mark: Parameters<typeof markHandoffComponent>[0]["mark"]) => {
           const result = await markHandoffComponent({ slug: prototype.slug, key: selected.key, mark, by: me ?? "" });

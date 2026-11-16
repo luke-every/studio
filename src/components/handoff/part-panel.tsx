@@ -6,6 +6,7 @@ import { ComponentIcon } from "@/components/shell/nav-icons";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { productionHas } from "@/lib/handoff-brief";
+import { isFind } from "@/lib/handoff-clip";
 import { partsOf, type Part } from "@/lib/handoff-parts";
 import type { Mark } from "@/lib/handoff";
 import type { PublicHandoff } from "@/lib/handoff-public";
@@ -146,9 +147,12 @@ export function SelectionPanel({
   const rows = section ? data.elements.filter((item) => item.file === section.file) : [];
   const wholeOwn = !!section && !!data.files[section.file] && rows.length > 0 && section.line <= Math.min(...rows.map((item) => item.line)) && section.endLine >= Math.max(...rows.map((item) => item.endLine));
   const isComponent = !!part || wholeOwn;
-  // What was picked on the canvas, by the section of code that draws it: the one thing that can be marked.
-  const markable = marks && section?.screenId ? rows.find((item) => item.line === section.line && item.endLine === section.endLine) : undefined;
-  const marked = section ? data.marks.find((item) => item.id === `${section.file}:${section.line}`) : undefined;
+  // What is marked is the component whole, whichever part of it was picked: its outermost element, in the design it was picked in.
+  const outer = section && !part?.kit ? rows.filter((item) => item.endLine < 9999).sort((a, b) => a.line - b.line || b.endLine - a.endLine)[0] : undefined;
+  const markable = marks && section && outer ? outer : undefined;
+  const markId = section && outer ? `${section.file}:${outer.line}` : "";
+  const marked = data.marks.find((item) => item.id === markId);
+  const markScreen = section?.screenId ?? data.pages.find((item) => item.file === section?.file)?.variants[0] ?? data.variants[0];
   const title = !selection ? "Ready for dev" : selection.kind === "frame" ? (variantLabel?.(selection.screenId) ?? selection.screenId) : (part?.name ?? selection.file.split("/").pop()?.replace(/\.[jt]sx?$/, ""));
 
   return (
@@ -170,13 +174,13 @@ export function SelectionPanel({
               {section.line <= 1 && section.endLine >= 9999 ? "" : `, lines ${section.line} to ${section.endLine}`}
             </p>
           ) : null}
-          {markable && section?.screenId ? (
+          {markable && section && markScreen ? (
             <MarkControl
-              key={`${section.file}:${section.line}`}
+              key={markId}
               marked={marked}
               defaultName={part?.name ?? section.file.split("/").pop()?.replace(/\.[jt]sx?$/, "") ?? ""}
-              onAdd={(name) => marks!.onMark({ name, file: section.file, line: section.line, endLine: section.endLine, find: markable.find, screen: section.screenId! })}
-              onRemove={() => marks!.onUnmark(`${section.file}:${section.line}`)}
+              onAdd={(name) => marks!.onMark({ name, file: section.file, line: markable.line, endLine: markable.endLine, find: isFind(finding?.mine.find) ? finding.mine.find : markable.find, screen: markScreen })}
+              onRemove={() => marks!.onUnmark(markId)}
             />
           ) : null}
           {matched ? (
