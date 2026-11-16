@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { publicHandoff } from "@/lib/handoff-public";
-import { decisionProblem, handoffSchema, undecided, type Decision, type Handoff } from "@/lib/handoff";
+import { decisionProblem, handoffSchema, undecided, type Decision, type Handoff, type Mark } from "@/lib/handoff";
 
 import { getPrototype } from "./index";
 import { readStudioFile, updateStudioFile, workingCopiesOn, workingFolder, WORKING_VERSION } from "./local-prototypes";
@@ -50,7 +50,7 @@ export async function handoffPublic(slug: string, key: string) {
 /** How far a handoff has got, for the row on the prototype's page: small, since it is asked for every few seconds. */
 export async function handoffStatus(slug: string, key: string) {
   const current = await readHandoff(slug, key);
-  return current ? { total: current.findings.length, left: undecided(current), signedBy: current.signOff?.by ?? null, variants: current.scope.variants.map((variant) => variant.id), scannedAt: current.scannedAt } : null;
+  return current ? { total: current.findings.length, marked: current.marks?.length ?? 0, left: undecided(current), signedBy: current.signOff?.by ?? null, variants: current.scope.variants.map((variant) => variant.id), scannedAt: current.scannedAt } : null;
 }
 
 async function update<T>(slug: string, key: string, change: (current: Handoff | null) => { next: Handoff; message: string; result: T }): Promise<T> {
@@ -88,6 +88,7 @@ export async function saveFindings(input: { slug: string; version: string; hando
       fixed: scanned.fixed ?? current?.fixed,
       exact: scanned.exact ?? current?.exact,
       applied: current?.applied ?? null,
+      marks: current?.marks,
       prototype: { slug: input.slug, version: version.version },
       findings: scanned.findings.map((finding) => {
         const kept = before.get(finding.id);
@@ -145,6 +146,34 @@ export async function decide(input: { slug: string; key: string; id: string; dec
     }
     const next = { ...current, findings: current.findings.map((item) => (item.id === input.id ? { ...item, decision } : item)) };
     return { next, message: `Handoff decision on ${input.slug} ${current.prototype?.version ?? input.key}`, result: next };
+  });
+}
+
+/** A section of the prototype's code marked as a new component, or marked again under another name. Until the handoff is signed off. */
+export async function markComponent(input: { slug: string; key: string; mark: Pick<Mark, "name" | "file" | "line" | "endLine" | "find" | "screen">; by: string }) {
+  const by = input.by.trim();
+  if (!by) throw new Error("Choose who you are first: a mark carries your name.");
+  const name = input.mark.name.trim();
+  if (!name) throw new Error("Give the component a name.");
+  return update(input.slug, input.key, (current) => {
+    if (!current) throw new Error("There is nothing handed off for this version yet.");
+    if (current.signOff) throw new Error("This handoff is signed off, so its components are final.");
+    const { file, line, endLine } = input.mark;
+    // Only what the scan found in the prototype's own code can be marked.
+    if (!current.scope.elements?.[file]?.some((row) => row[0] === line && row[1] === endLine)) throw new Error("That isn't part of the prototype. Reload the page.");
+    const id = `${file}:${line}`;
+    const mark: Mark = { ...input.mark, id, name, by, at: new Date().toISOString() };
+    const next = { ...current, marks: [...(current.marks ?? []).filter((item) => item.id !== id), mark] };
+    return { next, message: `Marked ${name} in ${input.slug} ${current.prototype?.version ?? input.key}`, result: next.marks };
+  });
+}
+
+export async function unmarkComponent(input: { slug: string; key: string; id: string }) {
+  return update(input.slug, input.key, (current) => {
+    if (!current) throw new Error("There is nothing handed off for this version yet.");
+    if (current.signOff) throw new Error("This handoff is signed off, so its components are final.");
+    const next = { ...current, marks: (current.marks ?? []).filter((item) => item.id !== input.id) };
+    return { next, message: `Unmarked a component in ${input.slug} ${current.prototype?.version ?? input.key}`, result: next.marks };
   });
 }
 

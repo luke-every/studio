@@ -26,7 +26,8 @@ import { SelectionPanel } from "@/components/handoff/part-panel";
 import { useHandoffData } from "@/components/handoff/use-handoff-data";
 import { useHandoffStatus } from "@/components/handoff/use-handoff-status";
 import type { Selection } from "@/lib/handoff-selection";
-import { reviewToken } from "@/lib/registry/actions";
+import { markHandoffComponent, reviewToken, unmarkHandoffComponent } from "@/lib/registry/actions";
+import { useUser } from "@/lib/use-user";
 import { AvatarStack } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
 import { collaborators } from "@/lib/registry/select";
@@ -199,7 +200,10 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // Asked again when the review is closed, and every few seconds on a running prototype (see the hook).
   const handoffStatus = useHandoffStatus(prototype.slug, selected.key, !!selected.live, handoffOpen);
   // With a handoff, whatever is picked on the canvas (a design, or a section of its code) gets a link and a brief for an agent, in the side panel.
-  const handoffData = useHandoffData(prototype.slug, selected.key, !!handoffStatus, JSON.stringify(handoffStatus));
+  // Components marked here show at once, without waiting for the next time the handoff is asked for.
+  const [markedAt, setMarkedAt] = useState(0);
+  const handoffData = useHandoffData(prototype.slug, selected.key, !!handoffStatus, `${JSON.stringify(handoffStatus)}|${markedAt}`);
+  const { name: me } = useUser();
   const [pickedSection, setPickedSection] = useState<Selection | null>(null);
   const folder = (selected.url ?? "").split("/").pop() ?? "";
   const openHandoff = useCallback(() => setUrlHash("handoff"), []);
@@ -336,7 +340,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           variants={variantsCanvas}
           readyForDev={handoffStatus?.signedBy ? handoffStatus.variants : null}
           handoffInspect={handoffData ? { elements: handoffData.elements, onSelect: setPickedSection, selection: pickedSection } : undefined}
-          handoffSheet={handoffData?.components.length && typeof window !== "undefined" ? { items: handoffData.components, theme: handoffData.theme, fontBase: `${window.location.origin}${selected.url ?? ""}/` } : undefined}
+          handoffSheet={handoffData?.marks.length ? { marks: handoffData.marks } : undefined}
           inspecting={!!pickedSection}
           inspectInPanel
           inspectPanel={
@@ -347,6 +351,22 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
                 selection={pickedSection}
                 onClose={() => setPickedSection(null)}
                 onSelect={setPickedSection}
+                marks={
+                  handoffStatus?.signedBy
+                    ? undefined
+                    : {
+                        onMark: async (mark) => {
+                          const result = await markHandoffComponent({ slug: prototype.slug, key: selected.key, mark, by: me ?? "" });
+                          if (!result.ok) notify(result.error, true);
+                          setMarkedAt((n) => n + 1);
+                        },
+                        onUnmark: async (id) => {
+                          const result = await unmarkHandoffComponent({ slug: prototype.slug, key: selected.key, id });
+                          if (!result.ok) notify(result.error, true);
+                          setMarkedAt((n) => n + 1);
+                        },
+                      }
+                }
                 variantLabel={(id) => [variantsCanvas?.flow, flow].flatMap((one) => one?.screens.find((screen) => screen.id === id)?.name ?? [])[0] ?? id}
                 briefUrl={async (target) => {
                   const minted = await reviewToken(prototype.slug, folder);

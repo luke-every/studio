@@ -55,6 +55,24 @@ export const findingSchema = z.object({
 });
 export type Finding = z.infer<typeof findingSchema>;
 
+/**
+ * A component the designer marked as new: a section of the prototype's own code, picked on the canvas, that engineering
+ * has something to build. `find` is how to recognise it in the running page, and `screen` the design it was picked in,
+ * so the canvas can draw it from there.
+ */
+export const markSchema = z.object({
+  id: z.string().max(600),
+  name: z.string().min(1).max(120),
+  file: z.string().max(500),
+  line: z.number().int(),
+  endLine: z.number().int(),
+  find: z.object({ tag: z.string().max(40).optional(), classes: z.array(z.string().max(200)).max(60), text: z.string().max(200).optional(), component: z.string().max(120).optional() }),
+  screen: z.string().max(80),
+  by: z.string().max(80),
+  at: z.string(),
+});
+export type Mark = z.infer<typeof markSchema>;
+
 export const handoffSchema = z.object({
   schema: z.literal(1),
   prototype: z.object({ slug: z.string(), version: z.string() }).nullable(),
@@ -82,6 +100,8 @@ export const handoffSchema = z.object({
     .optional(),
   /** The live files that are not as they were when this was scanned, as of the /push that carried it here: the handoff may no longer describe them. */
   changedSince: z.array(z.string().max(500)).max(2000).optional(),
+  /** The components the designer marked as new, for the frame beside the flow. Kept through a scan. */
+  marks: z.array(markSchema).max(200).optional(),
   /** The components a finding is "Built from", compiled to draw, by file: kept once however many findings use them. */
   modules: z.record(z.string(), z.string().max(250000)).optional(),
   /** What came with the prototype from the starter, a kit or a template, untouched: not reviewed, listed for engineering with how it differs from production's. */

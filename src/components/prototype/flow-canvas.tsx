@@ -3,9 +3,8 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CodeIcon, FitIcon, PlayIcon } from "@/components/shell/nav-icons";
-import type { Handoff } from "@/lib/handoff";
+import type { Mark } from "@/lib/handoff";
 import type { SourceEl } from "@/lib/handoff-clip";
-import type { PublicComponent } from "@/lib/handoff-public";
 import { targetOf, type Selection } from "@/lib/handoff-selection";
 import { IconButton } from "@/components/ui/button";
 import type { Spot } from "@/lib/anchor";
@@ -143,8 +142,8 @@ export function FlowCanvas({
   ready?: (screenId: string) => boolean;
   /** Engineers looking at a handed-off version: a tap on a screen selects the part of the handoff under it (outlined), and says which. */
   inspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void; /** What is selected now: one made elsewhere (the panel's list) is outlined on the screens too. */ selection: Selection | null };
-  /** A handed-off version's new and extended components: drawn in a frame after the last screen, at each device that is on. */
-  sheet?: { items: PublicComponent[]; theme: Handoff["theme"]; fontBase: string };
+  /** A handed-off version's components marked as new: drawn in a frame after the last screen, at each device that is on. */
+  sheet?: { marks: Mark[] };
   /**
    * The version can be edited: a click on a screen selects the part under it as well. `target` is the one selected, as
    * its page describes it; `onPick` is told the next and the frame it is in, or null when it is let go of; `onText` is
@@ -210,7 +209,7 @@ export function FlowCanvas({
   const flowHeight = laid.height - GAP.y;
   // The frame of components stands after the last screen, and is fitted with them once it has said how big it is.
   const [sheetSize, setSheetSize] = useState({ width: 0, height: 0 });
-  const withSheet = !!sheet?.items.length;
+  const withSheet = !!sheet?.marks.length;
   const width = withSheet ? flowWidth + GAP.x + sheetSize.width : flowWidth;
   const height = withSheet ? Math.max(flowHeight, sheetSize.height) : flowHeight;
   // How far each screen has been dragged from where the layout put it, in the canvas's own units.
@@ -322,7 +321,7 @@ export function FlowCanvas({
     setInspected(hit ? { id: key, copyId: found.copy.id, box: hit.box } : null);
     setEchoes([]);
     // Whatever is tapped is a section of the code; on bare page it is the screen itself.
-    select(hit ? { kind: "section", file: hit.file, line: hit.line, endLine: hit.endLine } : { kind: "frame", screenId: found.copy.screen.id });
+    select(hit ? { kind: "section", file: hit.file, line: hit.line, endLine: hit.endLine, screenId: found.copy.screen.id } : { kind: "frame", screenId: found.copy.screen.id });
     if (hit) void echo(found.copy, key, (frame) => handoffPartBox(frame, hit.find, hit.index));
   };
   // The element selected to edit, and the screen it is on; only while it is still the one the page holds.
@@ -922,7 +921,7 @@ export function FlowCanvas({
             </button>
           );
         }) : null}
-        {size && sheet && withSheet ? <ComponentsFrame items={sheet.items} theme={sheet.theme} fontBase={sheet.fontBase} devices={devices} scale={SCREEN_SCALE} onSize={setSheetSize} left={flowWidth + GAP.x} /> : null}
+        {size && sheet && withSheet ? <ComponentsFrame marks={sheet.marks} pages={Object.fromEntries(flow.screens.map((screen) => [screen.id, `${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`]))} devices={devices} scale={SCREEN_SCALE} onSize={setSheetSize} left={flowWidth + GAP.x} /> : null}
       </div>
 
       {/* While the pages load: a quiet loader in the middle, which gives way as they arrive. */}

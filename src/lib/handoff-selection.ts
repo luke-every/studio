@@ -2,7 +2,7 @@
  * What an engineer has picked in a handed-off version's canvas: a whole design (a frame), or a section of the code
  * that draws what they tapped in it. Either can be given to their agent as a brief of just that.
  */
-export type Selection = { kind: "frame"; screenId: string } | { kind: "section"; file: string; line: number; endLine: number };
+export type Selection = { kind: "frame"; screenId: string } | { kind: "section"; file: string; line: number; endLine: number; /** The design it was picked in, when it was picked on the canvas. */ screenId?: string };
 
 /** The target a brief is asked for, as it goes in a link: `design:<id>` or `src:<file>:<first line>-<last line>`. */
 export function targetOf(selection: Selection) {

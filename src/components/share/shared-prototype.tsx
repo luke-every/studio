@@ -277,7 +277,7 @@ function Shared({
           variants={variantsCanvas}
           readyForDev={handoff ? handoff.variants : null}
           handoffInspect={handoff ? { elements: handoff.elements, onSelect: setSection, selection: section } : undefined}
-          handoffSheet={handoff?.components.length && typeof window !== "undefined" ? { items: handoff.components, theme: handoff.theme, fontBase: `${window.location.origin}${version.url}/` } : undefined}
+          handoffSheet={handoff?.marks.length ? { marks: handoff.marks } : undefined}
           inspectPanel={
             handoff ? (
               <SelectionPanel

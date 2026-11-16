@@ -227,6 +227,15 @@ export async function decideFinding(input: Parameters<typeof handoff.decide>[0])
   return attempt(() => handoff.decide(input), []);
 }
 
+/** A component marked as new on the canvas, or taken off again (see `markComponent`). */
+export async function markHandoffComponent(input: Parameters<typeof handoff.markComponent>[0]) {
+  return attempt(() => handoff.markComponent(input), []);
+}
+
+export async function unmarkHandoffComponent(input: Parameters<typeof handoff.unmarkComponent>[0]) {
+  return attempt(() => handoff.unmarkComponent(input), []);
+}
+
 export async function signOffHandoff(input: Parameters<typeof handoff.signOff>[0]) {
   return attempt(() => handoff.signOff(input), []);
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { productionHas } from "@/lib/handoff-brief";
 import { partsOf, type Part } from "@/lib/handoff-parts";
+import type { Mark } from "@/lib/handoff";
 import type { PublicHandoff } from "@/lib/handoff-public";
 import { targetOf, type Selection } from "@/lib/handoff-selection";
 
@@ -42,6 +43,52 @@ function partOfFile(parts: Part[], file: string) {
   return here.find((part) => !part.finding?.mine.element) ?? here[0];
 }
 
+/** Marking what was picked as a new component (the designer's), or taking it off again. */
+function MarkControl({ marked, defaultName, onAdd, onRemove }: { marked: Mark | undefined; defaultName: string; onAdd: (name: string) => Promise<void> | void; onRemove: () => Promise<void> | void }) {
+  const [name, setName] = useState(defaultName);
+  const [busy, setBusy] = useState(false);
+  const run = async (work: () => Promise<void> | void) => {
+    setBusy(true);
+    try {
+      await work();
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (marked) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+          <ComponentMark />
+          <span className="truncate">{marked.name}</span>
+        </span>
+        <Button className="h-8 px-3" loading={busy} onClick={() => void run(onRemove)}>
+          Remove
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (name.trim()) void run(() => onAdd(name.trim()));
+      }}
+      className="flex flex-col gap-2"
+    >
+      <input
+        aria-label="Component name"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        className="h-8 w-full rounded-[var(--r-md)] bg-surface-inset px-2 text-ui text-foreground outline-none focus-visible:ring-1 focus-visible:ring-[var(--focus-ring)]"
+      />
+      <Button type="submit" variant="primary" className="h-8 self-start px-3" loading={busy} disabled={!name.trim()}>
+        Add to components
+      </Button>
+    </form>
+  );
+}
+
 /**
  * What an engineer sees when they pick something in a handed-off version's canvas: a whole design, or the section of the
  * code that draws what they tapped. What it is and what to do about it, and a link and a brief of just that for their agent.
@@ -53,6 +100,7 @@ export function SelectionPanel({
   briefUrl,
   onSelect,
   variantLabel,
+  marks,
   bare = false,
 }: {
   data: PublicHandoff;
@@ -63,6 +111,8 @@ export function SelectionPanel({
   /** The link an agent fetches to get the brief for just a target. */
   briefUrl?: (target: string) => string | Promise<string>;
   variantLabel?: (id: string) => string;
+  /** The designer's: what is picked on the canvas can be marked as a new component. Without it the panel only reads. */
+  marks?: { onMark: (input: Pick<Mark, "name" | "file" | "line" | "endLine" | "find" | "screen">) => Promise<void> | void; onUnmark: (id: string) => Promise<void> | void };
   /** Inside a panel that is already a card: no card of its own. */
   bare?: boolean;
 }) {
@@ -96,6 +146,9 @@ export function SelectionPanel({
   const rows = section ? data.elements.filter((item) => item.file === section.file) : [];
   const wholeOwn = !!section && !!data.files[section.file] && rows.length > 0 && section.line <= Math.min(...rows.map((item) => item.line)) && section.endLine >= Math.max(...rows.map((item) => item.endLine));
   const isComponent = !!part || wholeOwn;
+  // What was picked on the canvas, by the section of code that draws it: the one thing that can be marked.
+  const markable = marks && section?.screenId ? rows.find((item) => item.line === section.line && item.endLine === section.endLine) : undefined;
+  const marked = section ? data.marks.find((item) => item.id === `${section.file}:${section.line}`) : undefined;
   const title = !selection ? "Ready for dev" : selection.kind === "frame" ? (variantLabel?.(selection.screenId) ?? selection.screenId) : (part?.name ?? selection.file.split("/").pop()?.replace(/\.[jt]sx?$/, ""));
 
   return (
@@ -116,6 +169,15 @@ export function SelectionPanel({
               {section.file}
               {section.line <= 1 && section.endLine >= 9999 ? "" : `, lines ${section.line} to ${section.endLine}`}
             </p>
+          ) : null}
+          {markable && section?.screenId ? (
+            <MarkControl
+              key={`${section.file}:${section.line}`}
+              marked={marked}
+              defaultName={part?.name ?? section.file.split("/").pop()?.replace(/\.[jt]sx?$/, "") ?? ""}
+              onAdd={(name) => marks!.onMark({ name, file: section.file, line: section.line, endLine: section.endLine, find: markable.find, screen: section.screenId! })}
+              onRemove={() => marks!.onUnmark(`${section.file}:${section.line}`)}
+            />
           ) : null}
           {matched ? (
             <>
