@@ -14,9 +14,10 @@ import { MotionSheet } from "@/components/motion";
 import { ShareMenu } from "@/components/prototype/share-menu";
 import { deviceIcons } from "@/components/prototype/view-menu";
 
-import { CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, FoldIcon, GithubIcon } from "@/components/shell/nav-icons";
+import { CodeIcon, CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, FoldIcon, GithubIcon } from "@/components/shell/nav-icons";
 
 import { controlOn, IconButton } from "./button";
+import { Dot, type Tone } from "./chip";
 import { DialogForm } from "./dialog-form";
 import { Toggle } from "./toggle";
 import { withParams, type Flow, type FlowScreen } from "@/lib/flow";
@@ -81,6 +82,8 @@ export function PrototypeFrame({
   share,
   corner,
   bottom,
+  handoff,
+  side,
   center,
   device,
   onDevice,
@@ -123,8 +126,12 @@ export function PrototypeFrame({
   corner?: ReactNode;
   /** Which version the Share menu in the corner links to. */
   share?: { slug: string };
+  /** Beside the canvas button: a handoff has been scanned for this version. The dot says how far it has got. */
+  handoff?: { label: string; tone: Tone; hollow?: boolean; onOpen: () => void };
   /** On a phone only: a control in the middle of the first row of the bar. */
   bottom?: ReactNode;
+  /** Down the tile's left edge on a wide screen: what belongs to the prototype but not to its frame (a handoff, its variants). */
+  side?: ReactNode;
   /** The phone picker and sizing, in the middle of the bar. Told the scale the preview is drawn at, and above a screen opened on the canvas the device that copy of it is on. */
   center?: (info: { scale: number | null; device?: Device }) => ReactNode;
   /** The phone it is laid out for. */
@@ -625,6 +632,8 @@ export function PrototypeFrame({
       onClick={(event) => dev && !showingFlow && !(event.target as Element).closest("button, a") && deselect()}
       className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${bare || showingFlow ? "" : "max-sm:px-6 max-sm:pb-14 max-sm:pt-8"} ${fullscreen ? "lg:rounded-none" : ""}`}
     >
+      {/* Before the bar, at the same level, so the bar's menus (version, share) open over it. */}
+      {side ? <div className="absolute bottom-8 left-8 top-24 z-[var(--z-raised)] flex w-60 flex-col gap-4 overflow-y-auto max-sm:hidden [scrollbar-width:thin]">{side}</div> : null}
       {/* The bar lies over the top of the canvas: only its controls take a press, so a screen or button under the gaps between them can still be used. */}
       <div key={dev || commenting ? "mode" : "view"} style={bare ? { display: "none" } : undefined} className="bar-in pointer-events-none relative z-[var(--z-raised)] grid *:pointer-events-auto min-h-16 items-center gap-3 max-sm:mb-2 max-sm:grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] sm:px-8 sm:py-8">
         {dev || commenting ? (
@@ -711,6 +720,14 @@ export function PrototypeFrame({
                   </div>
                 )
               ) : null}
+              {handoff && url && !showingFlow ? (
+                <div className="relative max-sm:hidden">
+                  <IconButton label={handoff.label} aria-haspopup="dialog" onClick={handoff.onOpen}>
+                    <CodeIcon />
+                  </IconButton>
+                  <Dot tone={handoff.tone} hollow={handoff.hollow} className="pointer-events-none absolute right-1.5 top-1.5" />
+                </div>
+              ) : null}
             </div>
             {/* Picking a phone makes no sense on a phone. */}
             <div className="hidden justify-self-center sm:block">
@@ -765,6 +782,16 @@ export function PrototypeFrame({
                     </IconButton>
                   </span>
                 ) : null}
+                {share ? (
+                  <div className="max-sm:justify-self-end max-sm:[grid-area:1/3]">
+                    <ShareMenu
+                      {...share}
+                      stage={stage}
+                      newTab={newTab}
+                      onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined}
+                    />
+                  </div>
+                ) : null}
                 <span className={`hidden ${showingFlow ? "" : "lg:block"}`}>
                   <IconButton
                     label={fullscreen ? "Exit full screen (F)" : "Full screen (F)"}
@@ -776,21 +803,12 @@ export function PrototypeFrame({
                     <ExpandIcon />
                   </IconButton>
                 </span>
-                {share ? (
-                  <div className="max-sm:justify-self-end max-sm:[grid-area:1/3]">
-                    <ShareMenu
-                      {...share}
-                      stage={stage}
-                      newTab={newTab}
-                      onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined}
-                    />
-                  </div>
-                ) : null}
               </div>
             ) : null}
           </>
         )}
       </div>
+
 
       <div
         ref={stage}

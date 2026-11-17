@@ -37,7 +37,7 @@ function LiveRow({ slug, version, on, onSelect }: { slug: string; version: Proto
   };
 
   return (
-    <div className={`${menuItem} justify-between text-foreground ${on ? "bg-surface-hover" : ""}`}>
+    <div className={`${menuItem} justify-between text-foreground ${on ? "bg-menu-hover" : ""}`}>
       <span className="flex min-w-0 flex-col items-start gap-0.5">
         <button type="button" role="option" aria-selected={on} onClick={onSelect} className="flex items-center gap-1.5">
           <LiveDot />
@@ -53,7 +53,7 @@ function LiveRow({ slug, version, on, onSelect }: { slug: string; version: Proto
         type="button"
         onClick={stop}
         disabled={stopping}
-        className="shrink-0 rounded-[var(--r-full)] bg-surface-inset px-1.5 py-0.5 text-xs font-medium text-foreground-muted hover:text-foreground disabled:opacity-60"
+        className="shrink-0 rounded-[var(--r-full)] bg-surface-inset px-1.5 py-0.5 text-xs font-medium text-foreground-muted hover:text-foreground disabled:text-foreground-subtle disabled:hover:text-foreground-subtle"
       >
         {stopping ? "Stopping" : "Stop"}
       </button>
@@ -138,7 +138,7 @@ export function VersionMenu({
                   onSelect(version);
                   setOpen(false);
                 }}
-                className={`${menuItem} cursor-pointer justify-between text-foreground ${on ? "bg-surface-hover" : ""}`}
+                className={`${menuItem} cursor-pointer justify-between text-foreground ${on ? "bg-menu-hover" : ""}`}
               >
                 <span className="flex min-w-0 items-baseline gap-1.5">
                   <span>{version.version}</span>

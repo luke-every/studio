@@ -35,14 +35,13 @@ export function Breadcrumbs() {
   } else if (section === "prototypes" && slug) {
     const prototype = prototypes.find((candidate) => candidate.slug === slug);
     if (prototype) {
-      team(prototype.teamSlug);
-      if (prototype.projectSlug) project(prototype.teamSlug, prototype.projectSlug);
       trail.push({ label: prototype.name });
     }
   }
   if (!trail.length) return null;
 
-  const all = [{ label: "Home", href: "/" }, ...trail];
+  // A prototype's page is the prototype alone: its name, nothing to climb back through.
+  const all = section === "prototypes" ? trail : [{ label: "Home", href: "/" }, ...trail];
 
   return (
     <nav aria-label="Breadcrumbs" className="min-w-0 sm:pl-3">

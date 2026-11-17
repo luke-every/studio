@@ -86,9 +86,8 @@ export function ShareMenu({
         onClose={() => setOpen(false)}
         className="w-60"
         trigger={
-          <IconButton tooltipAlign="end" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open}>
+          <IconButton tooltipAlign="end" onClick={() => setOpen((value) => !value)} aria-label="Share" aria-haspopup="menu" aria-expanded={open}>
             <ShareIcon />
-            Share
           </IconButton>
         }
       >

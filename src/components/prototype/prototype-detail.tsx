@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { ViewMenu } from "@/components/prototype/view-menu";
@@ -8,29 +9,24 @@ import { ControlsPanel, VariantPicker, VariantsDropdown } from "@/components/pro
 import { useVersionVariants } from "@/components/prototype/use-version-variants";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
-import { ColumnHandle, RevealTab } from "@/components/prototype/column-handle";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { hintFullscreen } from "@/lib/fullscreen-hint";
+import type { Tone } from "@/components/ui/chip";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
 import { applyControls, controlParams, controlsInWords, defaultValues, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
 import { withParams, type Flow } from "@/lib/flow";
 import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
-import { useMediaQuery } from "@/lib/use-media-query";
 import { DEFAULT_DEVICE } from "@/lib/phone";
 import { useDevice, useFit, useInApp, useZoom } from "@/lib/use-device";
-import { HandoffNotice } from "@/components/handoff/handoff-notice";
 import { SelectionPanel } from "@/components/handoff/part-panel";
 import { useHandoffData } from "@/components/handoff/use-handoff-data";
-import { useHandoffStatus } from "@/components/handoff/use-handoff-status";
+import { useHandoffStatus, type HandoffStatus } from "@/components/handoff/use-handoff-status";
 import type { Selection } from "@/lib/handoff-selection";
 import { markHandoffComponent, reviewToken, unmarkHandoffComponent } from "@/lib/registry/actions";
 import { useUser } from "@/lib/use-user";
-import { AvatarStack } from "@/components/shell/user-avatar";
-import { Stamp } from "@/components/ui/stamp";
-import { collaborators } from "@/lib/registry/select";
 import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
 
 // The review and what it draws its previews with are only loaded once it is opened.
@@ -50,7 +46,6 @@ const HandoffModal = dynamic(() => import("@/components/handoff/handoff-modal").
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const { markOpened, repoUrl, notify } = useStudio();
-  const people = collaborators(prototype);
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
   const [inApp, chooseInApp] = useInApp();
@@ -172,23 +167,16 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // What the iframe is given: the address with `studio=1`, held still once the prototype can take control changes as messages.
   const live = useLiveControls(address, `${selected.url}|${variant ?? ""}`, { ...controlParams(offered, values), ...extra }, showingFlow);
   const frameUrl = live.src;
-  // Commenting with the list (the comment button, or C) brings the list, which takes the column's room.
+  // Commenting with the list (the comment button, or C) brings the list over the prototype, so the controls step aside.
   const side = (mode === "view" || (mode === "comment" && !listing)) && !showingFlow;
-  // The column can be dragged out of the way (and tapped back at the left edge); `drag` is how far it is being pulled while it is.
-  const [hidden, setHidden] = useState(false);
-  const [drag, setDrag] = useState(0);
-  const wide = useMediaQuery("(min-width: 64rem)");
-  const columnOpen = side && !(hidden && wide);
-  // Full screen: the nav and the side column go, the prototype fills the window, and the column slides back in while the pointer is at the left edge.
+  // Full screen: the nav goes and the prototype fills the window.
   // The canvas is always looked at this way, whatever the choice was: closing it puts things back as they were.
   const [focusChoice, setFocus] = useState(false);
   // Command-period, as in Figma: everything but the prototype goes, and comes back the same way.
   const [bare, setBare] = useState(false);
   const focus = focusChoice || showingFlow || bare;
-  // Full screen is the prototype alone: no bar, no column, no pins. Command-period is the same without leaving the window.
+  // Full screen is the prototype alone: no bar, no controls, no pins. Command-period is the same without leaving the window.
   const hideAll = bare || focusChoice;
-  const [peek, setPeek] = useState(false);
-  const away = focus && !peek;
   // The nav is the shell's, so it is told through the document: it slides up out of the way while the page below grows into its place.
   useEffect(() => {
     document.documentElement.toggleAttribute("data-fullscreen", focus);
@@ -225,6 +213,20 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
   const githubUrl = repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}${selected.source ? "/_source" : ""}` : undefined;
 
+  // The name is in the nav (see `Breadcrumbs`); the menu sits beside it, in the slots the nav leaves for it.
+  const [slots, setSlots] = useState<Element[]>([]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the nav is outside this page; its slots can only be found once the page is on screen
+  useEffect(() => setSlots([...document.querySelectorAll("[data-nav-slot]")]), []);
+  const menu = (
+    <PrototypeMenu
+      prototype={prototype}
+      version={selected.live ? "Live" : selected.version}
+      githubUrl={githubUrl}
+      onHandoff={openHandoff}
+      onEdit={selected.url && !showingFlow ? () => (setListing(false), setMode("edit")) : undefined}
+    />
+  );
+
   const versionMenu = (
     <VersionMenu
       slug={prototype.slug}
@@ -254,79 +256,13 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // Two columns that always fit the window; whatever is bigger scrolls inside its own column.
   return (
     <div
-      className={`flex w-full flex-col gap-6 pb-6 pt-2 sm:px-8 ${hideAll || showingFlow ? "max-lg:!p-0" : ""} lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:flex-row lg:items-stretch ${
+      className={`flex w-full flex-col gap-6 pb-6 pt-2 sm:px-8 ${hideAll || showingFlow ? "max-lg:!p-0" : ""} lg:relative lg:gap-4 lg:transition-[height,padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] overflow-x-clip lg:items-stretch ${
         focus ? "lg:h-dvh lg:p-0" : "lg:h-[calc(100dvh-var(--nav-height))]"
       }`}
     >
-      {focus && !hideAll ? (
-        <div aria-hidden onPointerEnter={() => setPeek(true)} className="fixed inset-y-0 left-0 z-[var(--z-focus-mode)] w-3 max-lg:hidden" />
-      ) : null}
-      {side && !focus && !hidden ? <ColumnHandle offset={drag} onDrag={setDrag} onHide={() => setHidden(true)} /> : null}
-      {side && !focus && hidden && wide ? <RevealTab onShow={() => setHidden(false)} /> : null}
-      {/* Closing up rather than unmounting, so it slides away as the panel opens beside the canvas. */}
-      <aside
-        inert={focus ? away : !columnOpen}
-        // While the column is being pulled, the room it leaves goes to the prototype as it goes.
-        style={drag ? { width: `max(0px, calc(var(--detail-side-width) + ${drag}px))`, transition: "none" } : undefined}
-        onPointerLeave={() => setPeek(false)}
-        className={`stagger-in [--i:0] sm:[--i:1] lg:[--i:0] ${hideAll ? "max-lg:hidden" : ""} order-1 min-w-0 px-5 sm:order-2 sm:px-0 lg:relative lg:order-1 lg:flex lg:shrink-0 lg:px-0 lg:transition-[width,margin,visibility] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
-          columnOpen && !focus
-            ? "lg:w-[var(--detail-side-width)] lg:overflow-hidden"
-            : focus
-              ? // Closed up like any other mode, but its panel stays drawn so it can come back over the prototype.
-                "lg:z-[var(--z-focus-mode)] lg:-mr-4 lg:w-0 lg:[transform:translateZ(0)] lg:[&>div]:border lg:[&>div]:border-border"
-              : "invisible max-lg:hidden lg:-mr-4 lg:w-0 lg:overflow-hidden"
-        }`}
-      >
-      {/* It travels left and fades as the column closes, at the same pace as the panel arrives. */}
-      <div
-        style={drag ? { translate: `${drag}px 0`, transition: "none" } : undefined}
-        className={`flex min-w-0 flex-1 flex-col gap-6 lg:w-[var(--detail-side-width)] lg:flex-none lg:rounded-[var(--r-tile)] lg:bg-tile lg:p-8 lg:transition-[translate,opacity] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${
-          (focus ? !away : columnOpen) ? "" : "lg:-translate-x-full lg:opacity-0"
-        }`}
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2.5">
-            <div className="flex items-start gap-2">
-              <h1 className="min-w-0 flex-1 text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">{prototype.name}</h1>
-              <PrototypeMenu
-                prototype={prototype}
-                version={selected.live ? "Live" : selected.version}
-                githubUrl={githubUrl}
-                onHandoff={openHandoff}
-                onEdit={selected.url && !showingFlow ? () => (setListing(false), setMode("edit")) : undefined}
-              />
-            </div>
-            <p className="flex items-center gap-1.5 text-ui text-foreground-subtle">
-              <AvatarStack people={people} className="size-5" overlap="-ml-1.5" ring="ring-tile" />
-              <span className="text-foreground-muted">{people.length > 2 ? `${people[0].name} +${people.length - 1}` : people.map((person) => person.name).join(", ")}</span>
-              <span aria-hidden>·</span>
-              <span>
-                Last updated <Stamp iso={prototype.updatedAt} relative />
-              </span>
-            </p>
-          </div>
-          {prototype.archived ? <p className="text-ui text-foreground-subtle">Archived. It is out of the feeds until it is unarchived.</p> : null}
-          <p className="text-base leading-[var(--leading-relaxed)] text-foreground-muted">
-            {prototype.description || "A short description of what this prototype is and the question it is asking will go here."}
-          </p>
-          {/* Read again once the review closes, so it says what was decided there. */}
-          <HandoffNotice status={handoffStatus} onOpen={openHandoff} />
-        </div>
 
-        {/* The variants, when there are some, in a framed block that fills what is left. On a phone they are a dropdown under the prototype instead. */}
-        <div className="min-h-0 flex-1 max-sm:hidden">
-          {options ? (
-            <div className="flex max-h-full flex-col gap-6 overflow-y-auto rounded-[var(--r-control)] border border-border p-4 [scrollbar-width:thin]">
-              {options}
-            </div>
-          ) : null}
-        </div>
-
-      </div>
-      </aside>
-
-      <div className="stagger-in [--i:1] sm:[--i:0] lg:[--i:1] order-2 min-w-0 flex-1 sm:order-1 lg:order-2 lg:min-h-0">
+      {slots.map((slot, index) => createPortal(menu, slot, String(index)))}
+      <div className="stagger-in [--i:0] min-w-0 flex-1 lg:min-h-0">
         <PrototypeFrame
           url={frameUrl}
           openUrl={address}
@@ -389,24 +325,34 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
             if (!next) {
               setFocus(false);
             }
-            setPeek(false);
           }}
           onFullscreen={(next) => {
             // On the canvas it is full screen already, and a choice made there would only show once it is closed.
             if (showingFlow) return;
             setFocus(next);
-            setPeek(false);
             if (next) hintFullscreen(notify);
           }}
           title={`${prototype.name} ${selected.version}`}
           leading={versionMenu}
           share={{ slug: prototype.slug }}
+          side={
+            side && !focus && options ? <div className="flex flex-col gap-6 rounded-[var(--r-control)] border border-border p-4">{options}</div> : undefined
+          }
+          handoff={handoffStatus ? { ...handoffChip(handoffStatus), onOpen: openHandoff } : undefined}
           bottom={options ? <VariantsDropdown label={variantsLabel}>{options}</VariantsDropdown> : undefined}
         />
       </div>
       {handoffOpen ? <HandoffModal prototype={prototype} version={selected} controls={offered} onClose={closeHandoff} /> : null}
     </div>
   );
+}
+
+/** What the handoff button says and which dot it wears, by how far the review has got. */
+function handoffChip(status: HandoffStatus): { label: string; tone: Tone; hollow?: boolean } {
+  const decided = status.total - status.left;
+  if (status.signedBy) return { label: `Handoff: ready for dev, signed off by ${status.signedBy}`, tone: "match" };
+  if (decided === 0) return { label: `Handoff: ${status.total} to decide`, tone: "quiet", hollow: true };
+  return { label: `Handoff: ${decided} of ${status.total} decided`, tone: "near" };
 }
 
 const listenToHash = (listener: () => void) => {

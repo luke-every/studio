@@ -9,6 +9,7 @@ import { IconButton } from "@/components/ui/button";
 import type { ActivityFeed } from "@/lib/use-activity";
 
 import { Breadcrumbs } from "./breadcrumbs";
+import { Logo } from "./logo";
 import { EditProfileModal } from "./profile-modal";
 import { SettingsDialog } from "./settings-dialog";
 import { SearchIcon } from "./nav-icons";
@@ -37,8 +38,8 @@ export function TopNav({ feed, onSwitchUser }: { feed: ActivityFeed; onSwitchUse
     <header className="sticky top-0 z-[var(--z-sticky)] bg-background max-lg:in-data-fullscreen:hidden lg:transition-[translate,margin] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] lg:in-data-fullscreen:-mt-[var(--nav-height)] lg:in-data-fullscreen:-translate-y-full">
       <div className="flex h-[var(--nav-height)] items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-4 justify-self-start">
-          <Link href="/" className="shrink-0 text-md font-medium tracking-[var(--tracking-tight)] text-foreground">
-            Test Kitchen
+          <Link href="/" aria-label="Every Studio home" className="shrink-0">
+            <Logo />
           </Link>
           <div className="flex items-center gap-1 max-sm:hidden">
             {atHome ? (
@@ -50,6 +51,7 @@ export function TopNav({ feed, onSwitchUser }: { feed: ActivityFeed; onSwitchUse
             ) : (
               <Breadcrumbs />
             )}
+            <div data-nav-slot className="empty:hidden" />
           </div>
         </div>
 
@@ -63,7 +65,10 @@ export function TopNav({ feed, onSwitchUser }: { feed: ActivityFeed; onSwitchUse
       </div>
 
       {/* On a phone there is no room beside the name, so where you are gets a row of its own. */}
-      <div className="px-4 pb-2 empty:hidden sm:hidden">{atHome ? <TeamRow /> : <Breadcrumbs />}</div>
+      <div className="flex items-center gap-1 px-4 pb-2 empty:hidden sm:hidden">
+        {atHome ? <TeamRow /> : <Breadcrumbs />}
+        <div data-nav-slot className="empty:hidden" />
+      </div>
 
       <SetupDialog open={setupOpen} onClose={() => setSetupOpen(false)} />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onSetup={() => setSetupOpen(true)} />
