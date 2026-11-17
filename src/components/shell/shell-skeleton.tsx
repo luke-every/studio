@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Logo } from "./logo";
 import { TabBar } from "./tab-bar";
 
 /**
@@ -11,8 +12,8 @@ export function ShellSkeleton() {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-[var(--z-sticky)] bg-background">
         <div className="flex h-[var(--nav-height)] items-center px-4 sm:px-6">
-          <Link href="/" className="shrink-0 text-md font-medium tracking-[var(--tracking-tight)] text-foreground">
-            Test Kitchen
+          <Link href="/" aria-label="Every Studio home" className="shrink-0">
+            <Logo />
           </Link>
         </div>
       </header>

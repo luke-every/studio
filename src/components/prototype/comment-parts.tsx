@@ -68,11 +68,11 @@ type Tip = { left: number; top: number };
  * `beside` puts it next to the pin instead of over it, so the pin still shows
  * where the comment is (the open comment).
  */
-function cornerOf(tip: Tip, height: number, width = WIDTH, beside = false) {
+function cornerOf(tip: Tip, height: number, width = WIDTH, beside = false, goDown?: boolean) {
   const root = document.documentElement;
   const shift = beside ? PIN + GAP : 0;
   const left = tip.left + shift + width > root.clientWidth - EDGE;
-  const down = tip.top - height < EDGE;
+  const down = goDown ?? tip.top - height < EDGE;
   return {
     left,
     down,
@@ -298,11 +298,14 @@ export function Card({
   onOutside,
   busy,
   roomy = false,
+  contained = false,
 }: {
   at: Tip;
   children: ReactNode;
   /** Wider and more open, with softer corners: how an open comment is laid out. */
   roomy?: boolean;
+  /** Never taller than the window: it opens to whichever side of the pin has more room and scrolls inside when it still doesn't fit. */
+  contained?: boolean;
   /** Being worked on (a delete or resolve in flight): it breathes and can't be pressed. */
   busy?: boolean;
   /** Pressing anywhere else, in the studio or in the prototype, calls this. */ onOutside?: () => void;
@@ -313,8 +316,10 @@ export function Card({
   useLayoutEffect(() => {
     const element = box.current;
     if (!element) return undefined;
-    setHeight(element.offsetHeight);
-    const watch = new ResizeObserver(() => setHeight(element.offsetHeight));
+    // Its full height, not the capped one, so growing text can still ask for more room.
+    const measure = () => setHeight(element.scrollHeight);
+    measure();
+    const watch = new ResizeObserver(measure);
     watch.observe(element);
     return () => {
       watch.disconnect();
@@ -344,14 +349,20 @@ export function Card({
       window.removeEventListener("blur", left);
     };
   }, []);
-  const corner = cornerOf(at, height, roomy ? ROOMY_WIDTH : WIDTH, roomy);
+  // Room above the pin and below it; the card takes the side it fits in, else the roomier one, and is capped to it.
+  const root = typeof document === "undefined" ? null : document.documentElement;
+  const above = at.top - EDGE;
+  const below = (root?.clientHeight ?? 0) - (at.top - PIN) - EDGE;
+  const goDown = contained ? (height <= above ? false : height <= below ? true : below > above) : undefined;
+  const corner = cornerOf(at, height, roomy ? ROOMY_WIDTH : WIDTH, roomy, goDown);
+  const cap = contained ? { maxHeight: goDown ? below : above } : undefined;
 
   return createPortal(
     <div
       ref={box}
       // It grows out of its pin, as a menu does out of its control: from whichever corner of it is at the pin.
-      style={{ ...corner.style, transformOrigin: `${corner.left ? "right" : "left"} ${corner.down ? "top" : "bottom"}` }}
-      className={`popover-in fixed flex flex-col ${roomy ? "w-80 gap-4 rounded-3xl p-4" : "w-64 gap-2 rounded-2xl p-3"} ${corner.square} border border-border bg-surface shadow-floating ${busy ? "pulse-soft pointer-events-none" : ""}`}
+      style={{ ...corner.style, ...cap, transformOrigin: `${corner.left ? "right" : "left"} ${corner.down ? "top" : "bottom"}` }}
+      className={`popover-in fixed flex flex-col ${contained ? "overflow-y-auto overscroll-contain [scrollbar-width:thin]" : ""} ${roomy ? "w-80 gap-4 rounded-3xl p-4" : "w-64 gap-2 rounded-2xl p-3"} ${corner.square} border border-border bg-surface shadow-floating ${busy ? "pulse-soft pointer-events-none" : ""}`}
       aria-busy={busy || undefined}
     >
       {children}
@@ -615,10 +626,13 @@ export function CommentCard({
   onCopy,
   onUndo,
   note,
+  contained,
 }: {
   comment: Comment;
   replies: Comment[];
   at: { left: number; top: number };
+  /** See `Card`. */
+  contained?: boolean;
   /** Said above the comment when it isn't shown where it was left: still being looked for, pinned to the nearest match, or not found. */
   note?: string;
   onClose: () => void;
@@ -634,7 +648,7 @@ export function CommentCard({
   const readOnly = !!useSharedComments();
 
   return (
-    <Card at={at} onOutside={onClose} busy={working} roomy>
+    <Card at={at} onOutside={onClose} busy={working} roomy contained={contained}>
       {/* The way Figma lays one out: a header with what can be done to the thread, then who said what, then a box to answer in. */}
       <div className="-mx-4 -mt-1 flex items-center justify-between gap-3 border-b border-divider px-4 pb-3">
         <span className="text-ui font-medium text-foreground">Comment</span>

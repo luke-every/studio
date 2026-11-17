@@ -44,6 +44,7 @@
   --color-surface-elevated: var(--surface-elevated);
   --color-surface-inset: var(--surface-inset);
   --color-surface-hover: var(--surface-hover);
+  --color-menu-hover: var(--menu-hover);
   --color-surface-pressed: var(--surface-pressed);
 
   --color-tile: var(--tile);

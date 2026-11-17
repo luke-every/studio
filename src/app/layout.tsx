@@ -5,7 +5,7 @@ import { ThemeProvider, ThemeScript } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Test Kitchen",
+  title: "Every Studio",
   description: "Explore what we're making.",
 };
 

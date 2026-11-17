@@ -23,7 +23,7 @@ async function shared(token: string) {
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const found = await shared((await params).token);
-  return { title: found ? `${found.prototype.name} ${found.version.version}` : "Test Kitchen", robots: { index: false } };
+  return { title: found ? `${found.prototype.name} ${found.version.version}` : "Every Studio", robots: { index: false } };
 }
 
 export default async function SharePage({ params }: { params: Promise<{ token: string }> }) {

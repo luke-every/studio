@@ -176,6 +176,7 @@ export function CommentLayer({
           replies={replies[open.id] ?? []}
           at={openAs.at}
           note={openAs.note}
+          contained
           onClose={() => onFocus(null)}
           onReply={onReply}
           onResolve={(comment, resolved) => {

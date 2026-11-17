@@ -28,6 +28,7 @@
   --surface-elevated: #ffffff;
   --surface-inset: var(--paper-200);
   --surface-hover: var(--alpha-ink-04);
+  --menu-hover: var(--graphite-100);
   /* A solid control under the pointer: the surface with the same tint mixed into it, not laid over whatever is
      behind. A control can sit over a prototype (the canvas), where a see-through hover would show the page through it.
      Worked out from the surface and the text colour, so it follows each theme. */
@@ -140,6 +141,7 @@
     --surface-elevated: var(--ink-700);
     --surface-inset: #100e0a;
     --surface-hover: var(--alpha-paper-06);
+    --menu-hover: var(--ink-650);
     --surface-pressed: var(--alpha-paper-10);
 
     --tile: var(--ink-800);
@@ -203,6 +205,7 @@
   --surface-elevated: var(--ink-700);
   --surface-inset: #100e0a;
   --surface-hover: var(--alpha-paper-06);
+  --menu-hover: var(--ink-650);
   --surface-pressed: var(--alpha-paper-10);
 
   --tile: var(--ink-800);
