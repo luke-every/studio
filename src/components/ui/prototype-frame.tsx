@@ -14,7 +14,8 @@ import { MotionSheet } from "@/components/motion";
 import { ShareMenu } from "@/components/prototype/share-menu";
 import { deviceIcons } from "@/components/prototype/view-menu";
 
-import { CodeIcon, CommentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, FoldIcon, GithubIcon } from "@/components/shell/nav-icons";
+import { CodeIcon, CommentIcon, ComponentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, FoldIcon, GithubIcon, SlidersIcon } from "@/components/shell/nav-icons";
+import { ComponentsPanel, SHOW_COMPONENTS } from "@/components/prototype/components-panel";
 
 import { controlOn, IconButton } from "./button";
 import { Dot, type Tone } from "./chip";
@@ -27,11 +28,13 @@ import { useFlag } from "@/lib/use-flag";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
-import { describePart, partIn, type Part } from "@/lib/edit-part";
+import { describePart, partIn, type Part, type Tokens } from "@/lib/edit-part";
+import { copyDocument } from "@/components/prototype/copy-page";
+import { CanvasZoomMenu } from "@/components/prototype/canvas-zoom-menu";
 import { EditLayer } from "@/components/prototype/edit-layer";
 import type { SourceEl } from "@/lib/handoff-clip";
 import type { Selection } from "@/lib/handoff-selection";
-import { followPart, setDesignSystem, watchScroll } from "@/components/prototype/frame-page";
+import { followPart, setDesignSystem, watchScrolled } from "@/components/prototype/frame-page";
 import { designSystemOf } from "@/lib/registry/actions";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
 import { watchTaps } from "@/lib/anchor";
@@ -55,6 +58,9 @@ const CANVAS_WARM_MS = 2 * 60 * 1000;
 
 /** How long a change of device takes to play, matching `--dur-standard`; and the transition that plays it. */
 const SIZING_MS = 280;
+/** The stage's left padding in px: the usual `px-8`, and with the options panel open (2rem in, 15rem wide, 1rem clear) 18rem. Keep in step with the classes on the stage. */
+const STAGE_PAD = 32;
+const STAGE_PAD_SIDE = 288;
 const SIZING = "transition-[width,height,transform] duration-[var(--dur-standard)] ease-[var(--curve-spatial)]";
 // Into and out of full screen the frame is sized as a share of the stage, which is itself growing or shrinking: the
 // same duration and curve as the page's own, so the two move as one and arrive together.
@@ -208,6 +214,17 @@ export function PrototypeFrame({
   const screen = opened.address === addressed ? opened.screen : null;
   const url = addressed && screen ? withParams(addressed, screen.params) : addressed;
   // The canvas: the flow if there is one, the variants if there are, and a switch between them when there are both.
+  // The options beside the prototype: open to start with, folded away to a button when they are in the way.
+  const [sideOpen, setSideOpen] = useState(true);
+  // The website's components, to pick from, on the canvas only (the options panel is for the prototype's own view, so the two never
+  // share the left). It is mounted the first time it is opened, which is when its list is asked for, and kept after, so closing
+  // and reopening is instant.
+  const [componentsOpen, setComponentsOpen] = useState(false);
+  const [componentsSeen, setComponentsSeen] = useState(false);
+  const toggleComponents = () => {
+    setComponentsOpen(!componentsOpen);
+    setComponentsSeen(true);
+  };
   const [canvasKind, setCanvasKind] = useState<"flow" | "variants">("flow");
   // Where each device's own height ends, drawn across its screens on the canvas.
   const [fold, setFold] = useState(false);
@@ -301,7 +318,9 @@ export function PrototypeFrame({
   // panel is given a description.
   const [target, setTarget] = useState<Element | null>(null);
   const [remote, setRemote] = useState<{ frame: HTMLIFrameElement; part: Part } | null>(null);
-  const part = editing && target?.isConnected ? describePart(target) : editing ? (remote?.part ?? null) : null;
+  // A part picked on a static copy (the canvas) is read with the tokens the copy was made with: it has no stylesheets of its own.
+  const [copyTokens, setCopyTokens] = useState<Tokens | undefined>();
+  const part = editing && target?.isConnected ? describePart(target, undefined, target.getRootNode() instanceof ShadowRoot ? copyTokens : undefined) : editing ? (remote?.part ?? null) : null;
   const remoteFrame = remote?.frame;
   const remoteSelector = remote?.part.selector;
   useEffect(() => {
@@ -319,7 +338,9 @@ export function PrototypeFrame({
   // The frames the version is on screen in: the prototype's own, or on the canvas one a screen, and an edit is drawn in all of them (see `useEditSession`).
   const canvasBox = useRef<HTMLDivElement>(null);
   const editFrames = () => [...((showingFlow ? canvasBox.current : stage.current)?.querySelectorAll("iframe") ?? [])];
-  const session = useEditSession(url, editFrames);
+  // The screens drawn as copies are painted too, each through its own scoped document (see `copyDocument`).
+  const editCopies = () => [...((showingFlow ? canvasBox.current : null)?.querySelectorAll<HTMLElement>("[data-copy]") ?? [])].flatMap((host) => (host.shadowRoot ? [copyDocument(host.shadowRoot)] : []));
+  const session = useEditSession(url, editFrames, editCopies);
   // A live version can always be edited: what is picked inside one of its design system's components is that component (see `setDesignSystem`). The names are there before the first pick, not after it.
   const liveSlug = edit?.live ? edit.slug : null;
   useEffect(() => {
@@ -405,11 +426,14 @@ export function PrototypeFrame({
     else deselect();
   };
   // A part picked through a frame's page (the canvas; a live version): held as the element where the page can be read.
-  const pickPart = (frame: HTMLIFrameElement | null, found: Part | null) => {
-    const element = found && frame?.contentDocument ? partIn(frame.contentDocument, found.selector) : null;
-    if (!frame || !found || (frame.contentDocument && !element)) return letGo();
+  // On a static copy there is no frame: `scope` is the copy, looked up the same way.
+  const pickPart = (frame: HTMLIFrameElement | null, found: Part | null, scope?: Document | null) => {
+    const doc = frame?.contentDocument ?? scope ?? null;
+    const element = found && doc ? partIn(doc, found.selector) : null;
+    if (!found || (!frame && !scope) || (doc && !element)) return letGo();
     setTarget(element);
-    setRemote(element ? null : { frame, part: found });
+    setCopyTokens(frame ? undefined : found.tokens);
+    setRemote(element || !frame ? null : { frame, part: found });
     if (!editing) changeMode("edit");
   };
 
@@ -519,7 +543,7 @@ export function PrototypeFrame({
   const newTab = openUrl && screen ? withParams(openUrl, screen.params) : (openUrl ?? url);
 
   const stage = useRef<HTMLDivElement>(null);
-  const [space, setSpace] = useState<{ width: number; height: number } | null>(null);
+  const [space, setSpace] = useState<{ width: number; height: number; left: number } | null>(null);
   // The stage with its padding: the window's size in full screen, which doesn't change when the padding does.
   const [whole, setWhole] = useState<{ width: number; height: number } | null>(null);
   // On a phone it is a preview, not a place to work: always scaled to fit the
@@ -527,6 +551,21 @@ export function PrototypeFrame({
   // Safari resizes the window as the address bar slides away while scrolling,
   // and redrawing the prototype for every step of that is slow.
   const narrow = useMediaQuery("(max-width: 639px)");
+  // A desktop is wide enough to run under the options panel (2rem in, 15rem wide, 1rem clear: 18rem), so while it is open the stage keeps that much to its left, and the frame is fitted to what is left of it. A phone or tablet is narrow enough to stay clear, and stays centred.
+  const clearOfSide = !!side && sideOpen && !showingFlow && !bare && device.kind === "desktop" && !narrow;
+  // How the stage's width will be once its padding has moved: the frame is fitted to that straight away, so while the padding glides the frame glides with it instead of chasing a width that changes every frame.
+  const fitWidth = (width: number, left: number) => (narrow ? width : width + left - (clearOfSide ? STAGE_PAD_SIDE : STAGE_PAD));
+  const [sideFor, setSideFor] = useState(clearOfSide);
+  const [sideMoving, setSideMoving] = useState(false);
+  if (sideFor !== clearOfSide) {
+    setSideFor(clearOfSide);
+    setSideMoving(true);
+  }
+  useEffect(() => {
+    if (!sideMoving) return undefined;
+    const timer = window.setTimeout(() => setSideMoving(false), SIZING_MS);
+    return () => window.clearTimeout(timer);
+  }, [sideMoving, sideFor]);
   // On a phone or tablet the new window gets the long-press comment script; on a desktop it is the plain prototype.
   const touch = useMediaQuery("(pointer: coarse)");
   const openWithComments = (href: string) => {
@@ -543,7 +582,8 @@ export function PrototypeFrame({
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      setSpace((now) => (narrow && now ? now : { width, height }));
+      const left = parseFloat(getComputedStyle(element).paddingLeft) || 0;
+      setSpace((now) => (narrow && now ? now : { width, height, left }));
       const box = entry.borderBoxSize?.[0];
       setWhole({ width: box?.inlineSize ?? element.offsetWidth, height: box?.blockSize ?? element.offsetHeight });
     });
@@ -566,7 +606,7 @@ export function PrototypeFrame({
     ? 1
     : space
     ? fit || narrow
-      ? Math.min(space.width / device.width, space.height / device.height)
+      ? Math.min(fitWidth(space.width, space.left) / device.width, space.height / device.height)
       : zoom
     : null;
 
@@ -593,7 +633,7 @@ export function PrototypeFrame({
     const timer = window.setTimeout(() => setSizing(false), SIZING_MS);
     return () => window.clearTimeout(timer);
   }, [sizing, sizedFor]);
-  const scaleOf = (candidate: Device) => (space ? (fit || narrow ? Math.min(space.width / candidate.width, space.height / candidate.height) : zoom) : null);
+  const scaleOf = (candidate: Device) => (space ? (fit || narrow ? Math.min(fitWidth(space.width, space.left) / candidate.width, space.height / candidate.height) : zoom) : null);
   const anchors = [device.kind === "phone" ? device : DEFAULT_DEVICE, ...DEVICES.filter((candidate) => candidate.kind !== "phone")];
   const widthOf = (candidate: Device) => candidate.width * (scaleOf(candidate) ?? 1);
   // Dragging an edge picks the device whose frame is nearest the width the pointer has reached, as it goes: the size jumps
@@ -609,17 +649,20 @@ export function PrototypeFrame({
   };
 
   // The comment buttons: in the bar on a wider screen, under the prototype on a phone.
-  const pinButtons = commentsOf ? (
+  const pinButtons = commentsOf || showingFlow ? (
     <>
-      {comments.length && !minimal ? (
+      {showingFlow ? <CanvasZoomMenu /> : null}
+      {commentsOf && comments.length && !minimal ? (
         <IconButton label={showPins ? "Hide comments" : "Show comments"} onClick={() => setShowPins(!showPins)}>
           {showPins ? <EyeIcon /> : <EyeOffIcon />}
         </IconButton>
       ) : null}
-      <IconButton label="Comment (C)" onClick={() => { changeMode("comment"); setListing(true); }}>
-        <CommentIcon />
-        {openCount ? openCount : null}
-      </IconButton>
+      {commentsOf ? (
+        <IconButton label="Comment (C)" onClick={() => { changeMode("comment"); setListing(true); }}>
+          <CommentIcon />
+          {openCount ? openCount : null}
+        </IconButton>
+      ) : null}
     </>
   ) : null;
 
@@ -633,7 +676,32 @@ export function PrototypeFrame({
       className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${bare || showingFlow ? "" : "max-sm:px-6 max-sm:pb-14 max-sm:pt-8"} ${fullscreen ? "lg:rounded-none" : ""}`}
     >
       {/* Before the bar, at the same level, so the bar's menus (version, share) open over it. */}
-      {side ? <div className="absolute bottom-8 left-8 top-24 z-[var(--z-raised)] flex w-60 flex-col gap-4 overflow-y-auto max-sm:hidden [scrollbar-width:thin]">{side}</div> : null}
+      {SHOW_COMPONENTS && showingFlow && componentsSeen && !dev && !commenting && !bare ? (
+        // Floats over the canvas and takes a press only on the panel itself.
+        <div className="pointer-events-none absolute bottom-8 left-8 top-24 z-[var(--z-raised)] flex w-72 flex-col max-sm:hidden">
+          <div
+            inert={!componentsOpen}
+            className={`min-h-0 w-full flex-1 origin-top-left transition-[opacity,scale] duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${
+              componentsOpen ? "pointer-events-auto" : "pointer-events-none scale-95 opacity-0"
+            }`}
+          >
+            <ComponentsPanel open={componentsOpen} />
+          </div>
+        </div>
+      ) : null}
+      {side && !showingFlow ? (
+        // Only the panel takes a press: the column around it is the prototype's. Its button is in the bar.
+        <div className="pointer-events-none absolute bottom-8 left-8 top-24 z-[var(--z-raised)] flex w-60 flex-col max-sm:hidden">
+          <div
+            inert={!sideOpen}
+            className={`min-h-0 w-full origin-top-left overflow-y-auto transition-[opacity,scale] duration-[var(--dur-standard)] ease-[var(--curve-standard)] [scrollbar-width:thin] ${
+              sideOpen ? "pointer-events-auto" : "pointer-events-none scale-95 opacity-0"
+            }`}
+          >
+            {side}
+          </div>
+        </div>
+      ) : null}
       {/* The bar lies over the top of the canvas: only its controls take a press, so a screen or button under the gaps between them can still be used. */}
       <div key={dev || commenting ? "mode" : "view"} style={bare ? { display: "none" } : undefined} className="bar-in pointer-events-none relative z-[var(--z-raised)] grid *:pointer-events-auto min-h-16 items-center gap-3 max-sm:mb-2 max-sm:grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] sm:px-8 sm:py-8">
         {dev || commenting ? (
@@ -686,6 +754,20 @@ export function PrototypeFrame({
             {/* On the left, the version and how it is looked at; in the middle, the phone it is shown on; on the right, what to do with it. */}
             <div className="flex min-w-0 items-center gap-2 justify-self-start max-sm:contents">
               <div className="max-sm:[grid-area:1/1]">{leading}</div>
+              {side && !showingFlow ? (
+                <span className="max-sm:hidden">
+                  <IconButton label={sideOpen ? "Hide options" : "Show options"} aria-expanded={sideOpen} tooltipAlign="start" onClick={() => setSideOpen((now) => !now)} className={sideOpen ? controlOn : ""}>
+                    <SlidersIcon />
+                  </IconButton>
+                </span>
+              ) : null}
+              {SHOW_COMPONENTS && showingFlow ? (
+                <span className="max-sm:hidden">
+                  <IconButton label={componentsOpen ? "Hide components" : "Show components"} aria-expanded={componentsOpen} tooltipAlign="start" onClick={toggleComponents} className={componentsOpen ? controlOn : ""}>
+                    <ComponentIcon />
+                  </IconButton>
+                </span>
+              ) : null}
               {minimal && githubUrl && url && !showingFlow ? (
                 <span className="hidden lg:block">
                   <IconButton label="Open in GitHub" href={githubUrl} external>
@@ -812,11 +894,11 @@ export function PrototypeFrame({
 
       <div
         ref={stage}
-        className={`flex min-h-0 flex-1 overflow-auto px-0 [scrollbar-width:thin] sm:px-8 sm:pb-10 ${fill ? "!p-0" : bare ? "pt-10" : ""} pb-0 ${showingFlow ? "invisible" : ""}`}>
+        className={`flex min-h-0 flex-1 overflow-auto px-0 [scrollbar-width:thin] sm:px-8 sm:pb-10 ${fill ? "!p-0" : bare ? "pt-10" : ""} ${clearOfSide ? "sm:!pl-[288px]" : ""} ${sideMoving ? "transition-[padding] duration-[var(--dur-standard)] ease-[var(--curve-spatial)]" : ""} pb-0 ${showingFlow ? "invisible" : ""}`}>
         {/* Clipped, not hidden: below 100% the frame's full-size layout box sticks out of this one, and a hidden box can still be scrolled by the prototype (a modal taking focus), which slid the whole phone sideways in Safari. A clipped box can't be scrolled at all. */}
         <div
           style={fill ? { width: "100%", height: "100%" } : scale ? { width: device.width * scale, height: device.height * scale } : { aspectRatio: `${device.width} / ${device.height}` }}
-          className={`relative m-auto shrink-0 ${scale ? "" : "h-full"} ${sizingClass(sizing)}`}
+          className={`relative m-auto shrink-0 ${scale ? "" : "h-full"} ${sizingClass(sizing || (sideMoving ? "device" : false))}`}
         >
         {onDevice && !narrow && !showingFlow && !bare ? (
           <>
@@ -841,7 +923,7 @@ export function PrototypeFrame({
               inset={bars}
               onScrolled={setScrolledDown}
               fill={fill}
-              sizing={sizing}
+              sizing={sizing || (sideMoving ? "device" : false)}
               // Behind the canvas nothing is picked in it: the canvas does its own picking.
               inspect={dev && !showingFlow ? { ...inspect, picking: !interacting } : null}
               // A page on another address (a live version) can't be picked from inside: it is asked, through the studio's own layer over it.
@@ -906,6 +988,7 @@ export function PrototypeFrame({
             controls={center}
             zoom={zoom}
             fit={fit}
+            inApp={inApp}
             // Closed, it isn't looking for pins.
             // The pins are on the canvas whenever it is open, not only while commenting: the eye switch is for the prototype itself.
             comments={showingFlow && commentsUi ? { ...commentsUi, visible: true, list: canvas.setups ? everything : withAsked } : undefined}
@@ -1105,23 +1188,8 @@ function FrameBody({
     told.current = onScrolled;
   });
   useEffect(() => {
-    const doc = frame.current?.contentDocument;
     told.current(false);
-    // A page on another address says so itself, through the studio's helper on it.
-    if (!doc) return frame.current ? watchScroll(frame.current, (down) => told.current(down)) : undefined;
-    const last = new WeakMap<EventTarget, number>();
-    const onScroll = (event: Event) => {
-      const target = event.target as Document | Element;
-      // The frame's own Document is another class from this page's, so `instanceof` can't tell it: its node type can.
-      const element = target.nodeType === Node.DOCUMENT_NODE ? (target as Document).scrollingElement : (target as Element);
-      const now = element?.scrollTop ?? 0;
-      const before = last.get(target) ?? 0;
-      last.set(target, now);
-      if (now <= 0 || now < before - 4) told.current(false);
-      else if (now > before + 4) told.current(true);
-    };
-    doc.addEventListener("scroll", onScroll, { capture: true, passive: true });
-    return () => doc.removeEventListener("scroll", onScroll, { capture: true });
+    return frame.current ? watchScrolled(frame.current, (down) => told.current(down)) : undefined;
   }, [documents]);
 
   // Handlers live in a ref so a new pick doesn't tear the listeners down.

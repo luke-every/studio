@@ -461,3 +461,19 @@ export function LogOutIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function FrameIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M5.5 2v12M10.5 2v12M2 5.5h12M2 10.5h12" />
+    </Frame>
+  );
+}
+
+export function PointerIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M3.5 2.5l9 3.75-3.9 1.4-1.4 3.9z" />
+    </Frame>
+  );
+}

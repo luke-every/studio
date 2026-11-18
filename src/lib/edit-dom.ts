@@ -12,12 +12,17 @@ const isElement = (node: Node): node is Element => node.nodeType === Node.ELEMEN
  * Structural, so it can stop matching if the markup around it changes; an
  * edit that no longer matches is skipped, never an error.
  */
-export function selectorFor(element: Element): string {
+export function selectorFor(element: Element, root?: Element): string {
   const doc = element.ownerDocument;
+  // `root` stands in for the body: a static copy of a page isn't inside one, but its paths have to read the same.
+  const home = element.getRootNode();
+  root ??= home instanceof ShadowRoot ? (home.querySelector("[data-studio-root]") ?? undefined) : undefined;
+  const stop = root ?? doc.body;
+  const scope: ParentNode = root ? (home as ShadowRoot) : doc;
   const parts: string[] = [];
   let node: Element | null = element;
-  while (node && node !== doc.body && node !== doc.documentElement) {
-    if (node.id && doc.querySelectorAll(`#${CSS.escape(node.id)}`).length === 1) {
+  while (node && node !== stop && node !== doc.documentElement) {
+    if (node.id && scope.querySelectorAll(`#${CSS.escape(node.id)}`).length === 1) {
       parts.unshift(`#${CSS.escape(node.id)}`);
       return parts.join(" > ");
     }
@@ -29,7 +34,33 @@ export function selectorFor(element: Element): string {
   return ["body", ...parts].join(" > ");
 }
 
-/** Text that can be edited as plain lines: no child elements except line breaks. */
+/**
+ * A prototype's copy file can tag each line of its words, in dev, with an invisible mark of where the line is in the
+ * file (see the starter's `studio-copy.ts`): the mark, the words, the mark again. The mark is a word joiner, sixteen
+ * zero-width non-joiners (0) or joiners (1) that spell the line's number, and a word joiner. Reading it off an element
+ * is how the studio knows which line of the file the element shows, with no guessing from the words themselves.
+ */
+const MARK = /\u2060([\u200c\u200d]{16})\u2060/g;
+const whole = /^\s*\u2060([\u200c\u200d]{16})\u2060([\s\S]*)\u2060\1\u2060\s*$/;
+export const unmark = (text: string) => text.replace(MARK, "");
+
+/** Which line of the copy file some words are, when they are exactly one such line; otherwise null. */
+export function copyIn(text: string): number | null {
+  const found = text.match(whole);
+  return found ? parseInt(found[1].replace(/\u200c/g, "0").replace(/\u200d/g, "1"), 2) : null;
+}
+
+/** Which line of the copy file an element's words are, when they are exactly one such line; otherwise null. */
+export function copyOf(element: Element): number | null {
+  let text = "";
+  for (const node of element.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
+    else if (node.nodeName !== "BR") return null;
+  }
+  return copyIn(text);
+}
+
+/** Text that can be edited as plain lines: no child elements except line breaks. The copy file's marks are left out. */
 export function textOf(element: Element): string | null {
   let text = "";
   for (const node of element.childNodes) {
@@ -37,6 +68,7 @@ export function textOf(element: Element): string | null {
     else if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
     else if (isElement(node)) return null;
   }
+  text = unmark(text);
   return text.trim() ? text : null;
 }
 
@@ -65,6 +97,27 @@ export function pictureOf(element: Element): Element | null {
   return null;
 }
 
+/** The address of the picture an element shows now: an <img>'s, or the first image of a background. Null when there is none. */
+export function pictureSrcOf(element: Element): string | null {
+  if (element.tagName === "IMG") return (element as HTMLImageElement).currentSrc || element.getAttribute("src");
+  return element.ownerDocument.defaultView!.getComputedStyle(element).backgroundImage.match(/url\(\s*["']?([^"')]+)["']?\s*\)/)?.[1] ?? null;
+}
+
+/** Which line of the copy file a picture's address is, read from the tag the copy file puts on it in dev (see `studio-copy.ts`); the address may be inside another (`/_next/image?url=…`). Null when it has none. */
+export function imageIdIn(src: string | null): number | null {
+  let text = src ?? "";
+  for (let pass = 0; pass < 2; pass++) {
+    const found = text.match(/#studio-(\d+)/);
+    if (found) return Number(found[1]);
+    try {
+      text = decodeURIComponent(text);
+    } catch {
+      break;
+    }
+  }
+  return null;
+}
+
 export function setPicture(element: Element, src: string) {
   if (element.tagName === "IMG") {
     element.removeAttribute("srcset");
@@ -78,6 +131,17 @@ export type Axis = "width" | "height";
 export type Sizing = "fixed" | "fill" | "hug";
 
 /** Sets some inline properties for a moment, runs `measure`, and puts them back as they were. */
+/**
+ * How much bigger an element is drawn than it measures: 1 on a page, and the copy's scale on a static copy of one (which sits
+ * in a scaled shadow root on the canvas). Pixels read off a copy are divided by this to be the page's own.
+ */
+export function drawnScale(element: Element): number {
+  const home = element.getRootNode();
+  if (!(home instanceof ShadowRoot)) return 1;
+  const host = home.host as HTMLElement;
+  return host.offsetWidth ? host.getBoundingClientRect().width / host.offsetWidth : 1;
+}
+
 function probing<T>(element: HTMLElement, changes: [string, string][], measure: () => T): T {
   const was = changes.map(([property]) => [property, element.style.getPropertyValue(property), element.style.getPropertyPriority(property)] as const);
   for (const [property, value] of changes) element.style.setProperty(property, value, "important");
@@ -102,7 +166,8 @@ function probing<T>(element: HTMLElement, changes: [string, string][], measure: 
  */
 export function sizingOf(element: Element, axis: Axis): Sizing {
   const el = element as HTMLElement;
-  const size = () => (axis === "width" ? el.getBoundingClientRect().width : el.getBoundingClientRect().height);
+  const k = drawnScale(el);
+  const size = () => (axis === "width" ? el.getBoundingClientRect().width : el.getBoundingClientRect().height) / k;
   const now = size();
   // A pixel size set on the element itself is a size of its own, even if it happens to match what filling would give.
   if (/^[\d.]+px$/.test(el.style.getPropertyValue(axis))) return "fixed";
@@ -189,7 +254,8 @@ export function editInPlace(element: HTMLElement, done: (text: string) => void) 
   const typed = () => {
     let text = "";
     for (const node of element.childNodes) text += node.nodeName === "BR" ? "\n" : (node.textContent ?? "");
-    return text.replace(/\n$/, "");
+    // The copy file's marks are in the words as the page has them, not in what was typed.
+    return unmark(text).replace(/\n$/, "");
   };
   const keys = (event: KeyboardEvent) => {
     // Keys are for the text, not for anything the prototype listens for.

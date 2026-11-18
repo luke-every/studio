@@ -42,6 +42,9 @@
   --signal-stop: #ff3b30;
   /* A design-system component instance. */
   --violet-500: #9531fe;
+  /* What is picked or hovered on a prototype's page. */
+  --blue-500: #0d99ff;
+  --rose-500: #ff3d6e;
   --instagram-chrome: #191b1f;
 
   /* --- Palette: handoff tones ------------------------------------------------

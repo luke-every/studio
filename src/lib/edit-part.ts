@@ -1,4 +1,5 @@
-import { pictureOf, selectorFor, setPicture, sizeProperties, sizingOf, textOf, toHex, writeText, type Axis, type Sizing } from "@/lib/edit-dom";
+import { copyIn, copyOf, drawnScale, imageIdIn, pictureOf, pictureSrcOf, selectorFor, setPicture, sizeProperties, sizingOf, textOf, toHex, unmark, writeText, type Axis, type Sizing } from "@/lib/edit-dom";
+import { boxOfElement, elementAt, rootOf, type Box, type Reach } from "@/lib/anchor";
 import type { Edit } from "@/lib/edits";
 
 /**
@@ -105,6 +106,38 @@ export function tokensOf(doc: Document): Tokens {
   return tokens;
 }
 
+/** One piece of text of its own in an element that has other elements among its words: where it is among the element's children, its words, which line of the copy file they are, and where it is drawn. */
+export type Segment = { index: number; text: string; copy: number | null; box: { left: number; top: number; width: number; height: number }; rects: { left: number; top: number; width: number; height: number }[] };
+
+/** The pieces of text of an element that has other elements among its words; none when its words are plain. */
+function segmentsOf(element: Element, place: (r: DOMRect) => Box): Segment[] | undefined {
+  if (textOf(element) !== null) return undefined;
+  const found: Segment[] = [];
+  element.childNodes.forEach((node, index) => {
+    if (node.nodeType !== Node.TEXT_NODE) return;
+    const raw = node.textContent ?? "";
+    const text = unmark(raw);
+    if (!text.trim()) return;
+    const range = element.ownerDocument.createRange();
+    range.selectNodeContents(node);
+    const plain = place;
+    const rects = [...range.getClientRects()].filter((r) => r.width && r.height).slice(0, 8).map(plain);
+    if (rects.length) found.push({ index, text, copy: copyIn(raw), box: plain(range.getBoundingClientRect()), rects });
+  });
+  return found.length ? found : undefined;
+}
+
+/**
+ * The part to type over at a point (in the page's pixels): the part itself when its words are plain, or, when other
+ * elements are among them, the piece of text under the point, as a part of its own. Null when there are no words there.
+ */
+export function editable(part: Part | null, x: number, y: number): Part | null {
+  if (!part) return null;
+  if (part.text !== null) return part;
+  const piece = part.segments?.find((seg) => seg.rects.some((r) => x >= r.left && x <= r.left + r.width && y >= r.top && y <= r.top + r.height));
+  return piece ? { ...part, text: piece.text, copy: piece.copy, box: piece.box, node: piece.index, segments: undefined } : null;
+}
+
 /** A part as the panel needs it: what it is, how it looks now, and what each choice of sizing would set. Plain data, so it can be sent from a page on another address. */
 export type Part = {
   selector: string;
@@ -115,9 +148,22 @@ export type Part = {
   parentDisplay: string;
   /** Its words, when they can be edited as plain lines (see `textOf`); and whether it holds any text of its own at all. */
   text: string | null;
+  /** Which line of the prototype's copy file the words are, when they are one (see `copyOf`). */
+  copy: number | null;
+  /** When other elements are among its words (a heading with an italic bit), each piece of text of its own, to be changed on its own. */
+  segments?: Segment[];
+  /** Set on a part made from one of those pieces (see `editable`): the piece, so an edit is to it and not to the whole. */
+  node?: number;
   hasText: boolean;
+  /** What is behind its words: the first background colour that isn't clear, from the part outwards. */
+  backdrop: string;
   /** The element whose picture a swap here would change (see `pictureOf`), by selector. */
   picture: string | null;
+  /** What that picture is: an <img> (`img`), or a background image (`fill`). And the address it shows now, to preview it. */
+  pictureKind: "img" | "fill" | null;
+  pictureSrc: string | null;
+  /** Which line of the prototype's copy file that picture's address is, when it is one (see `imageIdIn`). */
+  pictureCopy: number | null;
   sizing: Record<Axis, Sizing>;
   /** The properties each sizing along each axis would set (see `sizeProperties`). */
   sizes: Record<Axis, Record<Sizing, [string, string][]>>;
@@ -125,6 +171,8 @@ export type Part = {
   tokens: Tokens;
   /** Where it is in its page's window, in the page's own pixels. */
   box: { left: number; top: number; width: number; height: number };
+  /** Set when it is an element inside a design-system component (a live version), not the component itself: the component's name. Its look is the component's, so only its words can be changed. */
+  inside?: string;
   /** Set when it is the root of a design-system component instance (a live version): what it is, and its props that are plain values. */
   component?: { name: string; props: Record<string, string | number | boolean>; preview: boolean };
 };
@@ -217,15 +265,30 @@ export function propPreview() {
   };
 }
 
-/** `names` are the design system's components: an element inside one is described as that component instance, by its root. */
-export function describePart(picked: Element, names?: string[]): Part {
+/** `names` are the design system's components: the root of one is described as that component instance; an element inside one is itself, marked as inside it. */
+export function describePart(picked: Element, names?: string[], copyTokens?: Tokens): Part {
   const found = names?.length ? componentOf(picked, new Set(names)) : null;
-  const element = found?.root ?? picked;
+  const inside = found && found.root !== picked ? found.name : undefined;
+  const whole = inside ? null : found;
+  const element = picked;
   const computed = element.ownerDocument.defaultView!.getComputedStyle(element);
   const css = Object.fromEntries(PROPERTIES.map((property) => [property, computed.getPropertyValue(property).trim()]));
   const parent = element.parentElement;
   const picture = pictureOf(element);
   const rect = element.getBoundingClientRect();
+  // On a static copy (in a scaled shadow root) the page's own pixels are the copy's less its place and scale.
+  const k = drawnScale(element);
+  const home = element.getRootNode();
+  const origin = home instanceof ShadowRoot ? home.host.getBoundingClientRect() : { left: 0, top: 0 };
+  const place = (r: DOMRect) => ({ left: (r.left - origin.left) / k, top: (r.top - origin.top) / k, width: r.width / k, height: r.height / k });
+  let backdrop = "rgb(255, 255, 255)";
+  for (let up: Element | null = element; up; up = up.parentElement) {
+    const colour = element.ownerDocument.defaultView!.getComputedStyle(up).backgroundColor;
+    if (colour && !/^rgba\(.*, 0\)$|^transparent$/.test(colour)) {
+      backdrop = colour;
+      break;
+    }
+  }
   const each = <T,>(make: (axis: Axis) => T) => Object.fromEntries(AXES.map((axis) => [axis, make(axis)])) as Record<Axis, T>;
   return {
     selector: selectorFor(element),
@@ -233,13 +296,100 @@ export function describePart(picked: Element, names?: string[]): Part {
     css,
     parentDisplay: parent ? element.ownerDocument.defaultView!.getComputedStyle(parent).display : "",
     text: textOf(element),
+    copy: copyOf(element),
+    segments: segmentsOf(element, place),
     hasText: [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()),
+    backdrop,
     picture: picture ? selectorFor(picture) : null,
+    pictureKind: picture ? (picture.tagName === "IMG" ? "img" : "fill") : null,
+    pictureSrc: picture ? pictureSrcOf(picture) : null,
+    pictureCopy: picture ? imageIdIn(pictureSrcOf(picture)) : null,
     sizing: each((axis) => sizingOf(element, axis)),
     sizes: each((axis) => Object.fromEntries(SIZINGS.map((mode) => [mode, sizeProperties(element, axis, mode, parseFloat(css[axis]) || 0)])) as Record<Sizing, [string, string][]>),
-    tokens: tokensOf(element.ownerDocument),
-    box: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-    component: found ? { name: found.name, props: found.props, preview: !!rendererOf() } : undefined,
+    tokens: copyTokens ?? tokensOf(element.ownerDocument),
+    box: place(rect),
+    inside,
+    component: whole ? { name: whole.name, props: whole.props, preview: !!rendererOf() } : undefined,
+  };
+}
+
+/** One face of a font a page draws its words in, with the file itself, so the studio can draw the same words the same way. Plain data, so it can be sent from a page on another address. */
+export type Face = { family: string; weight: string; style: string; unicodeRange?: string; data: ArrayBuffer };
+
+const MAX_FACES = 6;
+const fetched = new WeakMap<Document, Map<string, Promise<ArrayBuffer | null>>>();
+
+/** The names in a font-family list, without quotes. */
+const familiesOf = (list: string) => (list.match(/("[^"]*"|'[^']*'|[^,])+/g) ?? []).map((name) => name.trim().replace(/^["']|["']$/g, ""));
+
+/** The `@font-face` rules a document's stylesheets declare, with the address each is relative to. A sheet from another address can't be read. */
+function faceRules(doc: Document) {
+  const found: { rule: CSSStyleRule; base: string }[] = [];
+  const walk = (rules: CSSRuleList, base: string) => {
+    for (const rule of rules) {
+      if (rule.constructor.name === "CSSFontFaceRule") found.push({ rule: rule as CSSStyleRule, base });
+      else if ((rule as CSSGroupingRule).cssRules) walk((rule as CSSGroupingRule).cssRules, base);
+    }
+  };
+  for (const sheet of doc.styleSheets) {
+    try {
+      walk(sheet.cssRules, sheet.href ?? doc.baseURI);
+    } catch {
+      // A sheet from another address.
+    }
+  }
+  return found;
+}
+
+/**
+ * The faces of the fonts a part's words are set in (from its `font-family`, `font-weight` and `font-style`), read from
+ * the page's own `@font-face` rules, with their files. The studio draws text over a prototype in its own page, which
+ * has none of the prototype's fonts (a `next/font` family is named by a hash), so it is given these to draw it the same.
+ */
+export async function facesFor(doc: Document, css: Record<string, string>): Promise<Face[]> {
+  const wanted = familiesOf(css["font-family"] ?? "");
+  const weight = parseInt(css["font-weight"] ?? "") || 400;
+  const italic = (css["font-style"] ?? "").startsWith("italic") || (css["font-style"] ?? "").startsWith("oblique");
+  const cache = fetched.get(doc) ?? fetched.set(doc, new Map()).get(doc)!;
+  const win = doc.defaultView!;
+
+  const all = faceRules(doc).flatMap(({ rule, base }) => {
+    const family = rule.style.getPropertyValue("font-family").trim().replace(/^["']|["']$/g, "");
+    const url = rule.style.getPropertyValue("src").match(/url\(\s*["']?([^"')]+)["']?\s*\)/)?.[1];
+    if (!wanted.includes(family) || !url) return [];
+    const [low, high = low] = (rule.style.getPropertyValue("font-weight") || "400").split(/\s+/).map((n) => parseInt(n) || 400);
+    const style = rule.style.getPropertyValue("font-style").trim() || "normal";
+    return [{ family, low, high, style, unicodeRange: rule.style.getPropertyValue("unicode-range").trim() || undefined, url: new URL(url, base).href }];
+  });
+  // The weight and style the words are in; failing that, whatever the family has.
+  const exact = all.filter((face) => weight >= face.low && weight <= face.high && (face.style.startsWith("italic") || face.style.startsWith("oblique")) === italic);
+  const chosen = (exact.length ? exact : all).slice(0, MAX_FACES);
+
+  const faces = await Promise.all(
+    chosen.map(async (face): Promise<Face | null> => {
+      const data = await (cache.get(face.url) ?? cache.set(face.url, win.fetch(face.url).then((response) => (response.ok ? response.arrayBuffer() : null), () => null)).get(face.url)!);
+      return data ? { family: face.family, weight: face.low === face.high ? String(face.low) : `${face.low} ${face.high}`, style: face.style, unicodeRange: face.unicodeRange, data } : null;
+    }),
+  );
+  return faces.flatMap((face) => (face ? [face] : []));
+}
+
+/**
+ * Hides the words of the element a selector names (and anything inside it), keeping their room, while the studio types
+ * over them. A style rule, not the element's own style, so words inside with a colour of their own are hidden too.
+ * Returns the way to show them again.
+ */
+export function hideWords(doc: Document, selector: string) {
+  const element = doc.head ? partIn(doc, selector) : null;
+  if (!element) return () => {};
+  const mark = "data-typing-over";
+  element.setAttribute(mark, "");
+  const style = doc.createElement("style");
+  style.textContent = `[${mark}], [${mark}] * { color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; }`;
+  doc.head.appendChild(style);
+  return () => {
+    style.remove();
+    element.removeAttribute(mark);
   };
 }
 
@@ -256,16 +406,46 @@ export function partIn(doc: Document, selector: string) {
 export type From = { selector: string; into: boolean };
 
 /**
- * What a point means to someone who has an element selected: that element while the point is inside it, or, diving
- * (`into`), the child of it that holds the point, one level down. Null when it doesn't apply, and the point is read as usual.
+ * What a point means to someone who has an element selected, as in Figma: that element while the point is inside it,
+ * or, diving (`into`), the child of it that holds the point, one level down. Outside it, what is beside it: a sibling,
+ * or the neighbour of the group it is in, whichever the point is in, at the same depth and one click away. Null when
+ * it doesn't apply (the point is read as usual: the top-level group, or the one at the bottom with ⌘).
  */
 export function reachFrom(doc: Document, hit: Element | null, from: From | undefined) {
   const selected = from && hit ? partIn(doc, from.selector) : null;
-  if (!from || !hit || !selected || !selected.contains(hit)) return null;
-  if (!from.into) return selected;
-  let child = hit;
-  while (child.parentElement && child.parentElement !== selected) child = child.parentElement;
-  return child === selected ? null : child;
+  if (!from || !hit || !selected) return null;
+  if (selected.contains(hit)) {
+    if (!from.into) return selected;
+    // On the element itself (its own words, or a gap), there is nothing deeper there.
+    if (hit === selected) return null;
+    let child = hit;
+    while (child.parentElement && child.parentElement !== selected) child = child.parentElement;
+    return child === selected ? null : child;
+  }
+  if (from.into) return null;
+  const root = rootOf(doc);
+  for (let group = selected.parentElement; group && group !== doc.body && group !== doc.documentElement; group = group.parentElement) {
+    if (!group.contains(hit)) continue;
+    // In the gap between its children, the point is on the group itself: that is what is beside the selection.
+    if (hit === group) return group === root || group.contains(root) ? null : group;
+    let beside = hit;
+    while (beside.parentElement && beside.parentElement !== group) beside = beside.parentElement;
+    // At the page's own wrapper it is the top-level group, which a click picks anyway.
+    return beside === root || beside.contains(root) ? null : beside;
+  }
+  return null;
+}
+
+/**
+ * The box to outline under the pointer: what a click there would pick (see `reachFrom`), with its groups when asked.
+ * In a design-system component, the component's root or what is inside it is a component's (`component`), so it is drawn as one.
+ */
+export function hoverBox(doc: Document, x: number, y: number, reach: Reach, names?: string[] | null): Box | null {
+  const hit = elementAt(doc, x, y);
+  const element = reachFrom(doc, hit, reach.from ? { selector: reach.from.selector, into: !!reach.from.into } : undefined) ?? (reach.deep !== false ? hit : elementAt(doc, x, y, false));
+  if (!element) return null;
+  const box = boxOfElement(element, reach.groups);
+  return names?.length && componentOf(element, new Set(names)) ? { ...box, component: true } : box;
 }
 
 type Original = { style: string | null; html: string; src: string | null };
@@ -311,7 +491,9 @@ export function painter(picture?: (src: string) => string | undefined) {
         if (edit.kind === "style") {
           for (const [property, value] of Object.entries(edit.css)) (element as HTMLElement).style.setProperty(property, value, "important");
         } else if (edit.kind === "text") {
-          writeText(element, edit.text);
+          const piece = edit.node === undefined ? null : element.childNodes[edit.node];
+          if (edit.node === undefined) writeText(element, edit.text);
+          else if (piece?.nodeType === Node.TEXT_NODE) piece.textContent = edit.text;
         } else if (edit.kind === "image") {
           const shown = picture?.(edit.src);
           if (shown) setPicture(element, shown);

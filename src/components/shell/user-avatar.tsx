@@ -4,6 +4,7 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 
 import { avatarSrc, colorVar, type Profile } from "@/lib/avatars";
+import { CLAUDE_AUTHOR } from "@/lib/comments";
 import type { Person } from "@/lib/registry/types";
 import { useUser } from "@/lib/use-user";
 
@@ -27,6 +28,16 @@ export function UserAvatar({
   tip?: boolean;
 }) {
   const { profileOf } = useUser();
+
+  // Claude has one face, always: its own mark, filling the circle.
+  if (name === CLAUDE_AUTHOR.name && !profile) {
+    const circle = (
+      <span aria-hidden className={`grid shrink-0 overflow-hidden rounded-[var(--r-full)] ${className}`}>
+        <Image src="/claude-avatar.png" alt="" width={110} height={110} draggable={false} className="size-full object-cover" />
+      </span>
+    );
+    return tip ? <WithTip label={name}>{circle}</WithTip> : circle;
+  }
 
   if (!name && !profile) {
     return (

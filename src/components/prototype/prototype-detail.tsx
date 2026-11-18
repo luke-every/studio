@@ -186,7 +186,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // A version's handoff, reviewed over the page: `#handoff` in the address, so a link (the one /handoff prints) opens it.
   const handoffOpen = useUrlHash() === "handoff";
   // Asked again when the review is closed, and every few seconds on a running prototype (see the hook).
-  const handoffStatus = useHandoffStatus(prototype.slug, selected.key, !!selected.live, handoffOpen);
+  const handoffStatus = useHandoffStatus(prototype.slug, selected.key, handoffOpen);
   // With a handoff, whatever is picked on the canvas (a design, or a section of its code) gets a link and a brief for an agent, in the side panel.
   // Components marked here show at once, without waiting for the next time the handoff is asked for.
   const [markedAt, setMarkedAt] = useState(0);

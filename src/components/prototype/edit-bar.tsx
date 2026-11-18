@@ -6,7 +6,7 @@ import type { EditSession } from "@/components/prototype/use-edit-session";
 import { RedoIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
-import { saveEdits } from "@/lib/registry/actions";
+import { saveEdits, saveLiveEdits } from "@/lib/registry/actions";
 
 import { useUser } from "@/lib/use-user";
 
@@ -26,8 +26,9 @@ const rememberedName = () => {
  * shown only when picked, so the version itself stays as it was. The first
  * time, a guest is asked whose edits these are, and it remembers.
  *
- * On a live version (`live`) there is no version to save: the edits are only
- * a preview on the running page, so it keeps undo and redo and no Save.
+ * On a live version (`live`) there is no version to save: Save writes the
+ * copy straight into the prototype's own code (see `live-edits.ts`), and what
+ * can't be written stays as a preview.
  */
 export function EditBar({
   session,
@@ -44,7 +45,7 @@ export function EditBar({
   variantId?: string;
   /** No Save as variant: on the canvas an edit is drawn on every screen, which is what saving a version does and saving a variant would not. */
   versionOnly?: boolean;
-  /** A live version: nothing to save. */
+  /** A live version: Save writes into its code. */
   live?: boolean;
 }) {
   const { notify } = useStudio();
@@ -57,6 +58,22 @@ export function EditBar({
   const [variantName, setVariantName] = useState("");
   const [saving, setSaving] = useState(false);
   const count = session.edits.length;
+
+  // On a live version, Save writes the copy into the prototype's own code; what was written is let go of here, the rest stays.
+  const saveToCode = async () => {
+    setSaving(true);
+    const form = new FormData();
+    form.set("slug", slug);
+    form.set("edits", JSON.stringify(session.edits));
+    for (const [path, file] of session.imagesInUse()) form.set(path, file);
+    const result = await saveLiveEdits(form);
+    setSaving(false);
+    if (!result.ok) return notify(result.error, true);
+    const { saved, where, left } = result.value;
+    saved.forEach((selector) => session.reset(selector));
+    const wrote = saved.length ? `Saved ${saved.length} ${saved.length === 1 ? "change" : "changes"} to copy.ts (${where.join(", ")}).` : "";
+    notify([wrote, ...left.slice(0, 2).map((item) => item.why)].filter(Boolean).join(" "), !saved.length);
+  };
 
   const save = async (by: string, variant?: { id: string; label: string }) => {
     if (!by.trim()) {
@@ -112,7 +129,11 @@ export function EditBar({
           Save as variant
         </IconButton>
       )}
-      {live ? null : (
+      {live ? (
+        <IconButton variant="primary" onClick={saveToCode} disabled={!count || saving} loading={saving}>
+          Save
+        </IconButton>
+      ) : (
         <IconButton variant="primary" onClick={() => save(name)} disabled={!count || saving} loading={saving}>
           Save
         </IconButton>

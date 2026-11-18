@@ -1,6 +1,6 @@
-import { anchorAt, anchorOf, boxAt, elementAt, revealAnchor, scrollAt, spotOf, watchTaps, type Spot } from "@/lib/anchor";
+import { anchorAt, anchorOf, elementAt, revealAnchor, scrollAt, spotOf, watchTaps, type Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
-import { componentOf, describePart, painter, partIn, reachFrom } from "@/lib/edit-part";
+import { describePart, facesFor, hideWords, hoverBox, painter, partIn, reachFrom } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
 import { findClip, isFind, partBox, setMarks, sourceAt } from "@/lib/handoff-clip";
 
@@ -34,17 +34,26 @@ const ANYWAY_MS = 1000;
   let last = "";
   let raf = 0;
   // The edits the studio is previewing here, and the part it has picked: its description is said again whenever it changes.
-  const brush = painter();
+  // The pictures the studio has swapped in, by the path they would be saved at: sent as data addresses, as the studio's own files can't be opened from here.
+  let pictures: Record<string, string> = {};
+  const brush = painter((src) => pictures[src]);
   let edits: Edit[] = [];
   let following: string | null = null;
   // The design system's component names, when the studio is editing: what is picked inside one of them is the component.
   let components: string[] | undefined;
   let lastPart = "";
+  // The words being typed over by the studio, hidden here: put back if the page drew itself again without them.
+  let hiding: { selector: string; show: () => void } | null = null;
+  const hide = (selector: string | null) => {
+    hiding?.show();
+    hiding = selector ? { selector, show: hideWords(document, selector) } : null;
+  };
   const report = () => {
     raf = 0;
     if (!document.body) return;
     // The page may have drawn itself again under the edits (a framework, a hot reload): they are put back where they are missing.
     if (edits.length) brush.keep([document], edits);
+    if (hiding && !document.querySelector("[data-typing-over]")) hide(hiding.selector);
     if (following) {
       const element = partIn(document, following);
       const part = element ? describePart(element, components) : null;
@@ -117,8 +126,12 @@ const ANYWAY_MS = 1000;
         return;
       case "studio:edits:paint":
         edits = Array.isArray(data.edits) ? data.edits : [];
+        pictures = data.pictures && typeof data.pictures === "object" ? data.pictures : {};
         if (document.body) brush.paint([document], edits);
         later();
+        return;
+      case "studio:edits:hide":
+        hide(typeof data.selector === "string" ? data.selector : null);
         return;
       case "studio:edits:follow":
         following = typeof data.selector === "string" ? data.selector : null;
@@ -131,16 +144,12 @@ const ANYWAY_MS = 1000;
         return;
       case "studio:comments:ask":
         if (data.what === "box") {
-          const names = Array.isArray(data.components) ? new Set<string>(data.components) : null;
-          const reach = { deep: data.deep !== false, groups: data.groups === true };
-          // A component is picked whole only when reaching in (⌘); otherwise it is the top-level group that is.
-          const hit = names && reach.deep && point && document.body ? elementAt(document, data.x, data.y) : null;
-          const found = hit && names ? componentOf(hit, names) : null;
-          if (found) {
-            const { left, top, width, height } = found.root.getBoundingClientRect();
-            return answer({ left, top, width, height, component: true });
-          }
-          return answer(point && document.body ? boxAt(document, data.x, data.y, reach) : null);
+          const from = data.from && typeof data.from.selector === "string" ? { selector: data.from.selector } : undefined;
+          return answer(point && document.body ? hoverBox(document, data.x, data.y, { deep: data.deep !== false, groups: data.groups === true, from }, Array.isArray(data.components) ? data.components : null) : null);
+        }
+        if (data.what === "fonts") {
+          const css = data.css && typeof data.css === "object" ? (data.css as Record<string, string>) : {};
+          return void facesFor(document, css).then(answer, () => answer([]));
         }
         if (data.what === "part") {
           const from = data.from && typeof data.from.selector === "string" ? { selector: data.from.selector, into: !!data.from.into } : undefined;

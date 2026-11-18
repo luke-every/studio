@@ -12,6 +12,7 @@ import * as activity from "./activity";
 import * as comments from "./comments";
 import * as system from "./design-system";
 import * as handoff from "./handoff";
+import * as liveEdits from "./live-edits";
 import * as push from "./push";
 import * as registry from "./write";
 
@@ -247,6 +248,24 @@ export async function applyHandoffDecisions(input: Parameters<typeof handoff.app
 
 export async function undoHandoffDecisions(input: Parameters<typeof handoff.undoHandoffApply>[0]) {
   return attempt(() => handoff.undoHandoffApply(input), []);
+}
+
+/** Writes the edits made on a live version into its source, on this machine (see `live-edits.ts`). Pictures arrive as files named by the path their edit uses. */
+export async function saveLiveEdits(form: FormData) {
+  let edits: Edit[];
+  try {
+    edits = editsSchema.parse(JSON.parse(String(form.get("edits") ?? "[]")));
+  } catch {
+    return { ok: false as const, error: "Those edits couldn't be read." };
+  }
+  const uploads = new Map<string, liveEdits.Upload>();
+  for (const [key, value] of form.entries()) {
+    if (!key.startsWith(`${EDIT_IMAGE_DIR}/`) || !(value instanceof File)) continue;
+    if (!/^_edits\/[\w.-]+$/.test(key)) return { ok: false as const, error: "That image has an odd name." };
+    if (value.size > 8_000_000) return { ok: false as const, error: "Images can be up to 8MB each." };
+    uploads.set(key, { name: value.name, bytes: Buffer.from(await value.arrayBuffer()) });
+  }
+  return attempt(() => liveEdits.saveLiveEdits(String(form.get("slug") ?? ""), edits, uploads), []);
 }
 
 /** Puts back what Claude changed for one of its replies on a live version, or makes the change again. */

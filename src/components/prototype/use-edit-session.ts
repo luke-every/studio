@@ -22,12 +22,13 @@ type Touched = Pick<Part, "selector">;
  * be saved. A new url starts it over, since the edits belong to one document.
  * Nothing is saved until the caller sends `edits` and `images` to the server.
  *
- * `frames` are the frames the version is on screen in: the one of the single view, or on the canvas one a screen.
+ * `frames` are the frames the version is on screen in: the one of the single view, or on the canvas one a screen; `copies`
+ * are the static copies of screens drawn there instead (as scoped documents).
  * Saved, an edit applies wherever its element is found, whichever screen that is, so the list is drawn in every one of
  * them: an edit made on one screen shows on each screen that has that element, as it will once saved. A frame on
  * another address (a live version) is drawn by its own page, which is sent the list (see `paintFrames`).
  */
-export function useEditSession(url: string | undefined, frames: () => HTMLIFrameElement[]) {
+export function useEditSession(url: string | undefined, frames: () => HTMLIFrameElement[], copies?: () => Document[]) {
   const [state, setState] = useState<{ url?: string; edits: Edit[]; past: Edit[][]; future: Edit[][] }>({
     edits: [],
     past: [],
@@ -39,12 +40,19 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
     latest.current = current;
   });
 
-  const [images] = useState(() => new Map<string, { file: File; url: string }>());
+  const [images] = useState(() => new Map<string, { file: File; url: string; data?: string }>());
   const [brush] = useState(() => painter((src) => images.get(src)?.url));
   const lastStep = useRef<{ key: string; at: number } | null>(null);
 
   /** Draw the page from a list of edits. */
-  const paint = (edits: Edit[]) => paintFrames(frames(), edits, brush);
+  const paint = (edits: Edit[]) =>
+    paintFrames(
+      frames(),
+      edits,
+      brush,
+      Object.fromEntries([...images].flatMap(([path, { data }]) => (data ? [[path, data]] : []))),
+      copies?.(),
+    );
 
   /** Make `edits` the new state. `key` names what changed, so a drag is one step. */
   const commit = (edits: Edit[], key: string) => {
@@ -65,8 +73,8 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
     apply({ kind: "style", selector: part.selector, css }, `style:${part.selector}:${Object.keys(css).join(",")}`);
   };
 
-  const setText = (part: Touched, text: string) => {
-    apply({ kind: "text", selector: part.selector, text }, `text:${part.selector}`);
+  const setText = (part: Pick<Part, "selector" | "text" | "copy"> & { node?: number }, text: string) => {
+    apply({ kind: "text", selector: part.selector, text, node: part.node, copy: part.copy ?? undefined, was: part.copy === null ? undefined : (part.text ?? undefined) }, `text:${part.selector}:${part.node ?? ""}`);
   };
 
   /** Changes a prop of a design-system component instance, drawn by the page itself when it can preview props. */
@@ -76,12 +84,20 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
   };
 
   /** Swaps the picture of the element `selector` names. */
-  const setImage = (selector: string, file: File) => {
+  const setImage = (selector: string, file: File, copy?: number | null) => {
     const extension = (file.name.split(".").pop() ?? "png").toLowerCase().replace(/[^a-z0-9]/g, "");
     const path = `${EDIT_IMAGE_DIR}/image-${Date.now().toString(36)}.${extension}`;
     // Shown from the file itself for now; the saved version carries it at `path`.
-    images.set(path, { file, url: URL.createObjectURL(file) });
-    apply({ kind: "image", selector, src: path }, `image:${selector}:${path}`);
+    const kept = { file, url: URL.createObjectURL(file), data: undefined as string | undefined };
+    images.set(path, kept);
+    apply({ kind: "image", selector, src: path, copy: copy ?? undefined }, `image:${selector}:${path}`);
+    // A page on another address can only be shown the picture itself: read it, and draw again with it.
+    const reader = new FileReader();
+    reader.onload = () => {
+      kept.data = String(reader.result);
+      paint(latest.current.edits);
+    };
+    reader.readAsDataURL(file);
   };
 
   /** Put one element back as it was. */
@@ -130,6 +146,11 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
     /** Draws the edits again: a page has just loaded that should show them too. */
     redraw: () => paint(latest.current.edits),
     imagesInUse,
+    /** The picture an element's swap shows, if it has been swapped: to preview it. */
+    imageOf: (selector: string) => {
+      const edit = current.edits.findLast((item) => item.kind === "image" && item.selector === selector);
+      return edit?.kind === "image" ? (images.get(edit.src)?.url ?? null) : null;
+    },
     has: (selector: string) => current.edits.some((edit) => edit.selector === selector),
   };
 }

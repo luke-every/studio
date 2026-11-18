@@ -16,6 +16,8 @@ const screen = z.object({
   name: z.string().min(1),
   /** The URL parameters that open the prototype on this screen. */
   params: z.record(z.string(), z.string()).default({}),
+  /** An address of its own, when it isn't a screen of the prototype (a component placed on the canvas); the parameters are put on it. */
+  url: z.string().optional(),
 });
 
 export const flowSchema = z.object({

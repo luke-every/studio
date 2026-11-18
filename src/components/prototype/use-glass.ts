@@ -13,8 +13,8 @@ import { pageOf } from "./frame-page";
  * calls `point` as the pointer moves over it (in the sheet's own pixels) and with null when it leaves.
  */
 export function useGlass(frame: RefObject<HTMLIFrameElement | null>, scale: number, active: boolean) {
-  // The element under the pointer: asked for at most once a frame, and a late answer (a page on another address) is
-  // dropped if the pointer has moved on or left.
+  // The element under the pointer: asked for at most once a frame. A late answer (a page on another address) is shown, and
+  // the pointer's new place asked for; one that arrives after the pointer has left is dropped.
   const [target, setTarget] = useState<Box | null>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const asking = useRef(0);
@@ -33,7 +33,11 @@ export function useGlass(frame: RefObject<HTMLIFrameElement | null>, scale: numb
       const element = frame.current;
       if (!at || !element) return;
       void pageOf(element).boxAt(at.x / scale, at.y / scale).then((found) => {
-        if (pointer.current === at) setTarget(found);
+        // Shown even if the pointer has moved on (a page on another address answers a moment later), and asked again.
+        const now = pointer.current;
+        if (!now) return;
+        setTarget(found);
+        if (now !== at) point(now.x, now.y);
       });
     });
   };

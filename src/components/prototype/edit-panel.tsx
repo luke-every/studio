@@ -41,6 +41,8 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
   const [spread, setSpread] = useState(false);
   // The words were just copied: the button says so for a moment.
   const [copied, setCopied] = useState(false);
+  // The copy field's key while it is being typed in, so the page's echo of each keystroke doesn't remount it.
+  const [typing, setTyping] = useState<string | null>(null);
   // The design system's colours, from its stylesheet: the page can't say them (see `designTokens`).
   const [palette, setPalette] = useState<{ slug: string; colours: { name: string; value: string }[] } | null>(null);
   useEffect(() => {
@@ -57,6 +59,8 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
 
   const read = (property: string) => element?.css[property] ?? "";
   const text = element ? element.text : null;
+  // While a line is being emptied, its field stays, empty.
+  const words = text ?? "";
   // The picture to swap: this element's, or a background image on something around it.
   const picture = element ? element.picture : null;
   const flex = /flex|grid/.test(read("display"));
@@ -172,7 +176,10 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
         {element ? (
           <>
             <div className="flex h-12 items-center justify-between gap-3 border-b border-divider px-4">
-              <p className="text-sm font-medium text-foreground">{`<${element.tag}>`}</p>
+              <p className="text-sm font-medium text-foreground">
+                {`<${element.tag}>`}
+                {element.inside ? <span className="font-normal text-foreground-muted">{` in ${element.inside}`}</span> : null}
+              </p>
               {session.has(element.selector) ? (
                 <PanelButton
                   label="Reset this part"
@@ -186,14 +193,20 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
               ) : null}
             </div>
 
-            {text !== null ? (
+            {picture && element.pictureKind === "img" ? (
+              <Section title="Image">
+                <ImageRow shown={session.imageOf(picture) ?? element.pictureSrc} onPick={(file) => (session.setImage(picture, file, element.pictureCopy), bump())} />
+              </Section>
+            ) : null}
+
+            {text !== null || typing?.startsWith(`${element.selector}:`) ? (
               <Section
                 title="Copy"
                 action={
                   <PanelButton
                     label={copied ? "Copied" : "Copy text"}
                     onClick={() => {
-                      navigator.clipboard.writeText(text).then(
+                      navigator.clipboard.writeText(words).then(
                         () => {
                           setCopied(true);
                           window.setTimeout(() => setCopied(false), 1500);
@@ -207,11 +220,14 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
                 }
               >
                 <textarea
-                  key={`text:${text}`}
-                  defaultValue={text}
-                  rows={Math.min(6, text.split("\n").length + 1)}
-                  onBlur={(event) => {
-                    if (event.target.value === text) return;
+                  // Refreshed from the page (an undo, a reset) except while it is being typed in, which would drop the caret.
+                  key={typing ?? `${element.selector}:${words}`}
+                  onFocus={() => setTyping(`${element.selector}:${words}`)}
+                  defaultValue={words}
+                  rows={Math.min(6, words.split("\n").length + 1)}
+                  // Live: the prototype changes as it is typed.
+                  onBlur={() => setTyping(null)}
+                  onChange={(event) => {
                     session.setText(element, event.target.value);
                     bump();
                   }}
@@ -221,25 +237,33 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
               </Section>
             ) : null}
 
-            {picture ? (
-              <Section title={picture === element.selector ? "Image" : "Background image"}>
-                <label className="inline-flex h-7 cursor-pointer items-center justify-center rounded-[var(--r-md)] bg-surface-inset px-3 text-xs text-foreground-muted hover:text-foreground">
-                  Replace image…
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      session.setImage(picture, file);
-                      bump();
-                    }}
-                    className="sr-only"
-                  />
-                </label>
+            {text === null && element.segments ? (
+              <Section title="Copy">
+                {element.segments.map((segment) => {
+                  const id = `${element.selector}#${segment.index}`;
+                  return (
+                    <textarea
+                      key={typing?.startsWith(`${id}:`) ? typing : `${id}:${segment.text}`}
+                      defaultValue={segment.text}
+                      aria-label="Text"
+                      rows={Math.min(6, segment.text.split("\n").length + 1)}
+                      onFocus={() => setTyping(`${id}:${segment.text}`)}
+                      onBlur={() => setTyping(null)}
+                      // Live: the prototype changes as it is typed, this piece of it and no other.
+                      onChange={(event) => {
+                        session.setText({ selector: element.selector, text: segment.text, copy: segment.copy, node: segment.index }, event.target.value);
+                        bump();
+                      }}
+                      className="w-full resize-y rounded-[var(--r-md)] bg-surface-inset p-2 text-xs leading-[var(--leading-relaxed)] text-foreground outline-none focus:ring-1 focus:ring-[var(--focus-ring)]"
+                    />
+                  );
+                })}
               </Section>
             ) : null}
 
+            {/* Inside a component its look is the component's: only its words can change. */}
+            {element.inside ? null : (
+              <>
             <Section title="Layout">
               <Row>
                 {dimension("width", "Width")}
@@ -492,10 +516,11 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
 
             <Section
               title="Fill"
-              applied={filled}
+              applied={filled || element.pictureKind === "fill"}
               onAdd={() => set(["background-color", "#ffffff"])}
               action={removeButton("Remove fill", () => set(["background-color", "transparent"], ["background-image", "none"]))}
             >
+              {picture && element.pictureKind === "fill" ? <ImageRow shown={session.imageOf(picture) ?? element.pictureSrc} onPick={(file) => (session.setImage(picture, file, element.pictureCopy), bump())} /> : null}
               {coloured("Background", read("background-color"), (option) => set(["background-color", option.css]), (value) => set(["background-color", value]), { none: true })}
             </Section>
 
@@ -575,6 +600,8 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
                 />
               </Row>
             </Section>
+              </>
+            )}
           </>
         ) : (
           <PanelEmpty icon={<PencilIcon />}>
@@ -583,6 +610,34 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
         )}
       </div>
 
+    </div>
+  );
+}
+
+/** A picture and the way to change it: what it shows now, small, and a button to pick another from the disk. */
+function ImageRow({ shown, onPick }: { shown: string | null; onPick: (file: File) => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="size-14 shrink-0 overflow-hidden rounded-[var(--r-md)] bg-surface-inset">
+        {shown ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={shown} alt="" draggable={false} className="size-full object-cover" />
+        ) : null}
+      </span>
+      <label className="inline-flex h-7 cursor-pointer items-center justify-center rounded-[var(--r-md)] bg-surface-inset px-3 text-xs text-foreground-muted hover:text-foreground">
+        Replace…
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            // Cleared, so choosing the same file again still counts.
+            event.target.value = "";
+            if (file) onPick(file);
+          }}
+          className="sr-only"
+        />
+      </label>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -8,6 +8,8 @@ import { workingCopiesOn } from "@/lib/registry/local-prototypes";
 
 const PORT = 6006;
 const PROJECT = join(homedir(), "Claude", "every-website-main");
+/** The stories and Storybook's settings live with the team's conventions, not in the website's repo: sync.mjs copies the stories and their settings (as .storybook-studio) into PROJECT while it runs. */
+const STORYBOOK = join(homedir(), "Claude", "team-conventions", "storybook");
 
 async function running() {
   try {
@@ -50,7 +52,12 @@ function stopWithStudio(child: ChildProcess) {
 export async function POST(request: NextRequest) {
   if (!allowed(request)) return new NextResponse("Not found.", { status: 404 });
   if (!(await running())) {
-    const child = spawn(join(PROJECT, "node_modules", ".bin", "storybook"), ["dev", "-p", String(PORT), "--no-open"], {
+    try {
+      execFileSync("node", [join(STORYBOOK, "sync.mjs"), "--add"], { stdio: "ignore" });
+    } catch {
+      // Without the stories Storybook still starts, with the website's own.
+    }
+    const child = spawn(join(PROJECT, "node_modules", ".bin", "storybook"), ["dev", "-c", ".storybook-studio", "-p", String(PORT), "--no-open"], {
       cwd: PROJECT,
       detached: true,
       stdio: "ignore",

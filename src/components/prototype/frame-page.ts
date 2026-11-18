@@ -1,6 +1,6 @@
-import { anchorAt, anchorOf, boxAt, elementAt, ownedBy, revealAnchor, scrollAt, spotOf, WAIT_FOR, type Box, type Reach, type Spot } from "@/lib/anchor";
+import { anchorAt, anchorOf, elementAt, ownedBy, revealAnchor, scrollAt, spotOf, WAIT_FOR, type Box, type Reach, type Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
-import { componentOf, describePart, partIn, reachFrom, type From, type painter, type Part } from "@/lib/edit-part";
+import { describePart, facesFor, hideWords, hoverBox, partIn, reachFrom, type From, type Face, type painter, type Part } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
 import { findClip, partBox, setMarks, sourceAt, type Clip, type Find, type SourceEl, type SourceHit } from "@/lib/handoff-clip";
 
@@ -21,6 +21,8 @@ export type FramePage = {
   boxAt(x: number, y: number, reach?: Reach): Promise<Box | null>;
   /** The part at (x, y), described for the edit panel (see `edit-part.ts`). Null on the bare page, or when the page can't say. */
   partAt(x: number, y: number, deep?: boolean, from?: From): Promise<Part | null>;
+  /** The faces of the fonts a part's words are set in, with their files (see `facesFor`): what the studio needs to draw the same words the same way. */
+  fonts(css: Record<string, string>): Promise<Face[]>;
   /** An anchor for the middle of the element a selector names, for a comment about it. Null when it isn't on the page. */
   anchorOf(selector: string): Promise<Anchor | null>;
   /** Scrolls what is under (x, y) by (dx, dy), all in the page's own pixels. */
@@ -33,6 +35,8 @@ export type FramePage = {
   spots(anchors: Record<string, Anchor>): Record<string, Spot> | null;
   /** Puts the page back where an anchor was left (see `revealAnchor`); `done` says whether it could be pinned there. Returns the way to stop. */
   reveal(anchor: Anchor, done: (found: boolean) => void): () => void;
+  /** Only a static copy: the copy as a document an edit can be painted in (see `copyDocument`). */
+  scope?: Document;
 };
 
 /**
@@ -43,6 +47,7 @@ let designSystem: string[] | null = null;
 export const setDesignSystem = (names: string[] | null) => {
   designSystem = names;
 };
+export const designSystemNames = () => designSystem;
 
 export function pageOf(frame: HTMLIFrameElement): FramePage {
   return frame.contentDocument ? near(frame) : across(frame);
@@ -68,16 +73,18 @@ function hitting<T>(frame: HTMLIFrameElement, read: () => T): T {
  * sent it again when it loads again, so a live version that reloads under its edits still shows them. Pictures are
  * left out there: a swapped one is a file in the studio, which that page can't be shown.
  */
-export function paintFrames(frames: HTMLIFrameElement[], edits: Edit[], brush: ReturnType<typeof painter>) {
-  const docs: Document[] = [];
+export function paintFrames(frames: HTMLIFrameElement[], edits: Edit[], brush: ReturnType<typeof painter>, pictures: Record<string, string> = {}, copies: Document[] = []) {
+  const docs: Document[] = [...copies];
   for (const frame of frames) {
     const doc = frame.contentDocument;
     if (doc) {
       if (doc.body) docs.push(doc);
     } else if (frame.contentWindow) {
       const link = linkOf(frame.contentWindow);
-      link.edits = edits.filter((edit) => edit.kind !== "image");
-      send(frame.contentWindow, link, { type: "studio:edits:paint", edits: link.edits });
+      // A swapped picture is a file in the studio, which that page can't open: it is sent the picture itself (a data address), for those edits that use one.
+      link.edits = edits;
+      link.pictures = Object.fromEntries(edits.flatMap((edit) => (edit.kind === "image" && pictures[edit.src] ? [[edit.src, pictures[edit.src]]] : [])));
+      send(frame.contentWindow, link, { type: "studio:edits:paint", edits: link.edits, pictures: link.pictures });
     }
   }
   brush.paint(docs, edits);
@@ -100,8 +107,27 @@ export function followPart(frame: HTMLIFrameElement, selector: string, heard: (p
   };
 }
 
-/** A part as a page on another address described it. Its picture can't be swapped from here (see `paintFrames`). */
-const heardPart = (part: Part | null): Part | null => (part ? { ...part, picture: null } : null);
+/**
+ * Hides the words of the element `selector` names in a frame while they are typed over (see `hideWords`): directly on
+ * the studio's own address, by message on another. Returns the way to show them again.
+ */
+export function hideWordsIn(frame: HTMLIFrameElement, selector: string) {
+  const doc = frame.contentDocument;
+  if (doc) return hideWords(doc, selector);
+  const win = frame.contentWindow;
+  if (!win) return () => {};
+  const link = linkOf(win);
+  link.hiding = selector;
+  send(win, link, { type: "studio:edits:hide", selector });
+  return () => {
+    if (link.hiding !== selector) return;
+    link.hiding = null;
+    send(win, link, { type: "studio:edits:hide", selector: null });
+  };
+}
+
+/** A part as a page on another address described it. */
+const heardPart = (part: Part | null): Part | null => part;
 
 /** A page on the studio's own address, read directly. */
 function near(frame: HTMLIFrameElement): FramePage {
@@ -116,6 +142,10 @@ function near(frame: HTMLIFrameElement): FramePage {
       const element = page ? hitting(frame, () => reachFrom(page, elementAt(page, x, y), from) ?? (from?.into ? null : elementAt(page, x, y, deep))) : null;
       return element ? describePart(element) : null;
     },
+    fonts: async (css) => {
+      const page = doc();
+      return page ? facesFor(page, css) : [];
+    },
     anchorOf: async (selector) => {
       const page = doc();
       const element = page ? partIn(page, selector) : null;
@@ -124,14 +154,7 @@ function near(frame: HTMLIFrameElement): FramePage {
     boxAt: async (x, y, reach = {}) => {
       const page = doc();
       if (!page) return null;
-      // A design system component is outlined whole when reaching in (⌘), as the bridge does on another address.
-      return hitting(frame, () => {
-        const element = designSystem && reach.deep !== false ? elementAt(page, x, y) : null;
-        const found = element && designSystem ? componentOf(element, new Set(designSystem)) : null;
-        if (!found) return boxAt(page, x, y, reach);
-        const { left, top, width, height } = found.root.getBoundingClientRect();
-        return { left, top, width, height, component: true };
-      });
+      return hitting(frame, () => hoverBox(page, x, y, reach, designSystem));
     },
     scrollAt: (x, y, dx, dy) => {
       const page = doc();
@@ -180,7 +203,7 @@ function near(frame: HTMLIFrameElement): FramePage {
 /** How long a question is waited for before the page is taken not to know (it may not have the helper). */
 const ASK_MS = 1500;
 
-type Ask = { id: number; what: "anchor" | "box" | "reveal" | "part" | "anchorOf" | "clip" | "mark" | "sourceAt" | "handoffPartBox" | "selectorBox"; x?: number; y?: number; deep?: boolean; groups?: boolean; from?: From; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; find?: Find; finds?: Find[]; colour?: string | null; elements?: SourceEl[]; part?: Find; index?: number };
+type Ask = { id: number; what: "anchor" | "box" | "fonts" | "reveal" | "part" | "anchorOf" | "clip" | "mark" | "sourceAt" | "handoffPartBox" | "selectorBox"; x?: number; y?: number; deep?: boolean; groups?: boolean; from?: From; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; css?: Record<string, string>; find?: Find; finds?: Find[]; colour?: string | null; elements?: SourceEl[]; part?: Find; index?: number };
 type Link = {
   /** The page's own address, once it has said hello; questions wait until then. */
   origin: string | null;
@@ -191,7 +214,11 @@ type Link = {
   waiting: Map<number, { ask: Ask; answer: (value: unknown) => void }>;
   /** The edits drawn on it, and the part followed on it: both said again to a page that has loaded again. */
   edits: Edit[];
+  /** The pictures those edits swap in, by the path they are saved at: data addresses. */
+  pictures: Record<string, string>;
   part: { selector: string; heard: (part: Part | null) => void } | null;
+  /** The words being typed over, hidden on the page: said again to a page that has loaded again. */
+  hiding: string | null;
   /** Told when the page is scrolled down or back up. */
   scrolled: ((down: boolean) => void) | null;
 };
@@ -232,8 +259,9 @@ function listen() {
         link.origin = event.origin;
         link.sent = "";
         follow(win, link);
-        if (link.edits.length) send(win, link, { type: "studio:edits:paint", edits: link.edits });
+        if (link.edits.length) send(win, link, { type: "studio:edits:paint", edits: link.edits, pictures: link.pictures });
         if (link.part) send(win, link, { type: "studio:edits:follow", selector: link.part.selector, components: designSystem });
+        if (link.hiding) send(win, link, { type: "studio:edits:hide", selector: link.hiding });
         for (const { ask } of link.waiting.values()) send(win, link, { type: "studio:comments:ask", ...ask });
         return;
       case "studio:comments:answer": {
@@ -261,7 +289,7 @@ function linkOf(win: Window) {
   listen();
   let link = links.get(win);
   if (!link) {
-    link = { origin: null, sent: "", wanted: {}, spots: {}, waiting: new Map(), edits: [], part: null, scrolled: null };
+    link = { origin: null, sent: "", wanted: {}, spots: {}, waiting: new Map(), edits: [], pictures: {}, part: null, hiding: null, scrolled: null };
     links.set(win, link);
     // "*": the page's address isn't known until it answers, and this carries nothing. A page whose helper has already
     // said hello (before comments were wanted here) loads the bridge on this; one still loading says hello itself.
@@ -279,6 +307,28 @@ export function watchScroll(frame: HTMLIFrameElement, told: (down: boolean) => v
   return () => {
     if (link.scrolled === told) link.scrolled = null;
   };
+}
+
+/**
+ * Told whether the page in a frame has been scrolled down (and not back up since), for an app bar that shrinks: read
+ * from the page itself on the studio's own address, through the bridge on another. Returns the way to stop.
+ */
+export function watchScrolled(frame: HTMLIFrameElement, told: (down: boolean) => void) {
+  const doc = frame.contentDocument;
+  if (!doc) return watchScroll(frame, told);
+  const last = new WeakMap<EventTarget, number>();
+  const onScroll = (event: Event) => {
+    const target = event.target as Document | Element;
+    // The frame's own Document is another class from this page's, so `instanceof` can't tell it: its node type can.
+    const element = target.nodeType === Node.DOCUMENT_NODE ? (target as Document).scrollingElement : (target as Element);
+    const now = element?.scrollTop ?? 0;
+    const before = last.get(target) ?? 0;
+    last.set(target, now);
+    if (now <= 0 || now < before - 4) told(false);
+    else if (now > before + 4) told(true);
+  };
+  doc.addEventListener("scroll", onScroll, { capture: true, passive: true });
+  return () => doc.removeEventListener("scroll", onScroll, { capture: true });
 }
 
 /**
@@ -362,8 +412,9 @@ function across(frame: HTMLIFrameElement): FramePage {
   return {
     // The keys the studio put in the frame's address are its own, whatever the page adds (see `ownedBy`).
     anchorAt: (x, y) => ask<Anchor | null>({ what: "anchor", x, y, owns: [...new URL(frame.src, window.location.href).searchParams.keys()] }, ASK_MS, null),
-    boxAt: (x, y, reach = {}) => ask<Box | null>({ what: "box", x, y, deep: reach.deep !== false, groups: reach.groups, components: designSystem ?? undefined }, ASK_MS, null),
+    boxAt: (x, y, reach = {}) => ask<Box | null>({ what: "box", x, y, deep: reach.deep !== false, groups: reach.groups, from: reach.from ? { selector: reach.from.selector, into: !!reach.from.into } : undefined, components: designSystem ?? undefined }, ASK_MS, null),
     partAt: (x, y, deep = true, from) => ask<Part | null>({ what: "part", x, y, deep, from, components: designSystem ?? undefined }, ASK_MS, null).then(heardPart),
+    fonts: (css) => ask<Face[]>({ what: "fonts", css }, 8000, []),
     anchorOf: (selector) => ask<Anchor | null>({ what: "anchorOf", selector, owns: [...new URL(frame.src, window.location.href).searchParams.keys()] }, ASK_MS, null),
     scrollAt: (x, y, dx, dy) => {
       if (win) send(win, linkOf(win), { type: "studio:comments:scroll", x, y, dx, dy });

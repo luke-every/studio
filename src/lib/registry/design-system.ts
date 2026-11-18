@@ -77,7 +77,7 @@ export async function designTokens(slug: string) {
   } catch {
     // Not on this machine: the production design system stands in.
   }
-  folders.push(join(homedir(), "Claude", "every-website"), join(homedir(), "Claude", "every-website-main"));
+  folders.push(join(homedir(), "Claude", "every-website-main"), join(homedir(), "Claude", "every-website"));
   for (const folder of folders) {
     for (const app of [join("src", "app"), "app"]) {
       const css = await readFile(join(folder, app, "globals.css"), "utf8").catch(() => null);

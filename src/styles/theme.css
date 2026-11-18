@@ -72,8 +72,15 @@
 
   --focus-ring: var(--ink-900);
   --scrim: color-mix(in oklab, var(--ink-900) 32%, transparent);
-  /* The element a comment would be pinned to: a faint dark fill inside a dark edge. It lies over a prototype's page, not the studio's, so it is the same in every theme. */
-  --pin-target-edge: color-mix(in oklab, var(--ink-900) 70%, transparent);
+  /* What is picked or hovered on a prototype's page (an element, a frame, a drawn box): blue, the same in every theme since it lies over the prototype's page, not the studio's. */
+  --selection: var(--blue-500);
+  --selection-muted: color-mix(in oklab, var(--blue-500) 8%, transparent);
+  /* Words highlighted in a text box over a prototype: strong enough to read on the page's own colours. */
+  --selection-highlight: color-mix(in oklab, var(--blue-500) 30%, transparent);
+  --pin-target-edge: var(--selection);
+  /* Alignment guides and measured distances over the canvas: a signal colour apart from the selection's blue, the same in every theme. */
+  --guide: var(--rose-500);
+  --guide-foreground: var(--paper-50);
   /* A design-system component instance picked in edit mode: drawn over the prototype's page too, so the same in every theme. */
   --inapp-chrome: var(--instagram-chrome);
   --inapp-chrome-foreground: var(--paper-50);

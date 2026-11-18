@@ -13,7 +13,7 @@ import { selectorFor } from "@/lib/edit-dom";
 export type Spot = { x: number; y: number };
 export type Box = { left: number; top: number; width: number; height: number; /** The element is a design-system component instance (edit mode on a live version). */ component?: boolean; /** The groups directly inside it, outlined dashed while it is hovered. */ children?: Box[] };
 /** How a point picks an element: `deep` is the one at the very bottom (⌘ held), otherwise the top-level group; `groups` also boxes what is directly inside it. */
-export type Reach = { deep?: boolean; groups?: boolean };
+export type Reach = { deep?: boolean; groups?: boolean; /** An element already selected, so a point beside it picks what is beside it (see `reachFrom`). */ from?: { selector: string; into?: boolean } };
 /** Whether a key in the prototype's address is the studio's (a control, a variant, the review token) rather than the prototype's own. */
 export type StudioOwns = (key: string) => boolean;
 
@@ -104,6 +104,9 @@ export function watchTaps(doc: Document) {
 export function elementAt(doc: Document, x: number, y: number, deep = true) {
   const hit = doc.elementFromPoint(x, y);
   if (!hit || hit === doc.body || hit === doc.documentElement) return null;
+  // The page itself (its root, and the wrappers around it) is never an element to pick: it is the frame.
+  const root = rootOf(doc);
+  if (root.children.length && (hit === root || hit.contains(root))) return null;
   return deep ? hit : topGroup(doc, hit);
 }
 
@@ -113,7 +116,7 @@ const drawn = (element: Element) => {
 };
 
 /** The page's real root: below the wrappers (`#__next`, a layout div) that hold one child and nothing else. */
-function rootOf(doc: Document) {
+export function rootOf(doc: Document) {
   let root: Element = doc.body;
   for (;;) {
     const inside = [...root.children].filter(drawn);
@@ -149,7 +152,11 @@ function groupsIn(element: Element, depth = 0): Element[] {
 /** The box of that element, in the document's own pixels, for the studio to outline while somebody chooses where to comment. */
 export function boxAt(doc: Document, x: number, y: number, { deep = true, groups = false }: Reach = {}): Box | null {
   const element = elementAt(doc, x, y, deep);
-  if (!element) return null;
+  return element ? boxOfElement(element, groups) : null;
+}
+
+/** An element's box, and with `groups` the boxes of what is directly inside it. */
+export function boxOfElement(element: Element, groups = false): Box {
   const { left, top, width, height } = element.getBoundingClientRect();
   if (!groups) return { left, top, width, height };
   const children = groupsIn(element).slice(0, MAX_GROUPS).map((child) => {
