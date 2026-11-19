@@ -289,7 +289,7 @@ export function FramePanel({ frame, unit, surface, inLayout, pin, onFillImage, p
     <div className="flex min-h-full flex-col">
       {onAlign ? <AlignRow onAlign={onAlign} spread={false} /> : null}
       <div className="flex flex-col gap-1 border-b border-divider p-4">
-        <Field caption={frame.shape ? { rectangle: "Rectangle", ellipse: "Ellipse", line: "Line", arrow: "Arrow", polygon: "Polygon", star: "Star", path: "Path" }[frame.shape] : "Frame"}>
+        <Field caption={frame.shape ? { rectangle: "Rectangle", ellipse: "Ellipse", line: "Line", arrow: "Arrow", polygon: "Polygon", star: "Star", path: "Path", sticky: "Sticky note" }[frame.shape] : "Frame"}>
           <input
             type="text"
             aria-label="Frame name"

@@ -2,13 +2,13 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo, useSyncExternalStore } from "react";
 
-import { ArrowIcon, CodeIcon, CopyIcon, EllipseIcon, PolygonIcon, StarIcon, FrameIcon, LineIcon, PenIcon, RectangleIcon, ImageIcon, PlayIcon, PointerIcon, SidebarIcon, TextIcon } from "@/components/shell/nav-icons";
+import { ArrowIcon, CodeIcon, EllipseIcon, PolygonIcon, StarIcon, FrameIcon, LineIcon, RectangleIcon, ImageIcon, PlayIcon, PointerIcon, TextIcon } from "@/components/shell/nav-icons";
 import { CanvasCamera, zoomAbout } from "@/lib/canvas-camera";
 import { detectLayout, flow as flowLayout, paddingOf, type Layout } from "@/lib/canvas-layout";
 import { copiedFill } from "@/lib/canvas-clipboard";
-import { fillsOf, readCanvas, writeCanvas, type CanvasFrame, type CanvasShape, type FillLayer, type Offsets, type Piece } from "@/lib/canvas-saved";
+import { fillsOf, readCanvas, STICKY_COLORS, writeCanvas, type CanvasFrame, type CanvasShape, type FillLayer, type Offsets, type Piece } from "@/lib/canvas-saved";
 import { COMPONENT_DRAG_TYPE } from "./components-panel";
-import { COPIES_OFFERED, donate, forgetCopies, useCopiesChoice, useScreenCopy } from "@/lib/screen-copies";
+import { COPIES_OFFERED, donate, useCopiesChoice, useScreenCopy } from "@/lib/screen-copies";
 import { ScreenCopy } from "./screen-copy";
 import type { Mark } from "@/lib/handoff";
 import type { SourceEl } from "@/lib/handoff-clip";
@@ -25,16 +25,19 @@ import { applyEmbed } from "@/lib/embed";
 import { embedded, PREVIEW_QUERY } from "@/lib/controls";
 
 import { ComponentsFrame } from "./components-frame";
-import { Card, CommentCard, Composer, DraftPin, Pin, PinTarget, type CommentsUi } from "./comment-parts";
+import { Card, CommentCard, Composer, DraftPin, NOTE_GAP, NOTE_WIDTH, NoteMark, noteHeight, noteScale, Pin, PinTarget, type CommentsUi } from "./comment-parts";
 import { editable, type Part } from "@/lib/edit-part";
 
 import { TextInPlace } from "./edit-layer";
 import { BunchPanel, FramePanel, PiecePanel, type AlignMode, type TextStyle } from "./frame-panel";
 import { LayersPanel, type LayerRow } from "./layers-panel";
+import { StickyNote } from "./sticky-note";
+import { StickyTool } from "./sticky-tool";
 import { ToolGroup, type ToolOption } from "./tool-group";
 import { deviceIcons } from "./view-menu";
 import { publishZoom } from "@/lib/canvas-zoom";
 import { measure, snapGaps, snapMove, snapResize, type Guide, type Rect, type Span } from "@/lib/canvas-geometry";
+import { boxOfTexts } from "@/lib/section-box";
 import { handoffPartBox, handoffSourceAt, pageOf, selectorBox, type FramePage } from "./frame-page";
 import { childrenIn, type PageTree } from "@/lib/page-tree";
 import { useVariants, variantLabel } from "@/lib/use-variants";
@@ -43,6 +46,12 @@ import { useCloudCanvas } from "./use-cloud-canvas";
 import { useSharedComments } from "./shared-comments";
 import { useUser } from "@/lib/use-user";
 
+/** A pointer from a drawing, its point at `x y`; the usual crosshair where drawings aren't used. */
+const drawnCursor = (svg: string, x: number, y: number) => `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${x} ${y}, crosshair`;
+/** Placing a comment: a speech bubble, its tail where the comment lands. */
+const COMMENT_CURSOR = drawnCursor("<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><path d='M3 25V9a6 6 0 0 1 6-6h10a6 6 0 0 1 6 6v6a6 6 0 0 1-6 6H8z' fill='#111' stroke='#fff' stroke-width='2' stroke-linejoin='round'/></svg>", 3, 25);
+/** Placing a note for the developers: a dot with its dotted line out to a box, the dot where the note lands. */
+const NOTE_CURSOR = drawnCursor("<svg xmlns='http://www.w3.org/2000/svg' width='32' height='28' viewBox='0 0 32 28'><path d='M8 14h6' stroke='#fff' stroke-width='4'/><path d='M8 14h6' stroke='#111' stroke-width='1.5' stroke-dasharray='2 2'/><rect x='14' y='6' width='15' height='16' rx='3' fill='#111' stroke='#fff' stroke-width='2'/><circle cx='5' cy='14' r='3.5' fill='#111' stroke='#fff' stroke-width='2'/></svg>", 5, 14);
 /** How big a screen is drawn on the canvas, as a share of the phone's real size. */
 const SCREEN_SCALE = 0.5;
 /**
@@ -72,6 +81,11 @@ const SHAPE_OPTIONS: ToolOption[] = [
   { id: "polygon", label: "Polygon", icon: <PolygonIcon className="size-4" /> },
   { id: "star", label: "Star", icon: <StarIcon className="size-4" /> },
 ];
+/** A sticky note is this big (in the canvas's own units) when it is put down, and square; its other shape is a quarter wider (5 to 4), with the same least height. */
+const STICKY_SIZE = 120;
+const STICKY_WIDE = 1.25;
+/** Pulled out sideways, a note keeps its shape until the pull passes the middle of the way between its two shapes, and then goes to the other at once. */
+const STICKY_POP = (1 + STICKY_WIDE) / 2;
 /** Shapes drawn as lines and paths in an SVG over their box (the rest are the box itself). */
 const drawnAsLines = (shape?: CanvasFrame["shape"]) => shape === "line" || shape === "arrow" || shape === "path" || shape === "polygon" || shape === "star";
 /** An arrow's head: two strokes back from its tip, in the box's units. */
@@ -113,8 +127,12 @@ const LABEL_HEIGHT = 26;
 const MIN_SIZE = 8;
 /** The clear space between one device's copy of a screen and the next device's, beside it: less than between screens, so a screen's copies read as a group. */
 const DEVICE_GAP = 48;
+/**
+ * The canvas draws a screen at half its size (SCREEN_SCALE), so the zoom the person is told is that scale times a half: 100% is real size, a 390 wide phone 390
+ * pixels across, as the dimensions say. These two are the canvas's own scale, so 400% at most is 8 here.
+ */
 const MIN_ZOOM = 0.08;
-const MAX_ZOOM = 4;
+const MAX_ZOOM = 8;
 /** Room kept clear around what is fitted: the top is where the toolbar sits over the canvas. */
 const INSET = { top: 104, side: 56 };
 /** How much a double-click zooms in. */
@@ -216,6 +234,14 @@ export function FlowCanvas({
   tools,
   layersOpen = false,
   onLayersOpen,
+  topLeft,
+  topRight,
+  editHistory,
+  focusFind,
+  sidePanel,
+  sideFull = false,
+  deviceChoice,
+  onDeviceChoice,
   uiHidden = false,
   viewOnly = false,
 }: {
@@ -229,6 +255,20 @@ export function FlowCanvas({
   /** Whether the layers panel is shown on the left. */
   layersOpen?: boolean;
   onLayersOpen?: (open: boolean) => void;
+  /** The controls at the top left, over the layers, and at the top right, over the properties: one card each. */
+  topLeft?: React.ReactNode;
+  topRight?: React.ReactNode;
+  /** Undo and redo while editing: a card of their own, just left of the top right one. */
+  editHistory?: React.ReactNode;
+  /** Lines of one section of the copy: once the screens are in, the view goes to where they are. */
+  focusFind?: string[];
+  /** Under the controls at the top right, in the same card, in place of nothing: the comments while commenting. */
+  sidePanel?: React.ReactNode;
+  /** The side panel fills the card's height (the comments and the notes, which ask questions that open over it) instead of being as tall as it is. */
+  sideFull?: boolean;
+  /** The devices chosen to show the screens on, once somebody has: kept with the canvas, here and in the cloud. `onDeviceChoice` is told of the ones the canvas has kept. */
+  deviceChoice?: string[];
+  onDeviceChoice?: (ids: string[]) => void;
   /** ⌘. : the canvas's own controls (panels, the bar at the foot) are put out of sight. */
   uiHidden?: boolean;
   /** The prototype's address, without any screen's parameters. */
@@ -334,7 +374,14 @@ export function FlowCanvas({
   // tallest of them. What is measured here is the screens alone, without the gap after the last.
   const group = devices.reduce((sum, on) => sum + on.width * SCREEN_SCALE, 0) + DEVICE_GAP * (devices.length - 1);
   const tallest = (id: string) => Math.max(...devices.map((on) => heightOf(copyKey(on.id, id))));
-  const laid = layoutFlow(flow, { width: group + GAP.x, height: 0 }, Infinity, (id) => tallest(id) + GAP.y + LABEL_HEIGHT);
+  // A screen with a note for the developers has room after it for the note, so the next screen isn't under it.
+  const noted = new Set<string>();
+  for (const note of comments?.notes ?? []) {
+    if (!setups) {
+      if (note.anchor.flowScreen) noted.add(note.anchor.flowScreen);
+    } else for (const [screenId, setup] of Object.entries(setups)) if (setupOf(setup) === setupOf(note.variant)) noted.add(screenId);
+  }
+  const laid = layoutFlow(flow, { width: group + GAP.x, height: 0 }, Infinity, (id) => tallest(id) + GAP.y + LABEL_HEIGHT, (id) => (noted.has(id) ? NOTE_WIDTH + NOTE_GAP : 0));
   const placed = spreadCopies(laid.placed, devices.map((on) => ({ id: on.id, width: on.width * SCREEN_SCALE })), DEVICE_GAP);
   const flowWidth = laid.width - GAP.x;
   const flowHeight = laid.height - GAP.y;
@@ -348,7 +395,16 @@ export function FlowCanvas({
   // Kept as they change, so the canvas is as it was left when it is opened again.
   // The frames drawn with the F tool (see below), kept the same way.
   const [shapes, setShapes] = useState<CanvasFrame[]>(() => readCanvas(base).frames);
-  useEffect(() => writeCanvas(base, { offsets, pieces, frames: shapes }), [base, offsets, pieces, shapes]);
+  useEffect(() => writeCanvas(base, { offsets, pieces, frames: shapes, devices: deviceChoice }), [base, offsets, pieces, shapes, deviceChoice]);
+  // Opened: the choice this browser kept is put back (the cloud's, when it has one, comes with the canvas).
+  const keptDevices = useRef(onDeviceChoice);
+  useEffect(() => {
+    keptDevices.current = onDeviceChoice;
+  });
+  useEffect(() => {
+    const kept = readCanvas(base).devices;
+    if (kept) keptDevices.current?.(kept);
+  }, [base]);
   // Each finished move, so ⌘Z puts a screen back where it was and ⇧⌘Z (or ⌘Y) moves it again.
   const offsetsNow = useRef(offsets);
   useEffect(() => {
@@ -398,7 +454,7 @@ export function FlowCanvas({
   const view = useSyncExternalStore(camera.subscribe, () => camera.target, () => camera.target);
   const worldEl = useRef<HTMLDivElement>(null);
   // Whether screens are drawn as static copies of their pages (lib/screen-copies.ts) instead of the pages running. Only while developing, for now.
-  const [copiesChosen, chooseCopies] = useCopiesChoice();
+  const [copiesChosen] = useCopiesChoice();
   useLayoutEffect(() => {
     camera.attach({ world: worldEl.current, grid: box.current, gridStep: 24 }, Math.max(window.innerWidth, window.innerHeight));
     return () => camera.detach();
@@ -562,7 +618,10 @@ export function FlowCanvas({
     stood.current = placed;
   });
 
-  const list = comments?.list;
+  // Notes are found on the pages the way comments are: they have a place in a screen too.
+  const list = comments ? [...comments.list, ...comments.notes] : undefined;
+  // The notes opened out past the lines they show at first.
+  const [longNotes, setLongNotes] = useState<ReadonlySet<string>>(new Set());
   const visible = !!comments?.visible;
   const last = useRef("");
   const read = () => {
@@ -618,6 +677,49 @@ export function FlowCanvas({
     // Only when asked, not each time the layout or the size moves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asked]);
+
+  // Asked to look at a section (a link in a copy doc): once the screens have arrived, the view goes to the box that holds its lines on the first screen that has
+  // them, or to the first screen when none does (the lines are in a closed modal, or the words have changed since the link was made).
+  const sectionKey = focusFind?.join("|");
+  useEffect(() => {
+    if (!sectionKey || !focusFind || !size || !revealed || !copies.length) return;
+    let stop = false;
+    const timers: number[] = [];
+    const go = (attempt: number) => {
+      if (stop) return;
+      for (const copy of copies) {
+        const doc = frames.current.get(copy.id)?.contentDocument;
+        const found = doc ? boxOfTexts(doc, focusFind) : null;
+        if (!found) continue;
+        const spot = at(copy.id);
+        const world = { x: spot.x + found.left * SCREEN_SCALE, y: spot.y + found.top * SCREEN_SCALE, width: found.width * SCREEN_SCALE, height: found.height * SCREEN_SCALE };
+        const space = clear(size);
+        // Not closer than 150%: one short line shouldn't fill the window.
+        const scale = Math.min(1.5 / SCREEN_SCALE, MAX_ZOOM, space.width / (world.width * 1.25), space.height / (world.height * 1.25));
+        touch(true);
+        camera.set({ scale, x: size.width / 2 - (world.x + world.width / 2) * scale, y: INSET.top + space.height / 2 - (world.y + world.height / 2) * scale }, { glide: true });
+        return;
+      }
+      if (attempt < 3) {
+        timers.push(window.setTimeout(() => go(attempt + 1), 600));
+        return;
+      }
+      const first = copies[0];
+      const spot = at(first.id);
+      const space = clear(size);
+      const tall = heightOf(first.id);
+      const scale = Math.min(MAX_ZOOM, space.width / widthOf(first.id), space.height / tall);
+      touch(true);
+      camera.set({ scale, x: size.width / 2 - (spot.x + widthOf(first.id) / 2) * scale, y: INSET.top + space.height / 2 - (spot.y + tall / 2) * scale }, { glide: true });
+    };
+    timers.push(window.setTimeout(() => go(0), 300));
+    return () => {
+      stop = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+    // Once for each link, when the screens are in: not each time the layout or the size moves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionKey, revealed, !!size]);
 
   const zoomAt = (px: number, py: number, factor: number, animate = false) => {
     touch(true);
@@ -737,18 +839,19 @@ export function FlowCanvas({
   const user = useUser();
   const sharedAs = useSharedComments();
   const [, setPictureArrived] = useState(0);
-  useCloudCanvas({
+  const cloudStatus = useCloudCanvas({
     cloud,
     token: sharedAs?.token,
     base,
     viewOnly,
     by: user.name,
-    canvas: { offsets, pieces, frames: shapes },
+    canvas: { offsets, pieces, frames: shapes, devices: deviceChoice },
     adopt: (found) => {
       history.current = { past: [], future: [], now: { offsets: found.offsets, pieces: found.pieces, shapes: found.frames } };
       setOffsets(found.offsets);
       setPieces(found.pieces);
       setShapes(found.frames);
+      if (found.devices) onDeviceChoice?.(found.devices);
     },
     havePicture: (name) => !!pictureOf(name),
     pictureData: pictureOf,
@@ -1000,6 +1103,9 @@ export function FlowCanvas({
   const [penAt, setPenAt] = useState<{ x: number; y: number } | null>(null);
   // The shape last chosen from the bar's shapes menu: what its button holds.
   const [shapeKind, setShapeKind] = useState<CanvasShape>("rectangle");
+  // The sticky note tool (S): the colour a new one is, and the one whose words are being typed.
+  const [stickyColor, setStickyColor] = useState<string>(STICKY_COLORS[0].color);
+  const [editingSticky, setEditingSticky] = useState<string | null>(null);
   const shapingNow = useRef<CanvasShape | null>(null);
   useEffect(() => {
     shapingNow.current = shaping;
@@ -1035,7 +1141,7 @@ export function FlowCanvas({
       if (event.metaKey || event.ctrlKey || event.altKey || target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")) return;
       // A canvas that is closed stays loaded out of sight: its keys are not for it then.
       if (box.current?.closest("[inert]")) return;
-      const tool = event.shiftKey && event.key.toLowerCase() === "l" ? "arrow" : event.shiftKey ? undefined : ({ r: "rectangle", o: "ellipse", l: "line", p: "path" } as Record<string, CanvasShape>)[event.key.toLowerCase()];
+      const tool = event.shiftKey && event.key.toLowerCase() === "l" ? "arrow" : event.shiftKey ? undefined : ({ r: "rectangle", o: "ellipse", l: "line", s: "sticky" } as Record<string, CanvasShape>)[event.key.toLowerCase()];
       if (tool && !event.repeat && !viewOnly) {
         shapeActs.current.pick(tool);
       } else if (event.key === "Enter" && shapingNow.current === "path") {
@@ -1145,10 +1251,10 @@ export function FlowCanvas({
     setPenned([]);
     setFraming(false);
     setTexting(false);
-    if (kind !== "path") setShapeKind(kind);
+    if (kind !== "path" && kind !== "sticky") setShapeKind(kind);
     setShaping((now) => (now === kind && !chosen ? null : kind));
   };
-  const shapeNames: Record<CanvasShape, string> = { rectangle: "Rectangle", ellipse: "Ellipse", line: "Line", arrow: "Arrow", polygon: "Polygon", star: "Star", path: "Path" };
+  const shapeNames: Record<CanvasShape, string> = { rectangle: "Rectangle", ellipse: "Ellipse", line: "Line", arrow: "Arrow", polygon: "Polygon", star: "Star", path: "Path", sticky: "Sticky note" };
   /** The corners of a triangle, or of a five-pointed star, as fractions of the box they fill. */
   const cornersOf = (kind: "polygon" | "star"): [number, number][] =>
     kind === "polygon"
@@ -1178,6 +1284,16 @@ export function FlowCanvas({
     setShape(id);
     setSelected(null);
     setShaping(null);
+    return id;
+  };
+  // A note carried out of the bar and let go of over the canvas (not over the bar again): put down there, centred on the pointer, and typed on.
+  const dropSticky = (color: string, clientX: number, clientY: number) => {
+    const rect = box.current?.getBoundingClientRect();
+    if (!rect || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return;
+    if (document.elementFromPoint(clientX, clientY)?.closest('[role="toolbar"]')) return;
+    const at = worldOf(clientX, clientY);
+    setStickyColor(color);
+    setEditingSticky(putShape("sticky", { x: at.x - STICKY_SIZE / 2, y: at.y - STICKY_SIZE / 2, width: STICKY_SIZE, height: STICKY_SIZE }, { fill: color, radius: 4, text: "", author: user.name || undefined, base: STICKY_SIZE }));
   };
   const addShape = (kind: CanvasShape, area: { x: number; y: number; x2: number; y2: number }) => {
     const now = camera.target;
@@ -1185,7 +1301,14 @@ export function FlowCanvas({
     const x = (Math.min(area.x, area.x2) - now.x) / now.scale;
     const y = (Math.min(area.y, area.y2) - now.y) / now.scale;
     const straight = kind === "line" || kind === "arrow";
-    const [width, height] = dragged ? [Math.abs(area.x2 - area.x) / now.scale, Math.abs(area.y2 - area.y) / now.scale] : straight ? [100, 0] : [100, 100];
+    const [width, height] = dragged ? [Math.abs(area.x2 - area.x) / now.scale, Math.abs(area.y2 - area.y) / now.scale] : straight ? [100, 0] : kind === "sticky" ? [STICKY_SIZE, STICKY_SIZE] : [100, 100];
+    if (kind === "sticky") {
+      // A sticky note is in the colour in hand, and is typed on at once.
+      // A square, as big as the drag was in its larger direction; that is its base.
+      const side = dragged ? Math.max(width, height) : STICKY_SIZE;
+      setEditingSticky(putShape(kind, { x, y, width: side, height: side }, { fill: stickyColor, radius: 4, text: "", author: user.name || undefined, base: side }));
+      return;
+    }
     putShape(kind, { x, y, width, height }, straight ? { flip: dragged && area.x2 > area.x !== area.y2 > area.y } : kind === "polygon" || kind === "star" ? { points: cornersOf(kind), closed: true } : {});
   };
   const finishPath = (closed: boolean) => {
@@ -1272,8 +1395,10 @@ export function FlowCanvas({
   // Resizing from the eight handles on a selected frame or image, as in Figma: a corner keeps its opposite one still, an edge moves only itself, Shift keeps
   // the proportions (from a corner) and Alt grows it from the middle. A frame follows the pointer; an image shows its new box and takes it on letting go.
   type Area = { x: number; y: number; width: number; height: number };
-  const resizeFrom = useRef<{ id: string; image: boolean; handle: [number, number]; px: number; py: number; start: Area } | null>(null);
+  const resizeFrom = useRef<{ id: string; image: boolean; handle: [number, number]; px: number; py: number; start: Area; base: number } | null>(null);
   const [resizeDraft, setResizeDraft] = useState<Area | null>(null);
+  // The sticky note being pulled wide or square: its width goes over a moment, so the change is seen as a pop.
+  const [popping, setPopping] = useState<string | null>(null);
   const areaOf = (start: Area, [hx, hy]: [number, number], dx: number, dy: number, keep: boolean, centre: boolean): Area => {
     const grow = centre ? 2 : 1;
     let width = start.width + (hx === 1 ? dx : hx === 0 ? -dx : 0) * grow;
@@ -1293,7 +1418,7 @@ export function FlowCanvas({
     event.stopPropagation();
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    resizeFrom.current = { id, image, handle, px: event.clientX, py: event.clientY, start };
+    resizeFrom.current = { id, image, handle, px: event.clientX, py: event.clientY, start, base: shapes.find((one) => one.id === id)?.base ?? Math.min(start.width, start.height) };
   };
   // A text's width is put on the words where they are drawn, so they reflow as it is dragged, with nothing loaded again (the width is not part of the layer's address).
   // Its height follows the lines, read back from there.
@@ -1368,7 +1493,19 @@ export function FlowCanvas({
   const moveResize = (event: React.PointerEvent<HTMLElement>) => {
     const now = resizeFrom.current;
     if (!now) return;
-    let area = areaOf(now.start, now.handle, (event.clientX - now.px) / view.scale, (event.clientY - now.py) / view.scale, event.shiftKey, event.altKey);
+    // A sticky note has two shapes, square and wide. Pulled from its right edge it goes from one to the other as the pull passes the middle of the way, at once;
+    // pulled from a corner it is scaled as a whole (its words with it), keeping the shape it has.
+    const sticky = !now.image && shapes.find((one) => one.id === now.id)?.shape === "sticky";
+    if (sticky && now.handle[0] === 1 && now.handle[1] === 0.5) {
+      const reach = now.start.width + (event.clientX - now.px) / view.scale;
+      const width = now.base * (reach > now.base * STICKY_POP ? STICKY_WIDE : 1);
+      clearGuides();
+      setPopping(now.id);
+      setShapes((all) => all.map((one) => (one.id === now.id ? { ...one, width } : one)));
+      return;
+    }
+    const keep = event.shiftKey || (sticky && now.handle[0] !== 0.5 && now.handle[1] !== 0.5);
+    let area = areaOf(now.start, now.handle, (event.clientX - now.px) / view.scale, (event.clientY - now.py) / view.scale, keep, event.altKey);
     // The edges pulled line up with other things' edges and middles (the frame it is in too), as a moved layer does; ⌘ or Ctrl turns that off, and Alt (from the middle) keeps to its own.
     // With Shift held at a corner the proportions are kept: each pulled edge is tried on its own, the nearer one wins, and both sides follow it.
     if (!(event.metaKey || event.ctrlKey || event.altKey)) {
@@ -1376,7 +1513,7 @@ export function FlowCanvas({
       const targets = everythingBut(skip);
       const near = RESIZE_SNAP_PX / camera.target.scale;
       const [hx, hy] = now.handle;
-      if (event.shiftKey && hx !== 0.5 && hy !== 0.5) {
+      if (keep && hx !== 0.5 && hy !== 0.5) {
         const [alongX, alongY] = [snapResize({ id: now.id, ...area }, [hx, 0.5], targets, near).area, snapResize({ id: now.id, ...area }, [0.5, hy], targets, near).area];
         const [offX, offY] = [Math.abs(alongX.width - area.width), Math.abs(alongY.height - area.height)];
         const by = offX > 0 && (offY === 0 || offX <= offY) ? alongX.width / area.width : offY > 0 ? alongY.height / area.height : 1;
@@ -1411,12 +1548,13 @@ export function FlowCanvas({
     if (now.image) return setResizeDraft(area);
     // By hand now: the sides pulled are its own size from here on (a hugging frame stops hugging that side).
     const [hx, hy] = now.handle;
-    setShapes((all) => all.map((one) => (one.id === now.id ? { ...one, ...area, sizing: { ...one.sizing, ...(hx !== 0.5 ? { width: "fixed" as const } : {}), ...(hy !== 0.5 ? { height: "fixed" as const } : {}) } } : one)));
+    setShapes((all) => all.map((one) => (one.id === now.id ? { ...one, ...area, ...(sticky ? { base: now.base * (area.width / now.start.width) } : {}), sizing: { ...one.sizing, ...(hx !== 0.5 ? { width: "fixed" as const } : {}), ...(hy !== 0.5 ? { height: "fixed" as const } : {}) } } : one)));
   };
   const endResize = () => {
     const now = resizeFrom.current;
     resizeFrom.current = null;
     clearGuides();
+    setPopping(null);
     const area = resizeDraft;
     setResizeDraft(null);
     if (!now?.image || !area) return;
@@ -1475,7 +1613,7 @@ export function FlowCanvas({
   };
   const styleText = (id: string, patch: Partial<TextStyle>) => setPieces((all) => all.map((piece) => (copyKey("stage", piece.id) === id ? { ...piece, props: { ...piece.props, ...patch } } : piece)));
   const HANDLES: [number, number][] = [[0, 0], [0.5, 0], [1, 0], [1, 0.5], [1, 1], [0.5, 1], [0, 1], [0, 0.5]];
-  const handlesFor = (id: string, image: boolean, area: Area, sides = false, fit?: (handle: [number, number]) => void, label?: string, tone = "var(--selection)") => {
+  const handlesFor = (id: string, image: boolean, area: Area, sides = false, fit?: (handle: [number, number]) => void, label?: string, tone = "var(--selection)", sticky = false) => {
     const corner = toScreen(area.x, area.y);
     const [w, h] = [area.width * view.scale, area.height * view.scale];
     return (
@@ -1490,7 +1628,7 @@ export function FlowCanvas({
             {label}
           </span>
         ) : null}
-        {HANDLES.filter(([, hy]) => !sides || hy === 0.5).map(([hx, hy]) => (
+        {HANDLES.filter(([hx, hy]) => (!sides || hy === 0.5) && (!sticky || (hx === 1 && hy === 0.5) || (hx !== 0.5 && hy !== 0.5))).map(([hx, hy]) => (
           <span
             key={`${hx}-${hy}`}
             onPointerDown={(event) => startResize(event, id, image, [hx, hy], { x: area.x, y: area.y, width: area.width, height: area.height })}
@@ -1834,7 +1972,7 @@ export function FlowCanvas({
     zoomControls.current = {
       zoomIn: () => size && zoomAt(size.width / 2, size.height / 2, 1.25, true),
       zoomOut: () => size && zoomAt(size.width / 2, size.height / 2, 1 / 1.25, true),
-      reset: () => size && zoomAt(size.width / 2, size.height / 2, 1 / camera.target.scale, true),
+      reset: () => size && zoomAt(size.width / 2, size.height / 2, 1 / SCREEN_SCALE / camera.target.scale, true),
       fit: () => {
         if (!size) return;
         touch(false);
@@ -2765,7 +2903,7 @@ export function FlowCanvas({
   });
   const canPlay = !!interactWith;
   useEffect(() => {
-    publishZoom({ scale: view.scale, zoomIn: () => zoomControls.current.zoomIn(), zoomOut: () => zoomControls.current.zoomOut(), reset: () => zoomControls.current.reset(), fit: () => zoomControls.current.fit(), play: canPlay ? () => playNow.current() : null });
+    publishZoom({ scale: view.scale * SCREEN_SCALE, zoomIn: () => zoomControls.current.zoomIn(), zoomOut: () => zoomControls.current.zoomOut(), reset: () => zoomControls.current.reset(), fit: () => zoomControls.current.fit(), play: canPlay ? () => playNow.current() : null });
   }, [view.scale, canPlay]);
   const needsLive = placing || !!inspect || (visible && !!list?.length);
   const asCopies = copiesChosen && !needsLive;
@@ -2801,6 +2939,12 @@ export function FlowCanvas({
         const pan = spaced || placing;
         // Panning with Space is not a click on anything: what is selected stays selected.
         if (!spaced) {
+          // A note that was selected is let go of by a press on the canvas around it.
+          if (comments?.focus && comments.notes.some((note) => note.id === comments.focus?.id)) {
+            comments.onFocus(null);
+            // Tapped from the canvas as it was: that is where it goes back to. In note mode the press goes on to leave a note.
+            if (comments.peeking) comments.onLeave();
+          }
           setShape(null);
           setBunch((now) => (now.copies.length || now.frames.length ? { copies: [], frames: [] } : now));
         }
@@ -2868,6 +3012,12 @@ export function FlowCanvas({
           window.setTimeout(() => (drag.current = null), 0);
           return;
         }
+        // Shift on a screen's name (a screen itself handles its own): the screen is added to the selection, or taken out of it.
+        if (done?.screen && !done.moved && event.shiftKey) {
+          toggleSelected(done.screen);
+          window.setTimeout(() => (drag.current = null), 0);
+          return;
+        }
         if (done?.lasso && done.moved && box.current) {
           const rect = box.current.getBoundingClientRect();
           const found = touching({ x: done.x - rect.left, y: done.y - rect.top, x2: event.clientX - rect.left, y2: event.clientY - rect.top });
@@ -2925,10 +3075,14 @@ export function FlowCanvas({
         }
         window.setTimeout(() => (drag.current = null), 0);
       }}
-      className={`absolute inset-0 touch-none overflow-hidden ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : ""}`}
+      // Shift is for selecting several: it must not also select the words between one press and the next.
+      onMouseDown={(event) => event.shiftKey && event.preventDefault()}
+      // Placing a comment or a note: the pointer says so, over everything, as it does while panning.
+      style={placing && !panning ? { cursor: comments?.noting ? NOTE_CURSOR : COMMENT_CURSOR } : undefined}
+      className={`absolute inset-0 touch-none overflow-hidden ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : placing ? "[&_*]:!cursor-[inherit]" : ""}`}
     >
       <div ref={worldEl} className="absolute left-0 top-0 origin-top-left" style={{ visibility: size ? undefined : "hidden" }}>
-        {shapes.map((one) => (
+        {shapes.filter((one) => one.shape !== "sticky").map((one) => (
           <div
             key={one.id}
             onPointerDown={(event) => frameDown(event, one)}
@@ -2937,7 +3091,7 @@ export function FlowCanvas({
             onPointerUp={frameUp}
             onPointerEnter={() => setHoverShape(one.id)}
             onPointerLeave={() => setHoverShape((now) => (now === one.id ? null : now))}
-            style={{ left: one.x, top: one.y, width: one.width, height: one.height, clipPath: clipFor(one.parent, one), background: drawnAsLines(one.shape) ? "transparent" : backgroundOf(one), borderRadius: one.shape === "ellipse" ? "50%" : one.radius, display: frameState(one.id, "hidden") ? "none" : undefined, pointerEvents: frameState(one.id, "locked") ? "none" : undefined, boxShadow: one.stroke ? `inset 0 0 0 ${one.strokeWidth ?? 1}px ${one.stroke}` : undefined, outline: dropInto === one.id ? `${3 / view.scale}px solid var(--selection)` : shape === one.id || bunch.frames.includes(one.id) ? `${2 / view.scale}px solid var(--selection)` : hoverShape === one.id ? `${1 / view.scale}px solid var(--selection)` : undefined, outlineOffset: 0 }}
+            style={{ left: one.x, top: one.y, width: one.width, height: one.height, clipPath: clipFor(one.parent, one), background: drawnAsLines(one.shape) ? "transparent" : backgroundOf(one), borderRadius: one.shape === "ellipse" ? "50%" : one.radius, display: frameState(one.id, "hidden") ? "none" : undefined, pointerEvents: frameState(one.id, "locked") ? "none" : undefined, boxShadow: one.shape === "sticky" ? "var(--elev-floating)" : one.stroke ? `inset 0 0 0 ${one.strokeWidth ?? 1}px ${one.stroke}` : undefined, outline: dropInto === one.id ? `${3 / view.scale}px solid var(--selection)` : shape === one.id || bunch.frames.includes(one.id) ? `${2 / view.scale}px solid var(--selection)` : hoverShape === one.id ? `${1 / view.scale}px solid var(--selection)` : undefined, outlineOffset: 0, transition: popping === one.id ? "width var(--dur-fast) var(--curve-spatial)" : undefined }}
             className="absolute cursor-default"
           >
             {drawnAsLines(one.shape) ? (
@@ -3104,6 +3258,45 @@ export function FlowCanvas({
         {size && sheet && withSheet ? <ComponentsFrame marks={sheet.marks} pages={Object.fromEntries(flow.screens.map((screen) => [screen.id, `${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`]))} devices={devices} scale={SCREEN_SCALE} onSize={setSheetSize} left={flowWidth + GAP.x} /> : null}
       </div>
 
+      {/*
+        Sticky notes are drawn here, at the size they are on screen, and not inside the world that is scaled: a note in the world is a picture stretched, and soft in
+        Safari however far in. Here its box, its words and its shadow are each set to the pixels they take, so they are as sharp as any text at every zoom.
+      */}
+      {size ? (
+        <div className="pointer-events-none absolute inset-0">
+          {shapes
+            .filter((one) => one.shape === "sticky" && !frameState(one.id, "hidden"))
+            .map((one) => (
+              <StickyNote
+                key={one.id}
+                note={one}
+                scale={view.scale}
+                corner={toScreen(one.x, one.y)}
+                background={backgroundOf(one)}
+                outline={dropInto === one.id ? "3px solid var(--selection)" : shape === one.id || bunch.frames.includes(one.id) ? "2px solid var(--selection)" : hoverShape === one.id ? "1px solid var(--selection)" : undefined}
+                transition={popping === one.id ? "width var(--dur-fast) var(--curve-spatial)" : undefined}
+                locked={viewOnly || frameState(one.id, "locked")}
+                editing={editingSticky === one.id}
+                handlers={{
+                  onPointerDown: (event) => frameDown(event, one),
+                  onContextMenu: (event) => openMenu(event, { frame: one.id }),
+                  onPointerMove: (event) => frameMove(event, one),
+                  onPointerUp: frameUp,
+                  onPointerEnter: () => setHoverShape(one.id),
+                  onPointerLeave: () => setHoverShape((now) => (now === one.id ? null : now)),
+                }}
+                onEdit={() => setEditingSticky(one.id)}
+                onCommit={(text) => {
+                  setEditingSticky(null);
+                  if (text !== (one.text ?? "")) updateFrame(one.id, { text });
+                }}
+                // Its height is whatever its words need (never less than its base): kept as it is measured, with no step of its own in the undo.
+                onFit={(height) => setShapes((all) => all.map((item) => (item.id === one.id && Math.abs(item.height - height) > 1 ? { ...item, height } : item)))}
+              />
+            ))}
+        </div>
+      ) : null}
+
       {/* While the pages load: a quiet loader in the middle, which gives way as they arrive. */}
       <div
         aria-live="polite"
@@ -3203,7 +3396,8 @@ export function FlowCanvas({
           })}
           {shapes.map((one) => {
             // Only a top-level frame is named on the canvas; what is in one is named in the layers.
-            if (frameState(one.id, "hidden") || one.parent) return null;
+            // A sticky note isn't named: it says what it says, and who by.
+            if (frameState(one.id, "hidden") || one.parent || one.shape === "sticky") return null;
             const spot = toScreen(one.x, one.y);
             // Double-clicked, the name is a field, right where it is.
             if (renaming === one.id)
@@ -3240,7 +3434,7 @@ export function FlowCanvas({
                 onPointerUp={frameUp}
                 onDoubleClick={() => !viewOnly && !one.locked && setRenaming(one.id)}
                 style={{ left: spot.x, top: spot.y - 22, maxWidth: Math.max(60, one.width * view.scale) }}
-                className={`absolute truncate text-xs font-medium ${placing || framing || one.locked ? "pointer-events-none" : "pointer-events-auto cursor-default"} ${shape === one.id || bunch.frames.includes(one.id) ? "text-foreground" : "text-foreground-muted"}`}
+                className={`absolute select-none truncate text-xs font-medium ${placing || framing || one.locked ? "pointer-events-none" : "pointer-events-auto cursor-default"} ${shape === one.id || bunch.frames.includes(one.id) ? "text-foreground" : "text-foreground-muted"}`}
               >
                 {one.name}
               </span>
@@ -3251,7 +3445,7 @@ export function FlowCanvas({
                 const frame = shape ? shapes.find((one) => one.id === shape) : undefined;
                 // The size, under it: each side its number, and `Hug` or `Fill` after it where that is how it is sized.
                 const sizeLabel = (area: Area, modes: ["fixed" | "hug" | "fill", "fixed" | "hug" | "fill"]) => modes.map((mode, at) => `${Math.round((at ? area.height : area.width) / SCREEN_SCALE)}${mode === "hug" ? " Hug" : mode === "fill" ? " Fill" : ""}`).join(" × ");
-                if (frame) return handlesFor(frame.id, false, frame, false, (handle) => fitFrame(frame.id, handle), sizeLabel(frame, frame.shape ? ["fixed", "fixed"] : [frameMode(frame, "width"), frameMode(frame, "height")]));
+                if (frame) return handlesFor(frame.id, false, frame, false, (handle) => fitFrame(frame.id, handle), sizeLabel(frame, frame.shape ? ["fixed", "fixed"] : [frameMode(frame, "width"), frameMode(frame, "height")]), undefined, frame.shape === "sticky");
                 const sized = selected && !picked && pieces.find((piece) => copyKey("stage", piece.id) === selected);
                 if (!sized || !copyOf.has(selected!)) return null;
                 const spot = at(selected!);
@@ -3277,7 +3471,7 @@ export function FlowCanvas({
                 data-screen-name
                 onPointerDown={(event) => grab(event, id)}
                 style={{ left: spot.x, top: spot.y - 22, maxWidth: Math.max(60, widthOf(id) * view.scale) }}
-                className={`absolute flex items-center gap-1.5 text-xs font-medium ${placing ? "pointer-events-none" : "pointer-events-auto cursor-grab"} ${selected === id ? "text-foreground" : "text-foreground-muted"}`}
+                className={`absolute flex select-none items-center gap-1.5 text-xs font-medium ${placing ? "pointer-events-none" : "pointer-events-auto cursor-grab"} ${selected === id ? "text-foreground" : "text-foreground-muted"}`}
               >
                 {/* With several devices on, each copy says which it is. */}
                 <span className="truncate">{devices.length > 1 ? `${screen.name} · ${on.name}` : screen.name}</span>
@@ -3335,6 +3529,42 @@ export function FlowCanvas({
                 />
               );
             })}
+          {(() => {
+            // Each screen's notes go down its right side in the order of their dots, pushed down where they would overlap.
+            const bottoms = new Map<string, number>();
+            return found
+              .flatMap((item) => {
+                const note = comments.notes.find((entry) => entry.id === item.id);
+                return note && item.key !== "draft" ? [{ item, note, point: onCanvas(item.copyId, item.spot) }] : [];
+              })
+              .sort((a, b) => a.point.y - b.point.y)
+              .map(({ item, note, point }) => {
+                const scale = noteScale(view.scale * SCREEN_SCALE);
+                const open = longNotes.has(note.id);
+                const top = Math.max(point.y - 16 * scale, (bottoms.get(item.copyId) ?? -Infinity) + 8 * scale);
+                bottoms.set(item.copyId, top + noteHeight(note.text, open) * scale);
+                return (
+                  <NoteMark
+                    key={item.key}
+                    note={note}
+                    from={point}
+                    edge={toScreen(at(item.copyId).x + widthOf(item.copyId), 0).x}
+                    top={top}
+                    scale={scale}
+                    expanded={open}
+                    selected={comments.focus?.id === note.id}
+                    onEdit={(text) => comments.onEditNote(note, text)}
+                    onExpand={() => setLongNotes((now) => (open ? new Set([...now].filter((id) => id !== note.id)) : new Set(now).add(note.id)))}
+                    onOpen={() => {
+                      // Tapped again, it is let go of; otherwise it is selected, already in view, so the canvas stays as it is.
+                      if (comments.focus?.id === note.id) return comments.onFocus(null);
+                      tapped.current = note.id;
+                      comments.onOpenNote(note);
+                    }}
+                  />
+                );
+              });
+          })()}
           {draft && draftAt ? <DraftPin left={onCanvas(draftAt.copyId, draftAt.spot).x} top={onCanvas(draftAt.copyId, draftAt.spot).y} /> : null}
           {/* Not while a comment is being written: its pin marks the spot then. */}
           {placing && target && !draft ? outline("target", target.copyId, target.box) : null}
@@ -3409,12 +3639,13 @@ export function FlowCanvas({
               setRetry({ text: "" });
             }}
             initialText={retry.text}
+            placeholder={comments.noting ? "Add a note" : undefined}
             onPost={(text) => {
               // Closed at once; the comment is on the canvas, breathing, until it is saved. If it isn't, what was written comes back.
               const placed = draft;
               setDraft(null);
               setRetry({ text: "" });
-              void comments.onAdd(text, placed.anchor, setups?.[screenOfCopy(placed.copyId)], copyOf.get(placed.copyId)?.device.id).then((saved) => {
+              void comments.onAdd(text, placed.anchor, setups?.[screenOfCopy(placed.copyId)], copyOf.get(placed.copyId)?.device.id, comments.noting).then((saved) => {
                 if (saved) return;
                 setRetry({ text });
                 setDraft(placed);
@@ -3424,6 +3655,29 @@ export function FlowCanvas({
         </Card>
       ) : null}
 
+      {/* One card at the top right: the zoom, play and share, and under them the properties of whatever is selected. */}
+      <div className="pointer-events-none absolute bottom-16 right-8 top-8 z-[var(--z-raised)] hidden flex-col items-end sm:flex">
+        {editHistory ? (
+          <div
+            inert={uiHidden}
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            className={`pointer-events-auto absolute right-full top-0 mr-2 flex items-center gap-1 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1.5 shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
+          >
+            {editHistory}
+          </div>
+        ) : null}
+        <div
+          inert={uiHidden}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
+          className={`pointer-events-auto flex max-h-full flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${sidePanel && sideFull ? "h-full" : ""} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
+        >
+          {topRight ? <div className="flex shrink-0 items-center justify-end gap-1 p-1.5">{topRight}</div> : null}
+          <div className="hidden min-h-0 flex-1 overflow-y-auto border-t border-divider [scrollbar-width:thin] has-[>:not(:empty)]:block">
+            {sidePanel}
+            <div className="w-[var(--dev-panel-width)] empty:hidden">
       {/* A selected frame's properties, beside the canvas. */}
       {(() => {
         // A text, image or component that is selected (and nothing of it picked): where it is, from its frame's corner when it is in one.
@@ -3433,13 +3687,7 @@ export function FlowCanvas({
         const spot = at(selected);
         const origin = frame ?? { x: 0, y: 0 };
         return (
-          <div
-            inert={uiHidden}
-            onPointerDown={(event) => event.stopPropagation()}
-            onPointerUp={(event) => event.stopPropagation()}
-            onWheel={(event) => event.stopPropagation()}
-            className={`absolute right-4 top-4 z-[var(--z-raised)] hidden w-[var(--dev-panel-width)] overflow-y-auto rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:block ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
-          >
+          <div>
             <PiecePanel
               label={piece.kind === "text" ? "Text" : piece.kind === "image" ? "Image" : piece.label}
               width={piece.width}
@@ -3471,24 +3719,12 @@ export function FlowCanvas({
         );
       })()}
       {!viewOnly && !framing && bunch.copies.length + bunch.frames.length > 1 ? (
-        <div
-          inert={uiHidden}
-          onPointerDown={(event) => event.stopPropagation()}
-          onPointerUp={(event) => event.stopPropagation()}
-          onWheel={(event) => event.stopPropagation()}
-          className={`absolute right-4 top-4 z-[var(--z-raised)] hidden w-[var(--dev-panel-width)] overflow-hidden rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:block ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
-        >
+        <div>
           <BunchPanel count={bunch.copies.length + bunch.frames.length} onAlign={alignSelected} />
         </div>
       ) : null}
       {shapes.find((one) => one.id === shape) && !framing ? (
-        <div
-          inert={uiHidden}
-          onPointerDown={(event) => event.stopPropagation()}
-          onPointerUp={(event) => event.stopPropagation()}
-          onWheel={(event) => event.stopPropagation()}
-          className={`absolute bottom-16 right-4 top-4 z-[var(--z-raised)] hidden w-[var(--dev-panel-width)] overflow-y-auto rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:block ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
-        >
+        <div>
           <FramePanel frame={shapes.find((one) => one.id === shape)!} onFillImage={(file, at) => fillWith(shape!, file, at)} pictures={pictureOf} onAlign={shapes.find((one) => one.id === shape)?.parent ? alignSelected : undefined} pin={(() => { const own = shapes.find((one) => one.id === shape); const parent = shapes.find((one) => one.id === own?.parent); return own && parent && !parent.layout ? { x: own.pin?.x ?? "none", y: own.pin?.y ?? "none", onChange: (axis: "x" | "y", value: "none" | "start" | "end" | "both" | "center") => pinLayer(`frame:${own.id}`, axis, value) } : undefined; })()} inLayout={!!shapes.find((one) => one.id === shapes.find((item) => item.id === shape)?.parent)?.layout} unit={1 / SCREEN_SCALE} surface="#ffffff" onChange={(patch) => {
                 const current = shapes.find((one) => one.id === shape);
                 if (patch.sizing?.width === "fill" && current?.sizing?.width !== "fill") roomToFill(current?.parent, "width");
@@ -3497,25 +3733,11 @@ export function FlowCanvas({
               }} onAutoLayout={() => { const boxes = [...pieces.filter((piece) => piece.parent === shape && copyOf.has(copyKey("stage", piece.id))).map((piece) => realBox(copyKey("stage", piece.id))), ...shapes.filter((one) => one.parent === shape).map((one) => ({ id: one.id, x: one.x / SCREEN_SCALE, y: one.y / SCREEN_SCALE, width: one.width / SCREEN_SCALE, height: one.height / SCREEN_SCALE }))]; updateFrame(shape!, { layout: detectLayout(boxes) }); }} />
         </div>
       ) : null}
-
-      {/* Development only: whether screens are drawn as copies. The rest of the canvas's controls are the bar below and the zoom beside the comments. */}
-      {COPIES_OFFERED && !viewOnly ? (
-        <div className="absolute bottom-4 left-4">
-          <IconButton
-            tooltipSide="above"
-            label={copiesChosen ? "Draw screens live" : "Draw screens as copies"}
-            aria-pressed={copiesChosen}
-            className={copiesChosen ? controlOn : ""}
-            onClick={() => {
-              // Switching on reads every page afresh, so the copies are of what the pages are now.
-              if (!copiesChosen) forgetCopies();
-              chooseCopies(!copiesChosen);
-            }}
-          >
-            <CopyIcon className="size-[1.125rem]" />
-          </IconButton>
+            </div>
+          </div>
         </div>
-      ) : null}
+      </div>
+
 
       {/* A screen opened to be used: it grows from where it stood into the middle of the canvas, over a blurred scrim, with Done above it. The selected screen's page is kept ready here, out of sight, so opening it shows no loading. */}
       {shownId && size
@@ -3746,18 +3968,28 @@ export function FlowCanvas({
           </svg>
         </div>
       ) : null}
-      {layersOpen && !viewOnly ? (
+      {/* One card at the top left: the version, closing the canvas and the layers button, and under them the layers when open. */}
+      <div className="pointer-events-none absolute bottom-16 left-8 top-8 z-[var(--z-raised)] hidden flex-col items-start sm:flex">
         <div
           inert={uiHidden}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onWheel={(event) => event.stopPropagation()}
-          className={`absolute bottom-16 left-4 top-24 z-[var(--z-raised)] hidden w-60 overflow-hidden rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:block ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
+          className={`pointer-events-auto flex max-h-full flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${layersOpen && !viewOnly ? "h-full w-60" : ""} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
         >
+          {topLeft ? (
+            <div className="flex shrink-0 items-center gap-1 p-1.5">
+              {topLeft}
+              <span aria-live="polite" className={`pl-1 pr-2 text-xs transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${cloudStatus === "idle" ? "hidden" : cloudStatus === "offline" ? "text-foreground" : "text-foreground-subtle"}`}>
+                {cloudStatus === "saving" ? "Saving" : cloudStatus === "saved" ? "Saved" : cloudStatus === "offline" ? "Offline, will retry" : ""}
+              </span>
+            </div>
+          ) : null}
+          {layersOpen && !viewOnly ? (
+            <div className="min-h-0 flex-1 overflow-hidden border-t border-divider">
           <LayersPanel
             rows={layerRows()}
             onSelect={selectLayer}
-            onClose={() => onLayersOpen?.(false)}
             onRename={(row, name) => renameLayer(row.id, name)}
             onToggle={toggleLayer}
             onMove={moveLayer}
@@ -3786,20 +4018,10 @@ export function FlowCanvas({
               });
             }}
           />
+            </div>
+          ) : null}
         </div>
-      ) : null}
-      {!layersOpen && !viewOnly && onLayersOpen ? (
-        <div
-          inert={uiHidden}
-          onPointerDown={(event) => event.stopPropagation()}
-          onPointerUp={(event) => event.stopPropagation()}
-          className={`absolute left-4 top-24 z-[var(--z-raised)] hidden transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:block ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
-        >
-          <IconButton label="Show layers" tooltipSide="below" tooltipAlign="start" onClick={() => onLayersOpen(true)}>
-            <SidebarIcon />
-          </IconButton>
-        </div>
-      ) : null}
+      </div>
       {menu ? (
         <div
           data-menu=""
@@ -3859,7 +4081,7 @@ export function FlowCanvas({
             );
           })}
         </div>
-        <div role="toolbar" aria-label="Canvas tools" className="pointer-events-auto flex items-center gap-1 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating">
+        <div role="toolbar" aria-label="Canvas tools" className="pointer-events-auto flex items-center gap-0 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating">
           <IconButton
             tooltipSide="above"
             label="Move (V)"
@@ -3898,13 +4120,21 @@ export function FlowCanvas({
               <ToolGroup
                 options={SHAPE_OPTIONS}
                 current={shapeKind}
-                active={!!shaping && shaping !== "path"}
+                active={!!shaping && shaping !== "path" && shaping !== "sticky"}
                 onActivate={() => pickShape(shapeKind)}
                 onChoose={(id) => pickShape(id as CanvasShape, true)}
               />
-              <IconButton tooltipSide="above" label="Pen (P)" variant="ghost" aria-pressed={shaping === "path"} className={shaping === "path" ? controlOn : ""} onClick={() => pickShape("path")}>
-                <PenIcon className="size-[1.125rem]" />
-              </IconButton>
+              <StickyTool
+                active={shaping === "sticky"}
+                color={stickyColor}
+                size={Math.min(240, Math.max(48, STICKY_SIZE * view.scale))}
+                onActivate={() => pickShape("sticky")}
+                onColor={(color) => {
+                  setStickyColor(color);
+                  pickShape("sticky", true);
+                }}
+                onDrop={dropSticky}
+              />
               <IconButton
                 tooltipSide="above"
                 label="Text (T)"

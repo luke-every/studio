@@ -5,6 +5,10 @@ import { useEffect, useRef, type ReactNode } from "react";
 /** True where a pointer can hover (a mouse or trackpad), so a click on a hover-opened popover should not shut it again. */
 export const canHover = () => typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
 
+/** The popover a mouse is hovering now. Moving onto another shuts this one at once, so two are never open together while the first waits out its delay. */
+type Hovered = { cancel: () => void; close: () => void };
+let hovered: Hovered | null = null;
+
 type Align = "start" | "center" | "end";
 
 /**
@@ -48,7 +52,17 @@ export function MotionPopover({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(leaving.current), []);
+  const self = useRef<Hovered>({ cancel: () => clearTimeout(leaving.current), close: onClose });
+  useEffect(() => {
+    self.current.close = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    const own = self.current;
+    return () => {
+      clearTimeout(leaving.current);
+      if (hovered === own) hovered = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -75,6 +89,11 @@ export function MotionPopover({
           ? (event) => {
               if (event.pointerType !== "mouse") return;
               clearTimeout(leaving.current);
+              if (hovered && hovered !== self.current) {
+                hovered.cancel();
+                hovered.close();
+              }
+              hovered = self.current;
               onOpen();
             }
           : undefined

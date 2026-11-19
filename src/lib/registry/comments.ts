@@ -88,6 +88,8 @@ type CommentInput = {
   variant?: string;
   /** The device it is left on (see `Comment`). */
   device?: string;
+  /** Left as a note for the developers (see `Comment`). */
+  note?: boolean;
   by?: string;
   /** The commenter's chosen face, for the notification only; it is not kept. */
   avatar?: number;
@@ -110,7 +112,7 @@ async function post(input: CommentInput) {
     const comment: Comment = {
       id,
       // A reply shares its comment's number: it is part of that thread, not a new one.
-      n: parent?.n ?? Math.max(0, ...comments.filter((item) => item.variant === variant).map((item) => item.n)) + 1,
+      n: parent?.n ?? Math.max(0, ...comments.filter((item) => item.variant === variant && !item.note === !input.note).map((item) => item.n)) + 1,
       author: named(input.by),
       at,
       text,
@@ -118,13 +120,15 @@ async function post(input: CommentInput) {
       variant,
       device: parent ? parent.device : input.device,
       parentId: parent?.id,
+      note: input.note || undefined,
     };
     return {
       comments: [...comments, comment],
-      message: `${parent ? "Reply to" : "Comment"} #${comment.n} on ${input.slug} ${input.version}`,
+      message: `${parent ? "Reply to" : comment.note ? "Note" : "Comment"} #${comment.n} on ${input.slug} ${input.version}`,
       result: comment,
     };
   });
+  if (comment.note) return comment;
   if (working(input.version)) {
     // A comment for Claude starts it in the background; whatever happens to that, the comment itself is saved.
     await claude.ask(input.slug, comment).catch(() => {});
@@ -178,6 +182,17 @@ export async function setResolved(input: { slug: string; version: string; id: st
     next: { ...found, resolvedAt: input.resolved ? new Date().toISOString() : undefined },
     message: `${input.resolved ? "Resolve" : "Reopen"} comment #${found.n}`,
   }));
+  return next;
+}
+
+/** Rewrites a note for the developers; a comment's words stay as they were said. */
+export async function setNoteText(input: { slug: string; version: string; id: string; text: string }) {
+  const text = input.text.trim();
+  if (!text) throw new Error("Write something first.");
+  const { next } = await changeOne(input, (found) => {
+    if (!found.note) throw new Error("Only a note can be edited.");
+    return { next: { ...found, text: text.slice(0, 2000) }, message: `Edit note #${found.n}` };
+  });
   return next;
 }
 

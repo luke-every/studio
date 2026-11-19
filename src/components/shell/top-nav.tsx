@@ -15,7 +15,7 @@ import { SettingsDialog } from "./settings-dialog";
 import { SearchIcon } from "./nav-icons";
 import { NotificationsMenu } from "./notifications-menu";
 import { SearchDialog } from "./search-dialog";
-import { PulseLink, StorybookLink, TeamMenu, TeamRow } from "./team-menu";
+import { DesignQaLink, PulseLink, StorybookLink, TeamMenu, TeamRow } from "./team-menu";
 import { UserMenu } from "./user-menu";
 
 /**
@@ -28,7 +28,7 @@ import { UserMenu } from "./user-menu";
  */
 export function TopNav({ feed, onSwitchUser }: { feed: ActivityFeed; onSwitchUser: () => void }) {
   const pathname = usePathname();
-  const atHome = pathname === "/" || pathname === "/pulse" || pathname === "/storybook";
+  const atHome = pathname === "/" || pathname === "/pulse" || pathname === "/storybook" || pathname === "/design-qa";
   const [searchOpen, setSearchOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -45,6 +45,7 @@ export function TopNav({ feed, onSwitchUser }: { feed: ActivityFeed; onSwitchUse
             {atHome ? (
               <>
                 <TeamMenu />
+                <DesignQaLink />
                 <PulseLink />
                 <StorybookLink />
               </>

@@ -53,6 +53,8 @@ export const commentSchema = z.object({
   variant: z.string().optional(),
   /** The id of the device (see `DEVICES`) it was left on; none on older comments, which show on every device. */
   device: z.string().optional(),
+  /** A note for the developers, drawn beside the screen on a dotted line: kept with the comments, but not one of them. It is never sent to Claude or announced. */
+  note: z.boolean().optional(),
   /** The names of the people who liked it. */
   likes: z.array(z.string()).optional(),
   /** Set on a reply, to the comment it answers. */

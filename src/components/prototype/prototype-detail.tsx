@@ -1,8 +1,9 @@
 "use client";
 
+import { CopyDocsMenu } from "@/components/prototype/copy-docs-menu";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { ViewMenu } from "@/components/prototype/view-menu";
 import { ControlsPanel, VariantPicker, VariantsDropdown } from "@/components/prototype/controls-panel";
@@ -163,6 +164,16 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   // The flow, when it has one, is looked at instead of the prototype; like a mode, it takes the side column's room.
   const flow = usePrototypeFlow(address?.split("?")[0]);
   const [flowOpen, setFlowOpen] = useState(false);
+  // A link into the canvas (`?canvas=1&find=…`, as the copy docs carry): it opens the canvas once, zoomed to the section the lines belong to.
+  const canvasParam = useUrlParam("canvas");
+  const findParam = useUrlParam("find");
+  const focusFind = useMemo(() => (findParam ? findParam.split("|").filter(Boolean) : undefined), [findParam]);
+  const openedByLink = useRef(false);
+  useEffect(() => {
+    if (canvasParam === null || !address || openedByLink.current) return;
+    openedByLink.current = true;
+    setFlowOpen(true);
+  }, [canvasParam, address]);
   const showingFlow = flowOpen && !!address;
   // What the iframe is given: the address with `studio=1`, held still once the prototype can take control changes as messages.
   const live = useLiveControls(address, `${selected.url}|${variant ?? ""}`, { ...controlParams(offered, values), ...extra }, showingFlow);
@@ -266,6 +277,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
         <PrototypeFrame
           url={frameUrl}
           openUrl={address}
+          docs={!prototype.slug.startsWith("qa-") ? <CopyDocsMenu slug={prototype.slug} name={prototype.name} figmaUrl={prototype.figmaUrl} githubUrl={githubUrl} notionUrl={prototype.notionUrl} /> : undefined}
           device={device}
           onDevice={chooseDevice}
           zoom={zoom}
@@ -312,6 +324,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
             ) : undefined
           }
           flowOpen={flowOpen}
+          focusFind={focusFind}
           onFlowOpen={setFlowOpen}
           mode={mode}
           onMode={setMode}

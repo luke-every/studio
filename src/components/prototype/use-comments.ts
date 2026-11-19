@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 
 import { setupOf, type Anchor, type Comment } from "@/lib/comments";
 import { useUser } from "@/lib/use-user";
-import { addComment, addSharedComment, deleteComment, likeComment, likeSharedComment, listComments, listSharedComments, resolveComment, undoClaudeChange } from "@/lib/registry/actions";
+import { addComment, addSharedComment, deleteComment, editNote, likeComment, likeSharedComment, listComments, listSharedComments, resolveComment, undoClaudeChange } from "@/lib/registry/actions";
 
 import { useSharedComments } from "./shared-comments";
 
@@ -171,18 +171,18 @@ export function useComments(slug: string | undefined, version: string | undefine
    * Posts a comment; the comment, or null if it couldn't be saved. It is on the list at once, as a comment still being saved
    * (which breathes), and is swapped for the saved one when that lands or taken away again if it fails.
    */
-  const add = async (text: string, anchor: Anchor, setup?: string, device?: string) => {
+  const add = async (text: string, anchor: Anchor, setup?: string, device?: string, note?: boolean) => {
     if (!target) return null;
     const pendingId = `pending-${crypto.randomUUID()}`;
     const kept = setupOf(setup === undefined ? variant : setup);
     setLoaded((now) => {
       const list = now && now.key === key ? now.list : [];
-      const n = Math.max(0, ...list.filter((item) => setupOf(item.variant) === kept).map((item) => item.n)) + 1;
-      const pending: Comment = { id: pendingId, n, author: { login: "pending", name: by || "Someone" }, at: new Date().toISOString(), text: text.trim(), anchor, variant: kept, device };
+      const n = Math.max(0, ...list.filter((item) => setupOf(item.variant) === kept && !item.note === !note).map((item) => item.n)) + 1;
+      const pending: Comment = { id: pendingId, n, author: { login: "pending", name: by || "Someone" }, at: new Date().toISOString(), text: text.trim(), anchor, variant: kept, device, note: note || undefined };
       return { key, list: [...list, pending] };
     });
     setWorking(pendingId, true);
-    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: kept, device, by, avatar }) : addComment({ ...target, text, anchor, variant: kept, device, by, avatar })).finally(() => setWorking(pendingId, false));
+    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: kept, device, note, by, avatar }) : addComment({ ...target, text, anchor, variant: kept, device, note, by, avatar })).finally(() => setWorking(pendingId, false));
     if (!result.ok) {
       setLoaded((now) => (now && now.key === key ? { key, list: now.list.filter((item) => item.id !== pendingId) } : now));
       setError(result.error);
@@ -246,6 +246,18 @@ export function useComments(slug: string | undefined, version: string | undefine
     return result.ok ? null : result.error;
   };
 
+  /** Rewrites a note at once; put back if it can't be saved. */
+  const edit = async (note: Comment, text: string) => {
+    if (!target || sharedAs || !text.trim() || text.trim() === note.text) return;
+    replace({ ...note, text: text.trim() });
+    const result = await track(editNote({ ...target, id: note.id, text }));
+    if (result.ok) replace(result.value);
+    else {
+      replace(note);
+      setError(result.error);
+    }
+  };
+
   const remove = async (comment: Comment) => {
     if (!target || sharedAs) return;
     setWorking(comment.id, true);
@@ -266,5 +278,5 @@ export function useComments(slug: string | undefined, version: string | undefine
   const replies: Record<string, Comment[]> = {};
   for (const item of every) if (item.parentId) (replies[item.parentId] ??= []).push(item);
 
-  return { comments: all.filter((item) => !item.parentId), everything: every.filter((item) => !item.parentId), replies, error, add, reply, resolve, like, remove, undo, changed, refresh: () => setPosted((count) => count + 1) };
+  return { comments: all.filter((item) => !item.parentId), everything: every.filter((item) => !item.parentId), replies, error, add, reply, resolve, like, remove, edit, undo, changed, refresh: () => setPosted((count) => count + 1) };
 }

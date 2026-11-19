@@ -1,5 +1,6 @@
 "use client";
 
+import { LinkedText } from "@/components/ui/linked-text";
 import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
@@ -215,7 +216,7 @@ export function CommentsPanel({
                     <p
                       className={`whitespace-pre-wrap py-2 text-base leading-[var(--leading-relaxed)] ${comment.resolvedAt ? "text-foreground-subtle" : "text-foreground"}`}
                     >
-                      {comment.text}
+                      <LinkedText text={comment.text} />
                     </p>
                     {replies[comment.id]?.length ? (
                       <p className="text-ui font-medium text-foreground-muted">

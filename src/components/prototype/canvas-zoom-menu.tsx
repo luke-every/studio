@@ -12,7 +12,7 @@ const step = "grid size-8 place-items-center rounded-[var(--r-full)] text-foregr
 const row = "flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[var(--r-control)] border border-border bg-surface px-3 text-sm font-medium text-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-[var(--control-hover)]";
 
 /** The canvas's zoom, in the top bar beside share: where it is now, a step either way, back to 100%, and fitting everything in. Nothing when there is no canvas. */
-export function CanvasZoomMenu() {
+export function CanvasZoomMenu({ ghost = false }: { ghost?: boolean }) {
   const zoom = useCanvasZoom();
   const [open, setOpen] = useState(false);
   if (!zoom) return null;
@@ -24,7 +24,7 @@ export function CanvasZoomMenu() {
       align="end"
       className="w-56"
       trigger={
-        <IconButton label="Zoom" tooltip={false} onClick={() => setOpen((value) => canHover() || !value)} aria-haspopup="menu" aria-expanded={open}>
+        <IconButton label="Zoom" tooltip={false} variant={ghost ? "ghost" : undefined} onClick={() => setOpen((value) => canHover() || !value)} aria-haspopup="menu" aria-expanded={open}>
           <span className="tabular-nums">{percent(zoom.scale)}</span>
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
         </IconButton>

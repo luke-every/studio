@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { EditSession } from "@/components/prototype/use-edit-session";
 import { RedoIcon, UndoIcon } from "@/components/shell/nav-icons";
@@ -9,6 +9,9 @@ import { useStudio } from "@/lib/data/studio-store";
 import { saveEdits, saveLiveEdits } from "@/lib/registry/actions";
 
 import { useUser } from "@/lib/use-user";
+
+/** How long after an edit a live version saves by itself: none. Edits made while one is being written go in the next, as soon as it is done. */
+const AUTO_SAVE_MS = 0;
 
 const NAME_KEY = "studio.name";
 const rememberedName = () => {
@@ -22,14 +25,29 @@ const rememberedName = () => {
 /**
  * What edit mode keeps in the top bar: undo, redo, Save and Save as variant.
  * Saving makes a new version; nothing is written to the one being looked at.
+ * On the canvas it sits beside the zoom at the top right; its Save is there only while something has been changed.
  * A variant keeps the edits as a named option beside the version's others,
  * shown only when picked, so the version itself stays as it was. The first
  * time, a guest is asked whose edits these are, and it remembers.
  *
- * On a live version (`live`) there is no version to save: Save writes the
- * copy straight into the prototype's own code (see `live-edits.ts`), and what
- * can't be written stays as a preview.
+ * On a live version (`live`) there is no version to save: the copy is written
+ * straight into the prototype's own code (see `live-edits.ts`), by itself a
+ * moment after each edit, and what can't be written stays as a preview.
  */
+/** Undo and redo, as a card of their own beside the canvas's controls. */
+export function EditHistory({ session }: { session: EditSession }) {
+  return (
+    <>
+      <IconButton variant="ghost" label="Undo (⌘Z)" tooltipSide="below" onClick={session.undo} disabled={!session.canUndo}>
+        <UndoIcon />
+      </IconButton>
+      <IconButton variant="ghost" label="Redo (⌘⇧Z)" tooltipSide="below" onClick={session.redo} disabled={!session.canRedo}>
+        <RedoIcon />
+      </IconButton>
+    </>
+  );
+}
+
 export function EditBar({
   session,
   slug,
@@ -37,6 +55,7 @@ export function EditBar({
   variantId,
   versionOnly = false,
   live,
+  history = true,
 }: {
   session: EditSession;
   slug: string;
@@ -47,6 +66,8 @@ export function EditBar({
   versionOnly?: boolean;
   /** A live version: Save writes into its code. */
   live?: boolean;
+  /** Undo and redo are in this bar. False where they are shown elsewhere (`EditHistory`). */
+  history?: boolean;
 }) {
   const { notify } = useStudio();
   const user = useUser();
@@ -60,20 +81,59 @@ export function EditBar({
   const count = session.edits.length;
 
   // On a live version, Save writes the copy into the prototype's own code; what was written is let go of here, the rest stays.
-  const saveToCode = async () => {
+  // `auto` is the save that happens by itself a moment after an edit: quiet unless something couldn't be written.
+  const writtenAs = useRef(new Map<number, string>());
+  const lineOf = useRef(new Map<string, number>());
+  const latest = useRef(session);
+  useEffect(() => {
+    latest.current = session;
+  });
+  const saveToCode = async (auto = false) => {
     setSaving(true);
     const form = new FormData();
     form.set("slug", slug);
-    form.set("edits", JSON.stringify(session.edits));
+    // Once the page has drawn an edit, the words no longer carry the mark that says which line they are; so which line an element is stays as it was first seen.
+    const sent = session.edits.map((edit) => {
+      if (edit.kind !== "text") return edit;
+      const key = `${edit.selector}:${edit.node ?? ""}`;
+      if (edit.copy !== undefined) lineOf.current.set(key, edit.copy);
+      const copy = edit.copy ?? lineOf.current.get(key);
+      // A line already written by an earlier save is what the next edit of it starts from: typing on after the first letter was saved.
+      return copy === undefined ? edit : { ...edit, copy, was: writtenAs.current.get(copy) ?? edit.was };
+    });
+    form.set("edits", JSON.stringify(sent));
     for (const [path, file] of session.imagesInUse()) form.set(path, file);
     const result = await saveLiveEdits(form);
     setSaving(false);
     if (!result.ok) return notify(result.error, true);
     const { saved, where, left } = result.value;
-    saved.forEach((selector) => session.reset(selector));
+    // Only what was sent is let go of: letters typed while it was being written stay, and go in the next save.
+    for (const edit of sent) {
+      if (!saved.includes(edit.selector)) continue;
+      if (edit.kind === "text" && edit.copy !== undefined) writtenAs.current.set(edit.copy, edit.text);
+      const now = latest.current.edits.find((one) => one.selector === edit.selector && one.kind === edit.kind);
+      if (!now || edit.kind !== "text" || (now.kind === "text" && now.text === edit.text)) session.reset(edit.selector);
+    }
     const wrote = saved.length ? `Saved ${saved.length} ${saved.length === 1 ? "change" : "changes"} to copy.ts (${where.join(", ")}).` : "";
+    if (auto && !left.length) return;
     notify([wrote, ...left.slice(0, 2).map((item) => item.why)].filter(Boolean).join(" "), !saved.length);
   };
+
+  // On a live version nobody presses Save: a moment after the last edit it is written into the code. Edits that can't be written stay as a preview, and
+  // aren't tried again until something changes (or the whole would be tried over and over).
+  const tried = useRef("");
+  useEffect(() => {
+    if (!live || !count || saving) return;
+    const now = JSON.stringify(session.edits);
+    if (now === tried.current) return;
+    const timer = window.setTimeout(() => {
+      tried.current = now;
+      void saveToCode(true);
+    }, AUTO_SAVE_MS);
+    return () => window.clearTimeout(timer);
+    // `saveToCode` reads the session as it is when the timer fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, session.edits, saving, count]);
 
   const save = async (by: string, variant?: { id: string; label: string }) => {
     if (!by.trim()) {
@@ -118,24 +178,24 @@ export function EditBar({
 
   return (
     <div className="relative flex items-center gap-2">
-      <IconButton label="Undo (⌘Z)" onClick={session.undo} disabled={!session.canUndo || saving}>
-        <UndoIcon />
-      </IconButton>
-      <IconButton label="Redo (⌘⇧Z)" onClick={session.redo} disabled={!session.canRedo || saving}>
-        <RedoIcon />
-      </IconButton>
+      {history ? (
+        <>
+          <IconButton label="Undo (⌘Z)" onClick={session.undo} disabled={!session.canUndo || saving}>
+            <UndoIcon />
+          </IconButton>
+          <IconButton label="Redo (⌘⇧Z)" onClick={session.redo} disabled={!session.canRedo || saving}>
+            <RedoIcon />
+          </IconButton>
+        </>
+      ) : null}
       {versionOnly || live ? null : (
         <IconButton onClick={() => setAsking(asking === "variant" ? null : "variant")} disabled={!count || saving} aria-expanded={asking === "variant"}>
           Save as variant
         </IconButton>
       )}
-      {live ? (
-        <IconButton variant="primary" onClick={saveToCode} disabled={!count || saving} loading={saving}>
-          Save
-        </IconButton>
-      ) : (
+      {live ? null : versionOnly && !count && !saving && !asking ? null : (
         <IconButton variant="primary" onClick={() => save(name)} disabled={!count || saving} loading={saving}>
-          Save
+          {versionOnly ? "Save as new version" : "Save"}
         </IconButton>
       )}
 

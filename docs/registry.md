@@ -50,13 +50,19 @@ per file, one tree, one commit, move the branch ref) — never a local `git`
 checkout, and never this application's own repository. A version's path is
 checked for existence first and never replaced, the same as it was in Blob.
 
-A canvas is kept the same way (`src/lib/registry/canvas.ts`): one file per version, read and written
-by the browser through server actions, saved a few seconds after the last change (the last save wins),
-and read, never written, from a share link. Each save is a commit to the content repository, so the
-browser waits for a pause rather than saving every drag. A working copy's (v0.0) is kept in its
-`.studio/canvas.json`. The browser keeps its own copy as well, which is what the canvas opens with and
-what is left offline; opening takes the cloud's copy unless this browser has changes it has not saved yet.
-Its pictures are files of their own, written once.
+A canvas is kept the same way (`src/lib/registry/canvas.ts`): one file per version, read by the
+browser through server actions, and read, never written, from a share link. It is saved as Paper saves a
+file, by sending what changed and not the whole (`diffCanvas` / `applyPatch` in `src/lib/canvas-doc.ts`,
+checked by `scripts/check-canvas-doc.mjs`): per layer, set or removed, with the stacking order when it
+changed, merged into whatever is saved now, so two people changing different layers keep both and a patch
+sent twice does no harm. A change is sent 0.4s after the last one (a drag waits for the pointer to lift and
+goes after 5s at the latest); a failed save is retried, later each time, and at once when the connection
+returns. As the tab hides or the window closes the unsent patch goes to `POST /api/canvas` with `keepalive`,
+which the browser finishes after the page is gone (a body under 64KB; a larger one makes the window ask
+before it closes). Each save is a commit to the content repository. A working copy's (v0.0) is kept in its
+`.studio/canvas.json`. The browser keeps its own copy as well, which is what the canvas opens with and what
+is left offline; opening takes the cloud's copy unless this browser has changes it has not sent yet. Its
+pictures are files of their own, written once.
 
 A handoff is kept the same way, one file per version (`src/lib/registry/handoff.ts`). /handoff
 scans the prototype on the designer's machine and posts the findings to `/api/handoff` with the

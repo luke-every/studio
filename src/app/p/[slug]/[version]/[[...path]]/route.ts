@@ -1,10 +1,16 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { NextResponse } from "next/server";
 
 import { guessContentType } from "@/lib/registry/content-type";
 import { checkReviewToken } from "@/lib/review";
 import { fetchPrototypeFile, prototypeVersionExists } from "@/lib/registry/github";
 import { getPrototype } from "@/lib/registry";
-import { liveOrigin, WORKING_SEGMENT } from "@/lib/registry/local-prototypes";
+import { liveOrigin, QA_PREFIX, WORKING_SEGMENT, workingFolder } from "@/lib/registry/local-prototypes";
+
+/** What the studio reads beside a prototype's page (see `lib/controls.ts`, `lib/edits.ts`, `lib/flow.ts`), and the tile's picture. */
+const STUDIO_FILES = new Set(["studio.json", "edits.json", "flow.json", "studio-preview.jpg"]);
 
 /**
  * Serving a prototype.
@@ -53,6 +59,13 @@ export async function GET(
     // Opened from a phone, "localhost" is the phone: send it to the host it used to reach the studio. That is the Host header: Next reports request.url as localhost.
     const host = request.headers.get("host")?.replace(/:\d+$/, "") || "localhost";
     if (!path.length) return NextResponse.redirect(`${live.replace("localhost", host)}/${search}`);
+    // The website a design QA runs has none of these, and asked for one it draws a whole page (seconds each, five of them as the
+    // prototype opens), which holds up the page itself on the same server. They can only be files in its folder, so they are read there.
+    if (slug.startsWith(QA_PREFIX) && path.length === 1 && STUDIO_FILES.has(path[0])) {
+      const bytes = await readFile(join(workingFolder(slug), "public", path[0])).catch(() => null);
+      if (!bytes) return new NextResponse("Not found.", { status: 404, headers: { "cache-control": "no-store" } });
+      return new NextResponse(new Uint8Array(bytes), { headers: { "content-type": guessContentType(path[0]), "cache-control": "no-store" } });
+    }
     const response = await fetch(`${live}/${path.map(encodeURIComponent).join("/")}`, { headers: range ? { range } : {}, cache: "no-store" }).catch(() => null);
     if (!response?.ok) return new NextResponse("Not found.", { status: 404 });
     return new NextResponse(response.body, {

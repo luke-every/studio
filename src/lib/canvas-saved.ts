@@ -20,9 +20,21 @@ export function fillsOf(frame: Pick<CanvasFrame, "fills" | "fill" | "fillImage">
   if (frame.fills) return frame.fills;
   return [...(frame.fillImage ? [{ kind: "image" as const, name: frame.fillImage.name, mode: frame.fillImage.mode }] : []), { kind: "solid" as const, color: frame.fill ?? surface }];
 }
-export type CanvasShape = "rectangle" | "ellipse" | "line" | "arrow" | "polygon" | "star" | "path";
-export type CanvasFrame = { id: string; /** Drawn with a shape tool rather than the frame tool: it is the shape (and holds nothing). A line (or arrow) runs corner to corner of its box (from the bottom left when `flip`); a path, polygon or star is its `points`, each 0 to 1 across the box. */ shape?: CanvasShape; flip?: boolean; points?: [number, number][]; closed?: boolean; /** The frame it is in, when it is in one: it moves with it, and goes with it. */ parent?: string; name: string; x: number; y: number; width: number; height: number; /** A CSS colour; the surface colour when absent. */ fill?: string; /** A picture in place of the colour (kept in this browser under `name`, like the images put on the canvas) and how it sits in the frame. */ fillImage?: { name: string; mode: "fill" | "fit" | "tile" | "stretch" }; radius?: number; /** Any number of fills, top first (see `fillsOf`); once set it is what is drawn, and `fill` and `fillImage` are no longer read. */ fills?: FillLayer[]; /** A line round the edge: its colour and width. */ stroke?: string; strokeWidth?: number; /** Absent: fixed, or hugging what is in it when it has a layout. */ sizing?: Sizing; pin?: Pin; hidden?: boolean; locked?: boolean; /** Cuts off what is in it at its edge. */ clip?: boolean; /** Lays what is in it out in a row or a column (see lib/canvas-layout.ts); absent for a frame whose contents sit where they were put. */ layout?: Layout };
-export type SavedCanvas = { offsets: Offsets; pieces: Piece[]; frames: CanvasFrame[] };
+export type CanvasShape = "rectangle" | "ellipse" | "line" | "arrow" | "polygon" | "star" | "path" | "sticky";
+
+/** The colours a sticky note comes in, as FigJam offers them: the first is what a new one is. Colours of the work, not of the interface. */
+export const STICKY_COLORS: { id: string; name: string; color: string }[] = [
+  { id: "yellow", name: "Yellow", color: "#FFE27A" },
+  { id: "orange", name: "Orange", color: "#FFB879" },
+  { id: "red", name: "Red", color: "#FF9B8F" },
+  { id: "pink", name: "Pink", color: "#FFB3D9" },
+  { id: "violet", name: "Violet", color: "#CDB4FF" },
+  { id: "blue", name: "Blue", color: "#9DD3FF" },
+  { id: "green", name: "Green", color: "#8FE3B0" },
+  { id: "gray", name: "Gray", color: "#E2E2E2" },
+];
+export type CanvasFrame = { id: string; /** Drawn with a shape tool rather than the frame tool: it is the shape (and holds nothing). A line (or arrow) runs corner to corner of its box (from the bottom left when `flip`); a path, polygon or star is its `points`, each 0 to 1 across the box. */ shape?: CanvasShape; flip?: boolean; points?: [number, number][]; closed?: boolean; /** The frame it is in, when it is in one: it moves with it, and goes with it. */ parent?: string; name: string; x: number; y: number; width: number; height: number; /** A CSS colour; the surface colour when absent. */ fill?: string; /** A picture in place of the colour (kept in this browser under `name`, like the images put on the canvas) and how it sits in the frame. */ fillImage?: { name: string; mode: "fill" | "fit" | "tile" | "stretch" }; radius?: number; /** Any number of fills, top first (see `fillsOf`); once set it is what is drawn, and `fill` and `fillImage` are no longer read. */ fills?: FillLayer[]; /** A line round the edge: its colour and width. */ stroke?: string; strokeWidth?: number; /** Absent: fixed, or hugging what is in it when it has a layout. */ sizing?: Sizing; pin?: Pin; hidden?: boolean; locked?: boolean; /** The words on a sticky note (`shape: "sticky"`), the name of whoever put it there, and its base size: the side of the square it is, and the least its height can be (its height otherwise follows its words). */ text?: string; author?: string; base?: number; /** Cuts off what is in it at its edge. */ clip?: boolean; /** Lays what is in it out in a row or a column (see lib/canvas-layout.ts); absent for a frame whose contents sit where they were put. */ layout?: Layout };
+export type SavedCanvas = { offsets: Offsets; pieces: Piece[]; frames: CanvasFrame[]; /** The devices the screens are shown on, once chosen. */ devices?: string[] };
 
 const key = (base: string) => `proto:canvas:${base}`;
 
@@ -30,7 +42,7 @@ export function readCanvas(base: string): SavedCanvas {
   try {
     const raw = typeof window === "undefined" ? null : localStorage.getItem(key(base));
     const found = raw ? (JSON.parse(raw) as Partial<SavedCanvas>) : null;
-    return { offsets: found?.offsets && typeof found.offsets === "object" ? found.offsets : {}, pieces: Array.isArray(found?.pieces) ? found.pieces : [], frames: Array.isArray(found?.frames) ? found.frames : [] };
+    return { offsets: found?.offsets && typeof found.offsets === "object" ? found.offsets : {}, pieces: Array.isArray(found?.pieces) ? found.pieces : [], frames: Array.isArray(found?.frames) ? found.frames : [], ...(Array.isArray(found?.devices) ? { devices: found.devices.filter((id) => typeof id === "string") } : {}) };
   } catch {
     return { offsets: {}, pieces: [], frames: [] };
   }
@@ -38,7 +50,7 @@ export function readCanvas(base: string): SavedCanvas {
 
 export function writeCanvas(base: string, saved: SavedCanvas) {
   try {
-    const empty = !Object.keys(saved.offsets).length && !saved.pieces.length && !saved.frames.length;
+    const empty = !Object.keys(saved.offsets).length && !saved.pieces.length && !saved.frames.length && !saved.devices;
     if (empty) localStorage.removeItem(key(base));
     else localStorage.setItem(key(base), JSON.stringify(saved));
   } catch {

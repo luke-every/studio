@@ -17,6 +17,9 @@
  * No DOM or React is imported, so the maths can be checked in Node (scripts/check-camera.mjs).
  */
 
+/** How long after the view stops moving the world is drawn again, flat, at the size it is. Longer than a wheel's pauses, so a zoom in steps isn't redrawn between them. */
+const SETTLE_MS = 200;
+
 export type View = { x: number; y: number; scale: number };
 export type Limits = { min: number; max: number };
 
@@ -120,7 +123,6 @@ export class CanvasCamera {
   attach(targets: Targets, extent?: number) {
     this.targets = targets;
     if (extent) this.extent = extent;
-    if (targets.world) targets.world.style.backfaceVisibility = "hidden";
     this.dirty = true;
     this.draw(false);
   }
@@ -172,12 +174,14 @@ export class CanvasCamera {
 
   /** Lets go of the elements and stops drawing, but keeps who is listening: for a camera that outlives its element (React may mount again). */
   detach() {
+    if (typeof window !== "undefined") window.clearTimeout(this.settling);
     if (this.frame) (this.options.cancelRaf ?? cancelAnimationFrame)(this.frame);
     this.frame = 0;
     this.targets = {};
   }
 
   dispose() {
+    if (typeof window !== "undefined") window.clearTimeout(this.settling);
     if (this.frame) (this.options.cancelRaf ?? cancelAnimationFrame)(this.frame);
     this.frame = 0;
     this.onTarget.clear();
@@ -208,6 +212,18 @@ export class CanvasCamera {
     else this.last = 0;
   };
 
+  private settling = 0;
+  /** Draws the world again at the size it is at, as flat 2D, once the view has stopped. */
+  private settle() {
+    const { world } = this.targets;
+    if (!world || this.frame !== 0 || this.easing || this.dirty) return;
+    const dpr = this.options.dpr?.() ?? window.devicePixelRatio;
+    const view = snapView(this.shown, dpr);
+    world.style.backfaceVisibility = "";
+    world.style.transition = "";
+    world.style.transform = `matrix(${view.scale},0,0,${view.scale},${view.x},${view.y})`;
+  }
+
   private draw(glide: boolean) {
     this.dirty = false;
     const { world, vars, grid, gridStep = 24 } = this.targets;
@@ -216,8 +232,16 @@ export class CanvasCamera {
     const view = glide ? this.shown : snapView(this.shown, dpr);
     const transition = this.options.glideTransition;
     if (world) {
+      // Moving, the world is a layer of its own (a 3D matrix), which the browser moves and scales as a picture, and that is what keeps a pan and a zoom smooth.
       world.style.transform = `matrix3d(${view.scale},0,0,0,0,${view.scale},0,0,0,0,1,0,${view.x},${view.y},0,1)`;
+      world.style.backfaceVisibility = "hidden";
       world.style.transition = glide && transition ? transition.world : "";
+      // But a picture stretched is soft: Safari takes it at the size it was and doesn't draw it again. So a moment after the last move the world goes back to a plain
+      // 2D transform, which is drawn afresh at the size it is now: text and shapes sharp however far in.
+      if (typeof window !== "undefined") {
+        window.clearTimeout(this.settling);
+        this.settling = window.setTimeout(() => this.settle(), SETTLE_MS);
+      }
     }
     vars?.style.setProperty("--cam-s", String(view.scale));
     if (grid) {

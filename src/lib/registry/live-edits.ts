@@ -107,12 +107,19 @@ export async function saveLiveEdits(slug: string, edits: Edit[], uploads: Map<st
   const changes: { leaf: Leaf; text: string }[] = [];
   const taken = (leaf: Leaf) => changes.some((change) => change.leaf === leaf);
   for (const edit of texts) {
-    if (edit.text === edit.was) continue;
+    if (edit.text === edit.was) {
+      // Typed and put back: nothing to write, and nothing left pending.
+      result.saved.push(edit.selector);
+      continue;
+    }
     const leaf = edit.copy === undefined ? null : leaves[edit.copy];
     if (!leaf) {
       skip(edit.selector, "These words aren't one line of the copy file, so there's nowhere certain to write them.");
     } else if (leaf.text === null) {
       skip(edit.selector, `${leaf.path} is built from parts in copy.ts, so it can't be changed here.`);
+    } else if (leaf.text === edit.text) {
+      // Already in the file (written by an earlier save, or by Update copy): nothing to write, and nothing to complain about.
+      result.saved.push(edit.selector);
     } else if (leaf.text !== edit.was) {
       // The file isn't what the page was drawn from: reloading the page draws it from the file as it is now.
       skip(edit.selector, `copy.ts has changed since this page loaded. Reload it and try again.`);

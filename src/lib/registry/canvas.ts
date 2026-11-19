@@ -1,6 +1,6 @@
 import "server-only";
 
-import { canvasDocSchema, IMAGE_DATA, IMAGE_NAME, MAX_IMAGE_CHARS, type CanvasDoc } from "@/lib/canvas-doc";
+import { applyPatch, canvasDocSchema, canvasPatchSchema, IMAGE_DATA, IMAGE_NAME, MAX_IMAGE_CHARS, type CanvasDoc, type CanvasPatch } from "@/lib/canvas-doc";
 
 import { readStudioFile, updateStudioFile, workingCopiesOn, WORKING_VERSION } from "./local-prototypes";
 import { isStoreConfigured, readStoreFile, updateStoreFile } from "./store";
@@ -39,19 +39,29 @@ export async function readCanvas(slug: string, version: string): Promise<CanvasD
   return parsed.success ? parsed.data : null;
 }
 
-/** Saves a version's canvas, whole (the last save wins: a canvas is one person's arrangement at a time). Returns when it was saved. */
-export async function saveCanvas(slug: string, version: string, canvas: CanvasDoc["canvas"], by?: string) {
+/**
+ * Saves what changed, applied to whatever is saved now (read again, and retried if somebody saved first, as every store write is): two people changing
+ * different layers keep both changes, and a patch sent twice does no harm. Returns when it was saved.
+ */
+export async function saveCanvasPatch(slug: string, version: string, patch: CanvasPatch, by?: string) {
   const path = pathFor(slug, version);
-  const doc = canvasDocSchema.parse({ savedAt: new Date().toISOString(), by: by?.slice(0, 80), canvas });
-  const content = JSON.stringify(doc);
-  if (content.length > 3_000_000) throw new Error("This canvas is too large to save.");
-  const write = () => ({ content, message: `Canvas for ${slug} ${version}` });
+  const checked = canvasPatchSchema.parse(patch);
+  const savedAt = new Date().toISOString();
+  const write = (text: string | null) => {
+    const parsed = text ? canvasDocSchema.safeParse(JSON.parse(text)) : null;
+    const base = parsed?.success ? parsed.data.canvas : { offsets: {}, pieces: [], frames: [] };
+    const canvas = applyPatch(base as { offsets: Record<string, { x: number; y: number }>; pieces: { id: string }[]; frames: { id: string }[]; devices?: string[] }, checked);
+    const doc = canvasDocSchema.parse({ savedAt, by: by?.slice(0, 80), canvas });
+    const content = JSON.stringify(doc);
+    if (content.length > 3_000_000) throw new Error("This canvas is too large to save.");
+    return { content, message: `Canvas for ${slug} ${version}` };
+  };
   if (working(version)) await updateStudioFile(slug, "canvas.json", write);
   else {
     if (!isStoreConfigured()) throw new Error("No content repository is connected, so nothing can be saved.");
     await updateStoreFile(path, write);
   }
-  return doc.savedAt;
+  return savedAt;
 }
 
 /** A picture a canvas uses, as a data address; null when there isn't one. */

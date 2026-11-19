@@ -24,20 +24,33 @@ const run = promisify(execFile);
  * The version is always `v0.0`, so it can't be mistaken for one that was pushed.
  */
 const ROOT = join(homedir(), "Claude", "prototypes");
+/**
+ * Design QA's folders (see `design-qa.ts`) are working copies too, so a branch being checked opens in the same view a prototype does.
+ * Their name carries a prefix, so one can never be taken for a prototype, or share its name.
+ */
+export const QA_ROOT = join(homedir(), "Claude", "design-qa");
+export const QA_PREFIX = "qa-";
+/** A design QA is framed through a second server this many ports above its dev server (see `scripts/qa-frame-proxy.mjs`). */
+export const QA_FRAME_OFFSET = 1000;
 
 export const WORKING_VERSION = "v0.0";
 export const WORKING_SEGMENT = "v0-0";
 
 export const workingCopiesOn = () => process.env.NODE_ENV !== "production";
 
-/** The ports that something is listening on, by the process that is. */
+/** What a dev server runs as. Anything else that happens to listen from a prototype's folder (a Claude Code session opens a port of its own there) is not one. */
+const SERVER_COMMAND = /^(node|next|bun|deno|vite)/i;
+
+/** The ports that a dev server is listening on, by the process that is. */
 async function listening() {
-  const { stdout } = await run("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn"]).catch(() => ({ stdout: "" }));
+  const { stdout } = await run("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn"]).catch(() => ({ stdout: "" }));
   const ports = new Map<string, number[]>();
   let pid = "";
+  let server = false;
   for (const line of stdout.split("\n")) {
     if (line.startsWith("p")) pid = line.slice(1);
-    else if (line.startsWith("n") && pid) {
+    else if (line.startsWith("c")) server = SERVER_COMMAND.test(line.slice(1));
+    else if (line.startsWith("n") && pid && server) {
       const port = Number(line.slice(line.lastIndexOf(":") + 1));
       if (port) ports.set(pid, [...(ports.get(pid) ?? []), port]);
     }
@@ -63,6 +76,10 @@ async function lookup() {
         const slug = line.slice(1 + ROOT.length + 1).split("/")[0];
         const port = Math.min(...(ports.get(pid) ?? [Infinity]));
         if (Number.isFinite(port) && !servers.has(slug)) servers.set(slug, { port, pid: Number(pid) });
+      } else if (line.startsWith("n/") && line.slice(1).startsWith(`${QA_ROOT}/`)) {
+        const slug = QA_PREFIX + line.slice(1 + QA_ROOT.length + 1).split("/")[0];
+        const port = Math.min(...(ports.get(pid) ?? [Infinity]));
+        if (Number.isFinite(port) && !servers.has(slug)) servers.set(slug, { port, pid: Number(pid) });
       }
     }
   }
@@ -78,7 +95,7 @@ export async function devServers() {
 /** The address of a prototype's running dev server, or null. */
 export async function liveOrigin(slug: string) {
   const port = (await devServers()).get(slug);
-  return port ? `http://localhost:${port}` : null;
+  return port ? `http://localhost:${slug.startsWith(QA_PREFIX) ? port + QA_FRAME_OFFSET : port}` : null;
 }
 
 /** Stops the dev server running in a prototype's folder. False when there is none. */
@@ -104,7 +121,21 @@ export async function workingCopies() {
         return built || live ? { slug: entry.name, builtAt: built?.mtime ?? new Date(), live, port: running.get(entry.name) } : null;
       }),
   );
-  return found.flatMap((copy) => (copy ? [copy] : []));
+  // Every design QA is a prototype whether or not its server is up (it is always live, on the port it was given), so one started after the
+  // studio was opened is already there to go into; with the server down, its page simply isn't served.
+  const metas = await readdir(join(QA_ROOT, ".meta")).catch(() => [] as string[]);
+  const qa = (
+    await Promise.all(
+      metas
+        .filter((name) => name.endsWith(".json"))
+        .map(async (name) => {
+          const meta = JSON.parse((await readFile(join(QA_ROOT, ".meta", name), "utf8").catch(() => "{}")) || "{}") as { id?: string; branch?: string; port?: number; archived?: boolean };
+          if (!meta.id || !meta.port || meta.archived || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(meta.id)) return null;
+          return { slug: QA_PREFIX + meta.id, builtAt: new Date(), live: true, port: meta.port + QA_FRAME_OFFSET, qa: meta.branch ?? meta.id };
+        }),
+    )
+  ).flatMap((copy) => (copy ? [copy] : []));
+  return [...found.flatMap((copy) => (copy ? [{ ...copy, qa: undefined as string | undefined }] : [])), ...qa];
 }
 
 /** A file of a working copy's build, or null. */
@@ -117,7 +148,7 @@ export async function workingFile(slug: string, path: string[]) {
 /** A working copy's folder, for what runs in it. Only on this machine, and only for a name that can be one. */
 export function workingFolder(slug: string) {
   if (!workingCopiesOn() || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("That isn't a prototype on this machine.");
-  return join(ROOT, slug);
+  return slug.startsWith(QA_PREFIX) ? join(QA_ROOT, slug.slice(QA_PREFIX.length)) : join(ROOT, slug);
 }
 
 /**
@@ -127,7 +158,7 @@ export function workingFolder(slug: string) {
  * The folder starts with a dot, so /push leaves it out of what it uploads, and the starter's .gitignore leaves it out
  * of the prototype's own repository. `handoff.json` is its handoff (see `handoff.ts`).
  */
-export type StudioFile = "comments.json" | "claude.json" | "handoff.json" | "canvas.json";
+export type StudioFile = "comments.json" | "claude.json" | "handoff.json" | "canvas.json" | "copy-docs.json";
 export const studioPath = (slug: string, name: string) => join(workingFolder(slug), ".studio", name);
 
 export const readStudioFile = (slug: string, name: StudioFile) => readFile(studioPath(slug, name), "utf8").catch(() => null);

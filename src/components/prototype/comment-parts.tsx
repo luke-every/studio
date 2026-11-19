@@ -18,6 +18,7 @@ import { UserAvatar } from "@/components/shell/user-avatar";
 import { useUser } from "@/lib/use-user";
 import { controlOn, IconButton } from "@/components/ui/button";
 import { ConfirmPopover } from "@/components/ui/confirm-popover";
+import { LinkedText } from "@/components/ui/linked-text";
 import { Stamp } from "@/components/ui/stamp";
 import type { Anchor, Comment } from "@/lib/comments";
 import { menuItem } from "@/components/ui/menu-item";
@@ -27,22 +28,34 @@ import { menuItem } from "@/components/ui/menu-item";
 /** What a surface needs to show, add and answer comments. */
 export type CommentsUi = {
   list: Comment[];
+  /** Notes for the developers: drawn beside the screen they are on, not as pins, and left out of `list`. */
+  notes: Comment[];
+  /** Whether what is placed next is a note rather than a comment. */
+  noting: boolean;
   /** Whether pins are drawn. */
   visible: boolean;
   /** Whether the next click leaves a comment. */
   placing: boolean;
+  /** A note was tapped from the canvas as it was (V): its panel is open, but a click is not a new note, and one on the canvas around it leaves again. */
+  peeking: boolean;
+  /** Goes back to how the canvas was before a note was tapped. */
+  onLeave: () => void;
   /** The comment that is open, and a count that goes up each time it is asked for, so asking again goes to it again. */
   focus: { id: string; at: number } | null;
   onFocus: (id: string | null) => void;
   /** What has been said back to each comment, oldest first. */
   replies: Record<string, Comment[]>;
   /** `setup` puts it on a particular setup of the prototype (see `Comment`); an empty one is the version as it is, and none is the setup on screen. */
-  onAdd: (text: string, anchor: Anchor, setup?: string, device?: string) => Promise<boolean>;
+  onAdd: (text: string, anchor: Anchor, setup?: string, device?: string, note?: boolean) => Promise<boolean>;
   onReply: (parent: Comment, text: string) => Promise<boolean>;
   onResolve: (comment: Comment, resolved: boolean) => void;
   onLike: (comment: Comment, liked: boolean) => void;
   /** Deletes it, once the comment's own menu has asked. */
   onDelete: (comment: Comment) => void;
+  /** Rewrites a note. */
+  onEditNote: (note: Comment, text: string) => void;
+  /** A note was tapped: its panel opens, with it selected. */
+  onOpenNote: (note: Comment) => void;
   /** Copies it, as a prompt for Claude Code. */
   onCopy: (comment: Comment) => void;
   /** Puts back what Claude changed for one of its replies (a live version), or with `redo` makes the change again. */
@@ -470,7 +483,7 @@ export function Replies({
               </span>
             </p>
             {/* Claude's word while it is still at it (a live version) is quiet, and breathes like anything else on its way; its answer takes its place. */}
-            <p className={`whitespace-pre-wrap text-base leading-[var(--leading-relaxed)] ${reply.claude ? "pulse-soft text-foreground-muted" : "text-foreground"}`}>{reply.text}</p>
+            <p className={`whitespace-pre-wrap text-base leading-[var(--leading-relaxed)] ${reply.claude ? "pulse-soft text-foreground-muted" : "text-foreground"}`}><LinkedText text={reply.text} /></p>
             {/* Claude's change, while the studio can still put it back itself: said so once it has been, with the way to make it again. */}
             {reply.undo ? (
               <div className="flex items-center gap-2 pt-1">
@@ -674,7 +687,7 @@ export function CommentCard({
               <Stamp iso={comment.at} relative />
             </span>
           </p>
-          <p className="whitespace-pre-wrap text-base leading-[var(--leading-relaxed)] text-foreground">{comment.text}</p>
+          <p className="whitespace-pre-wrap text-base leading-[var(--leading-relaxed)] text-foreground"><LinkedText text={comment.text} /></p>
           <div className="pt-1">
             <LikeButton comment={comment} onLike={onLike} />
           </div>
@@ -689,12 +702,14 @@ export function Composer({
   onPost,
   onCancel,
   initialText = "",
+  placeholder = "Add a comment",
 }: {
   /** Called at once, and the composer is closed by it; saving carries on without it. */
   onPost: (text: string) => void;
   onCancel: () => void;
   /** What was written before, when a post didn't save and it is opened again. */
   initialText?: string;
+  placeholder?: string;
 }) {
   const [text, setText] = useState(initialText);
 
@@ -719,8 +734,8 @@ export function Composer({
         }}
         rows={3}
         maxLength={2000}
-        placeholder="Add a comment"
-        aria-label="Comment"
+        placeholder={placeholder}
+        aria-label={placeholder}
         className="w-full resize-none rounded-[var(--r-md)] bg-surface-inset p-2 text-sm text-foreground outline-none placeholder:text-foreground-subtle focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
       />
       <div className="flex justify-end gap-2">
@@ -728,6 +743,95 @@ export function Composer({
         <IconButton variant="primary" disabled={!text.trim()} onClick={post}>
           Post
         </IconButton>
+      </div>
+    </>
+  );
+}
+
+/** The most lines of a note shown before "Show more". */
+const NOTE_LINES = 8;
+const linesOf = (text: string) => text.split("\n").reduce((lines, line) => lines + Math.max(1, Math.ceil(line.length / 30)), 0);
+/** Whether a note is longer than the box shows. */
+export const noteIsLong = (text: string) => linesOf(text) > NOTE_LINES;
+/** Roughly how tall a note's box is at its own size, for stacking the ones on one screen without measuring them. */
+export const noteHeight = (text: string, expanded: boolean) => 24 + 20 * (expanded ? linesOf(text) : Math.min(linesOf(text), NOTE_LINES)) + (noteIsLong(text) ? 20 : 0);
+export const NOTE_WIDTH = 256;
+/** The space between a screen's edge and its notes. */
+export const NOTE_GAP = 32;
+/** The canvas zoom a note is at its own size from, and the one below which it stops shrinking with the zoom, and the size it keeps there. */
+const NOTE_FULL_ZOOM = 1;
+const NOTE_SMALLEST = 0.5;
+/** How big a note is drawn at a zoom: in step with it, within those limits. */
+export const noteScale = (zoom: number) => Math.min(1, Math.max(NOTE_SMALLEST, zoom / NOTE_FULL_ZOOM));
+
+/**
+ * A note for the developers: a dot on the element, a dotted line out past the screen's edge, and what it says in a box. `from` is the
+ * dot and `edge` where the screen ends, both in the canvas's own pixels; `top` is where the box starts, which the caller has kept
+ * clear of the notes above it. The box is drawn at `scale` of its size, from its top left corner; it is as wide as its words, up to a
+ * limit, and as tall as them up to a limit, then "Show more".
+ */
+export function NoteMark({ note, from, edge, top, scale, expanded, selected, onExpand, onEdit, onOpen }: { note: Comment; from: { x: number; y: number }; edge: number; top: number; scale: number; expanded: boolean; /** Its panel row is selected, or it was tapped. */ selected: boolean; onExpand: () => void; onEdit: (text: string) => void; onOpen: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note.text);
+  const finish = (save: boolean) => {
+    setEditing(false);
+    if (save) onEdit(draft);
+  };
+  const left = edge + NOTE_GAP * scale;
+  const height = noteHeight(note.text, expanded) * scale;
+  const meet = Math.min(Math.max(from.y, top + 12 * scale), top + height - 12 * scale);
+  const long = noteIsLong(note.text);
+  return (
+    <>
+      <svg aria-hidden className={`pointer-events-none absolute left-0 top-0 overflow-visible transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${selected ? "text-[var(--selection)]" : hovered ? "text-foreground" : "text-foreground-subtle"}`} width="1" height="1">
+        <circle cx={from.x} cy={from.y} r="3" fill="currentColor" />
+        <polyline points={`${from.x},${from.y} ${edge + (NOTE_GAP * scale) / 2},${from.y} ${left},${meet}`} fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+      </svg>
+      <div
+        style={{ left, top, maxWidth: NOTE_WIDTH, scale, transformOrigin: "top left" }}
+        // Nothing here is the canvas's: a press or a double tap on a note must not pan it or zoom it.
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={onOpen}
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
+        onDoubleClick={(event) => {
+          event.stopPropagation();
+          setDraft(note.text);
+          setEditing(true);
+        }}
+        className={`pointer-events-auto absolute w-max cursor-pointer rounded-[var(--r-tile)] border bg-surface-elevated p-3 text-sm text-foreground shadow-floating transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${selected ? "border-[var(--selection)]" : "border-border hover:border-foreground-subtle"}`}
+      >
+        {editing ? (
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onFocus={(event) => event.currentTarget.select()}
+            onBlur={() => finish(true)}
+            onKeyDown={(event) => {
+              // The studio's own shortcuts stay out of it while somebody is typing.
+              event.stopPropagation();
+              if (event.key === "Escape") finish(false);
+              else if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                finish(true);
+              }
+            }}
+            rows={Math.min(8, Math.max(2, draft.split("\n").length))}
+            maxLength={2000}
+            aria-label="Note"
+            style={{ width: NOTE_WIDTH - 24 }}
+            className="block resize-none bg-transparent text-sm text-foreground outline-none"
+          />
+        ) : (
+          <p className={`whitespace-pre-wrap break-words ${expanded ? "" : "line-clamp-8"}`}><LinkedText text={note.text} /></p>
+        )}
+        {long && !editing ? (
+          <button type="button" onClick={onExpand} className="mt-1 text-xs text-foreground-subtle transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:text-foreground">
+            {expanded ? "Show less" : "Show more…"}
+          </button>
+        ) : null}
       </div>
     </>
   );

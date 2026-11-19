@@ -23,7 +23,7 @@ function useEntries() {
     (team) => pathname === `/teams/${team.slug}` || pathname.startsWith(`/teams/${team.slug}/`),
   );
 
-  const entries = [{ href: "/", label: "Home", selected: !current }].concat(
+  const entries = [{ href: "/", label: "Prototypes", selected: !current }].concat(
     visible.map((team) => ({ href: `/teams/${team.slug}`, label: team.name, selected: team.slug === current?.slug })),
   );
   return { current, entries };
@@ -50,6 +50,11 @@ export function TeamRow() {
         Weekly Pulse
       </IconButton>
       {SHOW_STORYBOOK ? (
+        <IconButton href={DESIGN_QA_HREF} className={pathname === DESIGN_QA_HREF ? controlOn : ""}>
+          Design QA
+        </IconButton>
+      ) : null}
+      {SHOW_STORYBOOK ? (
         <IconButton href={STORYBOOK_HREF} className={onStorybook ? controlOn : ""}>
           Storybook
         </IconButton>
@@ -60,6 +65,7 @@ export function TeamRow() {
 
 const PULSE_HREF = "/pulse";
 const STORYBOOK_HREF = "/storybook";
+const DESIGN_QA_HREF = "/design-qa";
 /** Local only: the tab is not built into the live studio. */
 const SHOW_STORYBOOK = process.env.NODE_ENV === "development";
 
@@ -70,6 +76,18 @@ export function PulseLink() {
   return (
     <IconButton href={PULSE_HREF} className={onPulse ? controlOn : ""} aria-current={onPulse ? "page" : undefined}>
       Weekly Pulse
+    </IconButton>
+  );
+}
+
+/** Design QA, beside Prototypes. On this machine only. */
+export function DesignQaLink() {
+  const on = usePathname() === DESIGN_QA_HREF;
+  if (!SHOW_STORYBOOK) return null;
+
+  return (
+    <IconButton href={DESIGN_QA_HREF} className={on ? controlOn : ""} aria-current={on ? "page" : undefined}>
+      Design QA
     </IconButton>
   );
 }
@@ -103,7 +121,7 @@ export function TeamMenu() {
       className="w-56"
       trigger={
         <IconButton onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open}>
-          {current?.name ?? "Home"}
+          {current?.name ?? "Prototypes"}
           <ChevronDownIcon className="size-3.5 text-foreground-subtle" />
         </IconButton>
       }

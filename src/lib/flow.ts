@@ -68,7 +68,7 @@ function stepsFromStart(flow: Flow) {
  * how tall each one's cell is (its page, its name and the gap below), in which
  * case a column is as tall as its screens add up to.
  */
-export function layoutFlow(flow: Flow, cell: { width: number; height: number }, perRow = Infinity, heights?: (id: string) => number) {
+export function layoutFlow(flow: Flow, cell: { width: number; height: number }, perRow = Infinity, heights?: (id: string) => number, extras?: (id: string) => number) {
   const heightOf = heights ?? (() => cell.height);
   const steps = stepsFromStart(flow);
   const stacked = new Map<number, number>();
@@ -90,12 +90,22 @@ export function layoutFlow(flow: Flow, cell: { width: number; height: number }, 
   }
   const offsets = bands.map((_, i) => bands.slice(0, i).reduce((sum, band) => sum + band, 0));
 
+  // A column is wider by what its widest screen asks for beyond the cell (room beside it for something drawn there).
+  const extra = new Map<number, number>();
+  for (const { id } of flow.screens) extra.set(steps.get(id)!, Math.max(extra.get(steps.get(id)!) ?? 0, extras?.(id) ?? 0));
+  const columnX = (step: number) => {
+    let x = 0;
+    for (let at = step - (step % perRow); at < step; at++) x += cell.width + (extra.get(at) ?? 0);
+    return x;
+  };
   const placed = new Map<string, Placed>();
   for (const [id, { step, above }] of slot) {
-    placed.set(id, { x: (step % perRow) * cell.width, y: offsets[Math.floor(step / perRow)] + above });
+    placed.set(id, { x: columnX(step), y: offsets[Math.floor(step / perRow)] + above });
   }
-  const columns = Math.min(perRow, Math.max(...stacked.keys()) + 1);
-  return { placed, width: columns * cell.width, height: bands.reduce((sum, band) => sum + band, 0), columns: Math.max(...stacked.keys()) + 1 };
+  const last = Math.max(...stacked.keys());
+  const bandWidths = new Map<number, number>();
+  for (let step = 0; step <= last; step++) bandWidths.set(Math.floor(step / perRow), (bandWidths.get(Math.floor(step / perRow)) ?? 0) + cell.width + (extra.get(step) ?? 0));
+  return { placed, width: Math.max(...bandWidths.values()), height: bands.reduce((sum, band) => sum + band, 0), columns: Math.max(...stacked.keys()) + 1 };
 }
 
 /** How many columns to a row make the whole flow as large as it can be on screen in this room. */

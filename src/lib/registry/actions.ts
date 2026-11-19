@@ -11,6 +11,8 @@ import { EDIT_IMAGE_DIR, editsSchema, type Edit } from "@/lib/edits";
 import * as activity from "./activity";
 import * as canvases from "./canvas";
 import * as comments from "./comments";
+import * as copyDocs from "./copy-docs";
+import * as designQa from "./design-qa";
 import * as system from "./design-system";
 import * as handoff from "./handoff";
 import * as liveEdits from "./live-edits";
@@ -200,8 +202,9 @@ export async function loadCanvas(slug: string, version: string) {
   return attempt(() => canvases.readCanvas(slug, version), []);
 }
 
-export async function storeCanvas(slug: string, version: string, canvas: Parameters<typeof canvases.saveCanvas>[2], by?: string) {
-  return attempt(() => canvases.saveCanvas(slug, version, canvas, by), []);
+/** What changed on a canvas since the cloud's copy (see `canvas-doc.ts`), merged into what is saved. */
+export async function patchCanvas(slug: string, version: string, patch: Parameters<typeof canvases.saveCanvasPatch>[2], by?: string) {
+  return attempt(() => canvases.saveCanvasPatch(slug, version, patch, by), []);
 }
 
 export async function loadCanvasImage(slug: string, name: string) {
@@ -304,6 +307,10 @@ export async function deleteComment(input: Parameters<typeof comments.removeComm
   return attempt(() => comments.removeComment(input), []);
 }
 
+export async function editNote(input: Parameters<typeof comments.setNoteText>[0]) {
+  return attempt(() => comments.setNoteText(input), []);
+}
+
 export async function resolveComment(input: Parameters<typeof comments.setResolved>[0]) {
   return attempt(() => comments.setResolved(input), []);
 }
@@ -339,4 +346,77 @@ export async function listActivity() {
 /** Sends this device a test notification, so a refusal can be seen. */
 export async function testPush(endpoint: string) {
   return attempt(() => push.sendTest(endpoint), []);
+}
+
+/** Design QA, on this machine only (see `design-qa.ts`). */
+export async function listQaBranches() {
+  return attempt(() => designQa.listBranches(), []);
+}
+export async function listQaItems() {
+  return attempt(() => designQa.listItems(), []);
+}
+export async function newQaItem(branch: string) {
+  return attempt(() => designQa.createItem(branch), []);
+}
+export async function startQaItem(id: string) {
+  return attempt(() => designQa.startItem(id), []);
+}
+export async function stopQaItem(id: string) {
+  return attempt(() => designQa.stopItem(id), []);
+}
+export async function archiveQaItem(id: string, archived: boolean) {
+  return attempt(() => designQa.archiveItem(id, archived), []);
+}
+export async function discardQaItem(id: string) {
+  return attempt(() => designQa.discardFailed(id), []);
+}
+export async function openQaInITerm(id: string) {
+  return attempt(() => designQa.openInITerm(id), []);
+}
+export async function revealQaFolder(id: string) {
+  return attempt(() => designQa.revealItem(id), []);
+}
+
+/** A prototype's copy documents, made on this machine only (see `copy-docs.ts`). */
+export async function readCopyDocs(slug: string) {
+  return attempt(() => copyDocs.readCopyDocs(slug), []);
+}
+export async function createCopyDoc(slug: string, name: string, kind: copyDocs.CopyKind, notionUrl?: string, keys?: string[]) {
+  return attempt(() => copyDocs.createCopyDoc(slug, name, kind, notionUrl, keys), []);
+}
+export async function readCopySections(slug: string) {
+  return attempt(() => copyDocs.readCopySections(slug), []);
+}
+export async function linkCopyDoc(slug: string, name: string, kind: copyDocs.CopyKind, url: string) {
+  return attempt(() => copyDocs.linkCopyDoc(slug, name, kind, url), []);
+}
+export async function deleteCopyDoc(slug: string, kind: copyDocs.CopyKind) {
+  return attempt(() => copyDocs.deleteCopyDoc(slug, kind), []);
+}
+export async function forgetCopyDoc(slug: string, kind: copyDocs.CopyKind) {
+  return attempt(() => copyDocs.forgetCopyDoc(slug, kind), []);
+}
+export async function clearCopyDocsTask(slug: string, kind: copyDocs.CopyKind) {
+  return attempt(() => copyDocs.clearCopyDocsTask(slug, kind), []);
+}
+export async function previewCopyImport(slug: string, rows: Parameters<typeof copyDocs.previewCopyImport>[1]) {
+  return attempt(() => copyDocs.previewCopyImport(slug, rows), []);
+}
+export async function applyCopyImport(slug: string, changes: Parameters<typeof copyDocs.applyCopyImport>[1]) {
+  return attempt(() => copyDocs.applyCopyImport(slug, changes), []);
+}
+export async function previewClaudeUpdate(slug: string) {
+  return attempt(() => copyDocs.previewClaudeUpdate(slug), []);
+}
+export async function updateClaudeDoc(slug: string, keys: string[]) {
+  return attempt(() => copyDocs.updateClaudeDoc(slug, keys), []);
+}
+export async function retryCopyDocDelete(slug: string, kind: copyDocs.CopyKind) {
+  return attempt(() => copyDocs.retryCopyDocDelete(slug, kind), []);
+}
+export async function dismissCopyDocDelete(slug: string, kind: copyDocs.CopyKind) {
+  return attempt(() => copyDocs.dismissCopyDocDelete(slug, kind), []);
+}
+export async function pullCopyFromDoc(slug: string) {
+  return attempt(() => copyDocs.pullClaudeDoc(slug), []);
 }

@@ -381,6 +381,54 @@ export function CommentIcon(props: IconProps) {
   );
 }
 
+export function DocumentIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M4.25 1.75h5l3 3v8.5a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-10.5a1 1 0 0 1 1-1Z" />
+      <path d="M9.25 1.75v3h3M5.75 8h4.5M5.75 10.5h4.5" />
+    </Frame>
+  );
+}
+
+export function FigmaIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M5.75 1.75H8v4.5H5.75a2.25 2.25 0 0 1 0-4.5Z" />
+      <path d="M8 1.75h2.25a2.25 2.25 0 0 1 0 4.5H8v-4.5Z" />
+      <path d="M5.75 6.25H8v4.5H5.75a2.25 2.25 0 0 1 0-4.5Z" />
+      <circle cx="10.25" cy="8.5" r="2.25" />
+      <path d="M5.75 10.75H8v2a2.25 2.25 0 1 1-2.25-2Z" />
+    </Frame>
+  );
+}
+
+export function ImportIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 2.25v7.5M5 7l3 3 3-3M2.75 11.25v1.5a1 1 0 0 0 1 1h8.5a1 1 0 0 0 1-1v-1.5" />
+    </Frame>
+  );
+}
+
+export function StickyIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M3.25 2.75h9.5v6.5l-3.5 3.5h-6V2.75Z" />
+      <path d="M9.25 12.75V9.25h3.5" />
+    </Frame>
+  );
+}
+
+export function NoteIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <circle cx="2.75" cy="8" r="0.75" />
+      <path d="M4.5 8h2" strokeDasharray="1.5 1.5" />
+      <rect x="8" y="4.25" width="5.75" height="7.5" rx="1.25" />
+    </Frame>
+  );
+}
+
 export function EyeIcon(props: IconProps) {
   return (
     <Frame {...props}>

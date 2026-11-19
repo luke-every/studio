@@ -7,7 +7,7 @@ import { useStudio } from "@/lib/data/studio-store";
 /** Every archived prototype, most recently updated first. Built from the snapshot, so it stays prerendered. */
 export default function ArchivePage() {
   const { prototypes, updatePrototype, isSaving } = useStudio();
-  const archived = prototypes.filter((prototype) => prototype.archived).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const archived = prototypes.filter((prototype) => prototype.archived && !prototype.slug.startsWith("qa-")).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   return (
     <div className="w-full px-5 pb-8 pt-2 sm:px-8 sm:pb-10">

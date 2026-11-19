@@ -1,12 +1,5 @@
-/** The studio's mark: a square with an E in it. Foreground on background, so it inverts with the theme. */
+/* eslint-disable @next/next/no-img-element */
+/** The studio's mark: the every-studio.svg tile. */
 export function Logo({ className = "" }: { className?: string }) {
-  return (
-    <span
-      role="img"
-      aria-label="Every Studio"
-      className={`grid size-7 shrink-0 place-items-center rounded-[var(--r-sm)] bg-foreground text-md font-semibold leading-none text-background ${className}`}
-    >
-      E
-    </span>
-  );
+  return <img src="/every-studio.svg" alt="Every Studio" className={`size-8 shrink-0 rounded-[var(--r-md)] ${className}`} />;
 }

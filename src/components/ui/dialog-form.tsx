@@ -77,7 +77,7 @@ export function DialogForm({
         <div className="flex items-center justify-end gap-2 pt-1">
           <Button onClick={onClose} disabled={busy}>Cancel</Button>
           <Button type="submit" variant={destructive ? "destructive" : "primary"} disabled={disabled} loading={busy}>
-            {busyLabel ?? submitLabel}
+            {busy ? (busyLabel ?? submitLabel) : submitLabel}
           </Button>
         </div>
       </form>

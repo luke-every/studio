@@ -88,7 +88,7 @@ export async function loadRegistry(): Promise<RegistryDocument> {
 async function addWorkingCopies(document: RegistryDocument) {
   const team = document.teams.find((item) => !item.archived);
   if (!team) return;
-  for (const { slug, builtAt, live, port } of await workingCopies()) {
+  for (const { slug, builtAt, live, port, qa } of await workingCopies()) {
     // With the content repository connected, what isn't running is read from there: the latest push, not a stale build.
     if (!live && isContentRepoConfigured()) continue;
     const id = `${slug}-${WORKING_VERSION}`;
@@ -102,8 +102,12 @@ async function addWorkingCopies(document: RegistryDocument) {
       prototypeSchema.parse({
         slug,
         teamSlug: team.slug,
-        name: slug.replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase()),
-        description: live
+        name: qa ?? slug.replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase()),
+        // A branch being checked is kept out of the feed and the teams, like an archived prototype, and opened from Design QA.
+        archived: qa !== undefined,
+        description: qa
+          ? `A design QA of ${qa}.`
+          : live
           ? `Running from ~/Claude/prototypes/${slug}, so a change shows as soon as you save it.`
           : `Served from ~/Claude/prototypes/${slug}/out, so a rebuild is all it takes to see a change.`,
         owner: team.lead,

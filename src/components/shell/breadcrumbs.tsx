@@ -41,7 +41,7 @@ export function Breadcrumbs() {
   if (!trail.length) return null;
 
   // A prototype's page is the prototype alone: its name, nothing to climb back through.
-  const all = section === "prototypes" ? trail : [{ label: "Home", href: "/" }, ...trail];
+  const all = section === "prototypes" ? trail : [{ label: "Prototypes", href: "/" }, ...trail];
 
   return (
     <nav aria-label="Breadcrumbs" className="min-w-0 sm:pl-3">

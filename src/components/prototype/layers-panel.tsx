@@ -16,6 +16,7 @@ import {
   EyeOffIcon,
   LineIcon,
   PenIcon,
+  StickyIcon,
   RectangleIcon,
   FrameIcon,
   HeadingIcon,
@@ -25,7 +26,6 @@ import {
   ListIcon,
   LockIcon,
   UnlockIcon,
-  SidebarIcon,
   TextIcon,
 } from "@/components/shell/nav-icons";
 
@@ -44,7 +44,7 @@ export type LayerRow = {
   /** The pointer is over what it stands for, on the canvas. */
   hovered?: boolean;
   /** A frame drawn with a shape tool: it has that shape's icon. */
-  shape?: "rectangle" | "ellipse" | "line" | "arrow" | "polygon" | "star" | "path";
+  shape?: "rectangle" | "ellipse" | "line" | "arrow" | "polygon" | "star" | "path" | "sticky";
   /** For a screen: the device it is drawn on, which gives its icon. */
   device?: string;
   hidden?: boolean;
@@ -93,7 +93,7 @@ const iconOf = (row: LayerRow) => {
     row.kind === "node"
       ? (byTag[row.name.split(/\s/)[0]] ?? BoxIcon)
       : row.kind === "frame"
-        ? row.shape === "rectangle" ? RectangleIcon : row.shape === "ellipse" ? EllipseIcon : row.shape === "line" ? LineIcon : row.shape === "arrow" ? ArrowIcon : row.shape === "polygon" ? PolygonIcon : row.shape === "star" ? StarIcon : row.shape === "path" ? PenIcon : FrameIcon
+        ? row.shape === "rectangle" ? RectangleIcon : row.shape === "ellipse" ? EllipseIcon : row.shape === "line" ? LineIcon : row.shape === "arrow" ? ArrowIcon : row.shape === "polygon" ? PolygonIcon : row.shape === "star" ? StarIcon : row.shape === "path" ? PenIcon : row.shape === "sticky" ? StickyIcon : FrameIcon
         : row.kind === "text"
           ? TextIcon
           : row.kind === "image"
@@ -109,7 +109,6 @@ export function LayersPanel({
   rows,
   onSelect,
   onFold,
-  onClose,
   onRename,
   onToggle,
   onMove,
@@ -124,7 +123,6 @@ export function LayersPanel({
   onMove: (drag: LayerRow, target: LayerRow, where: "before" | "after" | "into") => void;
   onSelect: (row: LayerRow, shift: boolean) => void;
   onFold: (row: LayerRow, all: boolean) => void;
-  /** Puts the panel away; the bar brings it back. */ onClose: () => void;
 }) {
   // The canvas takes every wheel for panning and zooming; over this panel the wheel is the list's own, to scroll it as far as it goes either way.
   const root = useRef<HTMLDivElement>(null);
@@ -145,18 +143,6 @@ export function LayersPanel({
   }, [shown]);
   return (
     <div ref={root} className="flex h-full flex-col">
-      <div className="flex h-10 shrink-0 items-center justify-between border-b border-divider pl-4 pr-2">
-        <h3 className="text-xs font-medium text-foreground">Layers</h3>
-        <button
-          type="button"
-          aria-label="Hide layers"
-          title="Hide layers"
-          onClick={onClose}
-          className="grid size-6 place-items-center rounded-[var(--r-control)] text-foreground-muted transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-inset hover:text-foreground"
-        >
-          <SidebarIcon className="size-4" />
-        </button>
-      </div>
       <div className="min-h-0 flex-1 overflow-auto py-1 [scrollbar-width:thin]">
         <ul role="tree" aria-label="Layers" className="w-max min-w-full">
           {rows.map((row) => (
