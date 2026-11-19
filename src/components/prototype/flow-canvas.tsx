@@ -688,8 +688,10 @@ export function FlowCanvas({
     const go = (attempt: number) => {
       if (stop) return;
       for (const copy of copies) {
+        // A screen drawn as a static copy answers from its recorded geometry; a live one is read where it stands.
+        const page = copyPages.current.get(copy.id);
         const doc = frames.current.get(copy.id)?.contentDocument;
-        const found = doc ? boxOfTexts(doc, focusFind) : null;
+        const found = page?.findBox ? page.findBox(focusFind) : doc ? boxOfTexts(doc, focusFind) : null;
         if (!found) continue;
         const spot = at(copy.id);
         const world = { x: spot.x + found.left * SCREEN_SCALE, y: spot.y + found.top * SCREEN_SCALE, width: found.width * SCREEN_SCALE, height: found.height * SCREEN_SCALE };

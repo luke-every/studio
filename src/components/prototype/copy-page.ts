@@ -2,6 +2,7 @@ import type { Box, Reach } from "@/lib/anchor";
 import type { Snapshot } from "@/lib/dom-snapshot";
 import { nameOfElement, treeOfRoot } from "@/lib/page-tree";
 import { describePart } from "@/lib/edit-part";
+import { uniqueTextNodes, unionBox } from "@/lib/section-box";
 
 import type { FramePage } from "./frame-page";
 
@@ -153,6 +154,14 @@ export function copyPage(snapshot: Snapshot, shadow: ShadowRoot): FramePage {
 
   return {
     scope: copyDocument(shadow),
+    // The words are looked for in the copy; each one's box is that of the element that holds it, from the geometry recorded when the copy was read.
+    findBox: (finds) =>
+      unionBox(
+        uniqueTextNodes(document, shadow, finds).flatMap((node) => {
+          const ix = Number(node.parentElement?.closest("[data-ix]")?.getAttribute("data-ix"));
+          return Number.isInteger(ix) && ix > 0 && g.boxes[ix * 4 + 2] ? [box(ix)] : [];
+        }),
+      ),
     // The box a click at (x, y) would outline: what it would pick, with its groups when asked (see `hoverBox`).
     boxAt: async (x, y, reach: Reach = {}) => {
       const found = elementAt(x, y);

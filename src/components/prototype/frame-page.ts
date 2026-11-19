@@ -36,6 +36,8 @@ export type FramePage = {
   spots(anchors: Record<string, Anchor>): Record<string, Spot> | null;
   /** Puts the page back where an anchor was left (see `revealAnchor`); `done` says whether it could be pinned there. Returns the way to stop. */
   reveal(anchor: Anchor, done: (found: boolean) => void): () => void;
+  /** Only a static copy: where the lines a section's link carries are, as one box in the page's own pixels (see `boxOfTexts`); null when none is found. */
+  findBox?: (finds: string[]) => Box | null;
   /** Only a static copy: the copy as a document an edit can be painted in (see `copyDocument`). */
   scope?: Document;
   /** The page's elements as a tree, for the layers panel. Null when the page can't say. */
