@@ -100,11 +100,11 @@ function Tile({ item, base }: { item: CatalogueItem; base: string }) {
   };
 
   return (
-    <li draggable={!!picture} onDragStart={picture ? grab : undefined} className="flex min-w-0 flex-col gap-1 [contain-intrinsic-size:auto_128px] [content-visibility:auto]">
+    <li draggable onDragStart={grab} className="flex min-w-0 flex-col gap-1 [contain-intrinsic-size:auto_128px] [content-visibility:auto]">
       <span title={item.group ? `${item.group} / ${item.label}` : item.label} className="truncate text-xs text-foreground">
         {item.label}
       </span>
-      <span className={`grid h-24 place-items-center overflow-hidden rounded-[var(--r-md)] bg-surface-inset p-2 ${picture ? "cursor-grab active:cursor-grabbing" : ""}`}>
+      <span className={`grid h-24 place-items-center overflow-hidden rounded-[var(--r-md)] bg-surface-inset p-2 cursor-grab active:cursor-grabbing`}>
         {picture ? (
           // Drawn at its own shape inside the well; the well, not the picture, is the grey.
           // eslint-disable-next-line @next/next/no-img-element

@@ -13,12 +13,34 @@ export type PropSpec = { name: string; optional: boolean; kind: "options" | "boo
 
 const DIRS = [join("src", "components", "shared"), join("src", "components", "shared", "modals"), join("src", "components", "icons"), join("src", "components", "website")];
 
+/** The folders searched all the way down: a site section is a component however deep in them it is kept. */
+const DEEP = [join("src", "components", "shared"), join("src", "components", "website")];
+
+async function walk(folder: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const entry of await readdir(folder, { withFileTypes: true }).catch(() => [])) {
+    const path = join(folder, entry.name);
+    if (entry.isDirectory()) out.push(...(await walk(path)));
+    else if (/\.tsx$/.test(entry.name) && !/\.(stories|test|spec)\.tsx$/.test(entry.name)) out.push(path);
+  }
+  return out;
+}
+
 async function files(folder: string) {
   const found = new Map<string, string>();
   for (const dir of DIRS) {
     for (const file of await readdir(join(folder, dir)).catch(() => [] as string[])) {
       const match = file.match(/^(\w+)\.tsx$/);
       if (match && !found.has(match[1])) found.set(match[1], join(folder, dir, file));
+    }
+  }
+  for (const dir of DEEP) {
+    for (const path of await walk(join(folder, dir))) {
+      const file = path.match(/(\w+)\.tsx$/)?.[1];
+      if (file && !found.has(file)) found.set(file, path);
+      // What a file exports counts under its own name too (a file can hold a component of another name).
+      const text = await readFile(path, "utf8").catch(() => "");
+      for (const [, name] of text.matchAll(/^export (?:default )?(?:function|const) ([A-Z]\w*)/gm)) if (!found.has(name)) found.set(name, path);
     }
   }
   return found;

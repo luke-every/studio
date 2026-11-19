@@ -2,6 +2,7 @@ import { anchorAt, anchorOf, elementAt, revealAnchor, scrollAt, spotOf, watchTap
 import type { Anchor } from "@/lib/comments";
 import { describePart, facesFor, hideWords, hoverBox, painter, partIn, reachFrom } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
+import { treeOf } from "@/lib/page-tree";
 import { findClip, isFind, partBox, setMarks, sourceAt } from "@/lib/handoff-clip";
 
 /**
@@ -154,6 +155,11 @@ const ANYWAY_MS = 1000;
         if (data.what === "part") {
           const from = data.from && typeof data.from.selector === "string" ? { selector: data.from.selector, into: !!data.from.into } : undefined;
           const element = point && document.body ? reachFrom(document, elementAt(document, data.x, data.y), from) ?? (from?.into ? null : elementAt(document, data.x, data.y, data.deep !== false)) : null;
+          return answer(element ? describePart(element, Array.isArray(data.components) ? data.components : undefined) : null);
+        }
+        if (data.what === "tree") return answer(treeOf(document));
+        if (data.what === "partOf") {
+          const element = typeof data.selector === "string" && document.body ? partIn(document, data.selector) : null;
           return answer(element ? describePart(element, Array.isArray(data.components) ? data.components : undefined) : null);
         }
         if (data.what === "anchorOf") {

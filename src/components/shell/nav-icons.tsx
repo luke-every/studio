@@ -477,3 +477,235 @@ export function PointerIcon(props: IconProps) {
     </Frame>
   );
 }
+
+export function TextIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M1.75 12.5l3.5-9 3.5 9M3 9.5h4.5" />
+      <circle cx="11.5" cy="10.25" r="1.75" />
+      <path d="M13.25 8.5v4" />
+    </Frame>
+  );
+}
+
+export function ImageIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+      <circle cx="5.75" cy="6" r="1" />
+      <path d="M2.5 12l3.5-3.5 2.5 2.5 2-2 3 3" />
+    </Frame>
+  );
+}
+
+export function SidebarIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <path d="M6 3v10" />
+    </Frame>
+  );
+}
+
+export function LayersIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 2.5 13.5 5.5 8 8.5 2.5 5.5ZM2.5 8.5 8 11.5l5.5-3M2.5 11 8 14l5.5-3" />
+    </Frame>
+  );
+}
+
+export function BoxIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" strokeDasharray="2 2" />
+    </Frame>
+  );
+}
+
+export function ButtonIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="1.75" y="4.5" width="12.5" height="7" rx="3.5" />
+      <path d="M5.5 8h5" />
+    </Frame>
+  );
+}
+
+export function InputIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="1.75" y="4.5" width="12.5" height="7" rx="1.5" />
+      <path d="M5 6.75v2.5" />
+    </Frame>
+  );
+}
+
+export function ListIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M6 4h7.5M6 8h7.5M6 12h7.5M2.5 4h.01M2.5 8h.01M2.5 12h.01" />
+    </Frame>
+  );
+}
+
+export function HeadingIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M3.5 3v10M12.5 3v10M3.5 8h9" />
+    </Frame>
+  );
+}
+
+export function LockIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+      <path d="M5.5 7V5.25a2.5 2.5 0 015 0V7" />
+    </Frame>
+  );
+}
+
+export function UnlockIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+      <path d="M5.5 7V5.25a2.5 2.5 0 014.75-1.1" />
+    </Frame>
+  );
+}
+
+export function AlignLeftIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2.5 2v12" />
+      <rect x="4.5" y="4" width="8" height="3" rx="0.75" />
+      <rect x="4.5" y="9" width="5" height="3" rx="0.75" />
+    </Frame>
+  );
+}
+
+export function AlignCenterXIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 2v12" />
+      <rect x="3" y="4" width="10" height="3" rx="0.75" />
+      <rect x="5" y="9" width="6" height="3" rx="0.75" />
+    </Frame>
+  );
+}
+
+export function AlignRightIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M13.5 2v12" />
+      <rect x="3.5" y="4" width="8" height="3" rx="0.75" />
+      <rect x="6.5" y="9" width="5" height="3" rx="0.75" />
+    </Frame>
+  );
+}
+
+export function AlignTopIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2 2.5h12" />
+      <rect x="4" y="4.5" width="3" height="8" rx="0.75" />
+      <rect x="9" y="4.5" width="3" height="5" rx="0.75" />
+    </Frame>
+  );
+}
+
+export function AlignMiddleIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2 8h12" />
+      <rect x="4" y="3" width="3" height="10" rx="0.75" />
+      <rect x="9" y="5" width="3" height="6" rx="0.75" />
+    </Frame>
+  );
+}
+
+export function AlignBottomIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2 13.5h12" />
+      <rect x="4" y="3.5" width="3" height="8" rx="0.75" />
+      <rect x="9" y="6.5" width="3" height="5" rx="0.75" />
+    </Frame>
+  );
+}
+
+export function DistributeXIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2.5 2v12M13.5 2v12" />
+      <rect x="6.5" y="4.5" width="3" height="7" rx="0.75" />
+    </Frame>
+  );
+}
+
+export function DistributeYIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2 2.5h12M2 13.5h12" />
+      <rect x="4.5" y="6.5" width="7" height="3" rx="0.75" />
+    </Frame>
+  );
+}
+
+export function RectangleIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="2.5" y="3.5" width="11" height="9" rx="1" />
+    </Frame>
+  );
+}
+
+export function EllipseIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <circle cx="8" cy="8" r="5.5" />
+    </Frame>
+  );
+}
+
+export function LineIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M3 13L13 3" />
+    </Frame>
+  );
+}
+
+export function PenIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M3 13l1-3.5L10.5 3l2.5 2.5L6.5 12z" />
+      <path d="M9 4.5l2.5 2.5" />
+    </Frame>
+  );
+}
+
+export function ArrowIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M3 13L13 3M6.5 3H13v6.5" />
+    </Frame>
+  );
+}
+
+export function PolygonIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 2.5l5.5 10h-11z" />
+    </Frame>
+  );
+}
+
+export function StarIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 2l1.8 4 4.2.4-3.2 2.9 1 4.2L8 11.3 4.2 13.5l1-4.2L2 6.4 6.2 6z" />
+    </Frame>
+  );
+}

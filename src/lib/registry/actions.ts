@@ -9,6 +9,7 @@ import { LATEST, mintShareToken, resolveShareToken } from "@/lib/share";
 import { EDIT_IMAGE_DIR, editsSchema, type Edit } from "@/lib/edits";
 
 import * as activity from "./activity";
+import * as canvases from "./canvas";
 import * as comments from "./comments";
 import * as system from "./design-system";
 import * as handoff from "./handoff";
@@ -192,6 +193,32 @@ export async function addSharedComment(token: string, input: Omit<Parameters<typ
 
 export async function likeSharedComment(token: string, input: Omit<Parameters<typeof comments.setLiked>[0], "slug" | "version">) {
   return shared(token, (at) => comments.setLiked({ ...input, ...at }));
+}
+
+/** A version's canvas: where its screens, frames and layers were put. Saved by the studio, read by the studio and, view only, by a share link. */
+export async function loadCanvas(slug: string, version: string) {
+  return attempt(() => canvases.readCanvas(slug, version), []);
+}
+
+export async function storeCanvas(slug: string, version: string, canvas: Parameters<typeof canvases.saveCanvas>[2], by?: string) {
+  return attempt(() => canvases.saveCanvas(slug, version, canvas, by), []);
+}
+
+export async function loadCanvasImage(slug: string, name: string) {
+  return attempt(() => canvases.readCanvasImage(slug, name), []);
+}
+
+export async function storeCanvasImage(slug: string, name: string, data: string) {
+  return attempt(() => canvases.saveCanvasImage(slug, name, data), []);
+}
+
+/** The canvas a share link opens on, and its pictures: read only, and only of the version the link names. */
+export async function loadSharedCanvas(token: string) {
+  return shared(token, (at) => canvases.readCanvas(at.slug, at.version));
+}
+
+export async function loadSharedCanvasImage(token: string, name: string) {
+  return shared(token, (at) => canvases.readCanvasImage(at.slug, name));
 }
 
 export async function likeComment(input: Parameters<typeof comments.setLiked>[0]) {

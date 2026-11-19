@@ -75,12 +75,21 @@
   /* What is picked or hovered on a prototype's page (an element, a frame, a drawn box): blue, the same in every theme since it lies over the prototype's page, not the studio's. */
   --selection: var(--blue-500);
   --selection-muted: color-mix(in oklab, var(--blue-500) 8%, transparent);
+  /* Text on the selection's blue, and the blue a touch deeper under the pointer: for the one action that follows a selection on the canvas. */
+  --selection-foreground: var(--paper-50);
+  --selection-hover: color-mix(in oklab, var(--blue-500) 88%, var(--ink-900));
   /* Words highlighted in a text box over a prototype: strong enough to read on the page's own colours. */
   --selection-highlight: color-mix(in oklab, var(--blue-500) 30%, transparent);
   --pin-target-edge: var(--selection);
   /* Alignment guides and measured distances over the canvas: a signal colour apart from the selection's blue, the same in every theme. */
   --guide: var(--rose-500);
   --guide-foreground: var(--paper-50);
+  /* The soft colour behind a picture on a card that announces something new: warm yellow high on the left, pink low on it, a pale lavender middle, and periwinkle on the right. */
+  --intro-backdrop:
+    radial-gradient(55% 80% at 0% 8%, color-mix(in oklab, var(--yellow-300) 88%, var(--paper-50)) 0%, transparent 72%),
+    radial-gradient(60% 70% at 4% 108%, color-mix(in oklab, var(--rose-500) 30%, var(--paper-50)) 0%, transparent 70%),
+    radial-gradient(75% 110% at 106% 58%, color-mix(in oklab, var(--blue-500) 60%, var(--paper-50)) 0%, transparent 78%),
+    linear-gradient(90deg, color-mix(in oklab, var(--blue-500) 9%, var(--paper-50)), color-mix(in oklab, var(--blue-500) 20%, var(--paper-50)));
   /* A design-system component instance picked in edit mode: drawn over the prototype's page too, so the same in every theme. */
   --inapp-chrome: var(--instagram-chrome);
   --inapp-chrome-foreground: var(--paper-50);

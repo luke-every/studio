@@ -115,3 +115,97 @@ export function measure(a: Rect, b: Rect): Span[] {
   axis(false);
   return spans;
 }
+
+/**
+ * Where a rectangle being resized lines up with others: only the edges being pulled (`handle`: 0 the start, 1 the end, 0.5 neither, on each axis) snap, to
+ * another thing's start, middle or end, and a line shows along each that holds.
+ */
+export function snapResize(area: Rect, handle: [number, number], targets: Rect[], threshold: number): { area: Rect; guides: Guide[] } {
+  const [hx, hy] = handle;
+  let { x, y, width, height } = area;
+  if (hx !== 0.5) {
+    const d = nudge([hx === 0 ? x : x + width], targets.flatMap((t) => stops(t.x, t.width)), threshold);
+    if (hx === 0) {
+      x += d;
+      width -= d;
+    } else width += d;
+  }
+  if (hy !== 0.5) {
+    const d = nudge([hy === 0 ? y : y + height], targets.flatMap((t) => stops(t.y, t.height)), threshold);
+    if (hy === 0) {
+      y += d;
+      height -= d;
+    } else height += d;
+  }
+  const out = { ...area, x, y, width, height };
+  const guides: Guide[] = [];
+  for (const t of targets) {
+    if (hx !== 0.5) {
+      const edge = hx === 0 ? out.x : out.x + out.width;
+      if (stops(t.x, t.width).some((line) => same(edge, line))) guides.push({ axis: "x", at: edge, from: Math.min(out.y, t.y), to: Math.max(out.y + out.height, t.y + t.height) });
+    }
+    if (hy !== 0.5) {
+      const edge = hy === 0 ? out.y : out.y + out.height;
+      if (stops(t.y, t.height).some((line) => same(edge, line))) guides.push({ axis: "y", at: edge, from: Math.min(out.x, t.x), to: Math.max(out.x + out.width, t.x + t.width) });
+    }
+  }
+  return { area: out, guides: merge(guides) };
+}
+
+/**
+ * Equal spacing for a rectangle being moved, along each axis: between two things (the same room on each side), or beside one with the same gap as it has
+ * to the one before it. Only things it shares a row (or a column) with count. The nudge that makes the gaps equal when it is near enough, and the gaps as spans.
+ */
+export function snapGaps(moving: Rect, targets: Rect[], threshold: number): { dx: number; dy: number; spans: Span[] } {
+  const result = { dx: 0, dy: 0, spans: [] as Span[] };
+  for (const horizontal of [true, false]) {
+    const [pos, size, cross, crossSize] = horizontal ? (["x", "width", "y", "height"] as const) : (["y", "height", "x", "width"] as const);
+    const together = (a: Rect, b: Rect) => overlap(a[cross], a[cross] + a[crossSize], b[cross], b[cross] + b[crossSize]);
+    const row = targets.filter((t) => together(moving, t));
+    const before = row.filter((t) => t[pos] + t[size] <= moving[pos] + 1e-6).sort((a, b) => b[pos] + b[size] - (a[pos] + a[size]));
+    const after = row.filter((t) => t[pos] >= moving[pos] + moving[size] - 1e-6).sort((a, b) => a[pos] - b[pos]);
+    const [L, R] = [before[0], after[0]];
+    const span = (a: Rect, b: Rect, from: number, to: number): Span => {
+      const shared = together(a, b) ?? [a[cross], a[cross] + a[crossSize]];
+      const mid = (shared[0] + shared[1]) / 2;
+      return horizontal ? { x1: from, y1: mid, x2: to, y2: mid, length: to - from } : { x1: mid, y1: from, x2: mid, y2: to, length: to - from };
+    };
+    let best: { d: number; spans: Span[] } | null = null;
+    const offer = (d: number, spans: Span[]) => {
+      if (Math.abs(d) <= threshold && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, spans };
+    };
+    if (L && R) {
+      const free = R[pos] - (L[pos] + L[size]) - moving[size];
+      if (free >= 0) {
+        const at = L[pos] + L[size] + free / 2;
+        const now = { ...moving, [pos]: at } as Rect;
+        offer(at - moving[pos], [span(L, now, L[pos] + L[size], at), span(now, R, at + moving[size], R[pos])]);
+      }
+    }
+    if (L) {
+      const prior = targets.filter((t) => t !== L && t[pos] + t[size] <= L[pos] + 1e-6 && together(L, t)).sort((a, b) => b[pos] + b[size] - (a[pos] + a[size]))[0];
+      if (prior) {
+        const gap = L[pos] - (prior[pos] + prior[size]);
+        const at = L[pos] + L[size] + gap;
+        const now = { ...moving, [pos]: at } as Rect;
+        offer(at - moving[pos], [span(prior, L, prior[pos] + prior[size], L[pos]), span(L, now, L[pos] + L[size], at)]);
+      }
+    }
+    if (R) {
+      const next = targets.filter((t) => t !== R && t[pos] >= R[pos] + R[size] - 1e-6 && together(R, t)).sort((a, b) => a[pos] - b[pos])[0];
+      if (next) {
+        const gap = next[pos] - (R[pos] + R[size]);
+        const at = R[pos] - gap - moving[size];
+        const now = { ...moving, [pos]: at } as Rect;
+        offer(at - moving[pos], [span(now, R, at + moving[size], R[pos]), span(R, next, R[pos] + R[size], next[pos])]);
+      }
+    }
+    const found = best as { d: number; spans: Span[] } | null;
+    if (found && found.spans.every((one) => one.length > 0.5)) {
+      if (horizontal) result.dx = found.d;
+      else result.dy = found.d;
+      result.spans.push(...found.spans);
+    }
+  }
+  return result;
+}

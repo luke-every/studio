@@ -14,11 +14,11 @@ import { snapshotOf, type Snapshot } from "@/lib/dom-snapshot";
  * read (it is on another port) comes back `unavailable`, and its screen stays live.
  */
 
-export type Copy = { state: "reading" | "ready" | "unavailable"; snapshot?: Snapshot; error?: string };
+export type Copy = { state: "reading" | "ready" | "unavailable"; snapshot?: Snapshot; error?: string; /** Whether the design system's component names were known when it was read: without them it has no components in it. */ named?: boolean };
 
 const copies = new Map<string, Copy>();
 const listeners = new Map<string, Set<() => void>>();
-const jobs: { key: string; frame: HTMLIFrameElement; generation: number }[] = [];
+const jobs: { key: string; frame: HTMLIFrameElement; generation: number; components?: string[] }[] = [];
 const fontsAdded = new Set<string>();
 let draining = false;
 /** Counts how often everything was forgotten, so a read that was under way then isn't kept. */
@@ -53,10 +53,12 @@ async function drain() {
       continue;
     }
     try {
-      const snapshot = await snapshotOf(job.frame, { components: designSystemNames() });
+      // The names are taken once, before the read: a copy read without them is marked so, even if they arrive while it is being read.
+      const names = [...(designSystemNames() ?? []), ...(job.components ?? [])];
+      const snapshot = await snapshotOf(job.frame, { components: names.length ? names : null });
       if (job.generation === generation) {
         addFonts(snapshot.fonts);
-        put(job.key, { state: "ready", snapshot });
+        put(job.key, { state: "ready", snapshot, named: names.length > 0 });
       }
     } catch (error) {
       if (job.generation === generation) put(job.key, { state: "unavailable", error: error instanceof Error ? error.message : "Couldn't read the page." });
@@ -68,12 +70,25 @@ async function drain() {
 }
 
 /** Reads a live, loaded frame into the copy of `src` at `width`, unless that is already being or has been done. */
-export function donate(src: string, width: number, frame: HTMLIFrameElement) {
+/** `components`: names to take as components in the copy besides the design system's (a component put on the canvas is one, whatever the page calls it). */
+export function donate(src: string, width: number, frame: HTMLIFrameElement, components?: string[]) {
   const key = keyOf(src, width);
   if (copies.has(key)) return;
   put(key, { state: "reading" });
-  jobs.push({ key, frame, generation });
+  jobs.push({ key, frame, generation, components });
   void drain();
+}
+
+/**
+ * Forgets the copies read before the design system's component names were known (they have no components in them), so each is read again with them.
+ * The names of a live version come from the studio's server a moment after its pages load, and a copy can be read first.
+ */
+export function refreshCopies() {
+  for (const [key, copy] of [...copies]) {
+    if (copy.state !== "ready" || copy.named) continue;
+    copies.delete(key);
+    tell(key);
+  }
 }
 
 /** Forgets every copy, so each is read again the next time its screen offers its frame. */

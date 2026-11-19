@@ -1,5 +1,6 @@
 import type { Box, Reach } from "@/lib/anchor";
 import type { Snapshot } from "@/lib/dom-snapshot";
+import { nameOfElement, treeOfRoot } from "@/lib/page-tree";
 import { describePart } from "@/lib/edit-part";
 
 import type { FramePage } from "./frame-page";
@@ -140,6 +141,16 @@ export function copyPage(snapshot: Snapshot, shadow: ShadowRoot): FramePage {
     return { left, top, width, height, children: inside, ...component };
   };
 
+  /** An element described for the panel: a component's root is the component (with its props), and what is inside one is marked as inside it. */
+  const partFor = (ix: number) => {
+    const element = shadow.querySelector(`[data-ix="${ix}"]`);
+    if (!element) return null;
+    const part = describePart(element, undefined, snapshot.tokens);
+    const one = g.components[g.inComponent[ix]];
+    if (one) return one.root === ix ? { ...part, component: { name: one.name, props: one.props, preview: false } } : { ...part, inside: one.name };
+    return part;
+  };
+
   return {
     scope: copyDocument(shadow),
     // The box a click at (x, y) would outline: what it would pick, with its groups when asked (see `hoverBox`).
@@ -155,13 +166,22 @@ export function copyPage(snapshot: Snapshot, shadow: ShadowRoot): FramePage {
       const found = elementAt(x, y);
       const beside = reachFrom(found, from ? { selector: from.selector, into: !!from.into } : undefined);
       const ix = beside >= 0 ? beside : from?.into ? -1 : deep ? found : elementAt(x, y, false);
-      const element = ix >= 0 ? shadow.querySelector(`[data-ix="${ix}"]`) : null;
-      if (!element) return null;
-      const part = describePart(element, undefined, snapshot.tokens);
-      // As on a live page: a component's root is the component (with its props), and what is inside one is marked as inside it.
-      const one = g.components[g.inComponent[ix]];
-      if (one) return one.root === ix ? { ...part, component: { name: one.name, props: one.props, preview: false } } : { ...part, inside: one.name };
-      return part;
+      return ix >= 0 ? partFor(ix) : null;
+    },
+    tree: async () => {
+      const root = shadow.querySelector("[data-studio-root]");
+      return root ? treeOfRoot(root, nameOfElement, (element) => {
+        const ix = Number(element.getAttribute("data-ix"));
+        return !!g.drawn[ix] || element.children.length > 0;
+      }) : null;
+    },
+    boxOf: async (selector) => {
+      const ix = indexOfSelector(selector);
+      return ix >= 0 ? box(ix) : null;
+    },
+    partOf: async (selector) => {
+      const ix = indexOfSelector(selector);
+      return ix >= 0 ? partFor(ix) : null;
     },
     fonts: async () => [],
     anchorOf: async () => null,

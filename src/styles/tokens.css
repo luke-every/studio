@@ -45,6 +45,7 @@
   /* What is picked or hovered on a prototype's page. */
   --blue-500: #0d99ff;
   --rose-500: #ff3d6e;
+  --yellow-300: #ffd95c;
   --instagram-chrome: #191b1f;
 
   /* --- Palette: handoff tones ------------------------------------------------
@@ -174,6 +175,8 @@
   /* What is written under a prototype: narrow enough to read. */
   --content-width: 45rem;
   --dev-panel-width: 14rem;
+  /* The comments panel reads like a conversation, so it keeps the wider column the side panels used to share. */
+  --comments-panel-width: 20rem;
 
   /* --- Radii -------------------------------------------------------------- */
   --r-xs: 0.125rem;

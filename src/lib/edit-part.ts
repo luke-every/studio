@@ -189,7 +189,9 @@ const nameOf = (fiber: Fiber) => {
 };
 const hostOf = (fiber: Fiber | null | undefined): Element | null => {
   for (let at = fiber?.child; at; at = at.sibling) {
-    const found = typeof at.type === "string" && at.stateNode instanceof Element ? at.stateNode : hostOf(at);
+    // Not `instanceof`: a page in a frame has its own `Element`, which the studio's is not.
+    const node = at.stateNode as Element | null | undefined;
+    const found = typeof at.type === "string" && node?.nodeType === 1 ? node : hostOf(at);
     if (found) return found;
   }
   return null;

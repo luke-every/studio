@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Layer</title>
+<style>
+  html, body { margin: 0; background: transparent; }
+  [data-stage] { display: inline-block; max-width: 100%; }
+  .text { font: 400 var(--size, 24px) / 1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color: #111; white-space: pre-wrap; overflow-wrap: anywhere; }
+  img { display: block; object-fit: cover; }
+</style>
+<div data-stage id="layer"></div>
+<script>
+  // A text or image layer placed on the studio's canvas (see flow-canvas.tsx): drawn alone, at its own size, on nothing.
+  // The image is kept in this browser by the canvas (same origin), under the name in the address.
+  var q = new URLSearchParams(location.search);
+  var layer = document.getElementById("layer");
+  if (q.get("kind") === "image") {
+    var src = "";
+    try { src = localStorage.getItem("proto:canvas-image:" + q.get("image")) || ""; } catch (e) {}
+    var img = new Image();
+    img.width = Number(q.get("w")) || 320;
+    img.height = Number(q.get("h")) || 240;
+    img.alt = "";
+    // How it sits in its box: filling it (cropped), fitting inside it, or stretched.
+    img.style.objectFit = { fit: "contain", stretch: "fill" }[q.get("fit")] || "cover";
+    img.src = src;
+    layer.appendChild(img);
+  } else {
+    layer.className = "text";
+    layer.textContent = q.get("text") || "Text";
+    // Its style, and its width when it was given one (it wraps there; otherwise it is as wide as its words).
+    if (q.get("size")) layer.style.setProperty("--size", Number(q.get("size")) + "px");
+    if (q.get("weight")) layer.style.fontWeight = q.get("weight");
+    if (q.get("color")) layer.style.color = q.get("color");
+    if (q.get("align")) layer.style.textAlign = q.get("align");
+    if (Number(q.get("w"))) { layer.style.width = Number(q.get("w")) + "px"; layer.style.maxWidth = "none"; }
+    // Without a width it never wraps: it is as wide as its words (a line break is only where one was typed), however the box round it was first guessed.
+    else { layer.style.whiteSpace = "pre"; layer.style.maxWidth = "none"; }
+  }
+</script>

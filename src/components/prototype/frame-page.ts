@@ -2,6 +2,7 @@ import { anchorAt, anchorOf, elementAt, ownedBy, revealAnchor, scrollAt, spotOf,
 import type { Anchor } from "@/lib/comments";
 import { describePart, facesFor, hideWords, hoverBox, partIn, reachFrom, type From, type Face, type painter, type Part } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
+import { treeOf, type PageTree } from "@/lib/page-tree";
 import { findClip, partBox, setMarks, sourceAt, type Clip, type Find, type SourceEl, type SourceHit } from "@/lib/handoff-clip";
 
 /**
@@ -37,6 +38,12 @@ export type FramePage = {
   reveal(anchor: Anchor, done: (found: boolean) => void): () => void;
   /** Only a static copy: the copy as a document an edit can be painted in (see `copyDocument`). */
   scope?: Document;
+  /** The page's elements as a tree, for the layers panel. Null when the page can't say. */
+  tree(): Promise<PageTree | null>;
+  /** The element a selector names, described for the edit panel as if it had been tapped. */
+  partOf(selector: string, components?: string[]): Promise<Part | null>;
+  /** Where the element a selector names is, in the page's own pixels. Null when it isn't there. */
+  boxOf(selector: string): Promise<Box | null>;
 };
 
 /**
@@ -146,6 +153,20 @@ function near(frame: HTMLIFrameElement): FramePage {
       const page = doc();
       return page ? facesFor(page, css) : [];
     },
+    tree: async () => {
+      const page = doc();
+      return page ? treeOf(page) : null;
+    },
+    partOf: async (selector, components) => {
+      const page = doc();
+      const element = page ? partIn(page, selector) : null;
+      return element ? describePart(element, [...(designSystem ?? []), ...(components ?? [])]) : null;
+    },
+    boxOf: async (selector) => {
+      const page = doc();
+      const rect = (page ? partIn(page, selector) : null)?.getBoundingClientRect();
+      return rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null;
+    },
     anchorOf: async (selector) => {
       const page = doc();
       const element = page ? partIn(page, selector) : null;
@@ -203,7 +224,7 @@ function near(frame: HTMLIFrameElement): FramePage {
 /** How long a question is waited for before the page is taken not to know (it may not have the helper). */
 const ASK_MS = 1500;
 
-type Ask = { id: number; what: "anchor" | "box" | "fonts" | "reveal" | "part" | "anchorOf" | "clip" | "mark" | "sourceAt" | "handoffPartBox" | "selectorBox"; x?: number; y?: number; deep?: boolean; groups?: boolean; from?: From; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; css?: Record<string, string>; find?: Find; finds?: Find[]; colour?: string | null; elements?: SourceEl[]; part?: Find; index?: number };
+type Ask = { id: number; what: "tree" | "partOf" | "anchor" | "box" | "fonts" | "reveal" | "part" | "anchorOf" | "clip" | "mark" | "sourceAt" | "handoffPartBox" | "selectorBox"; x?: number; y?: number; deep?: boolean; groups?: boolean; from?: From; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; css?: Record<string, string>; find?: Find; finds?: Find[]; colour?: string | null; elements?: SourceEl[]; part?: Find; index?: number };
 type Link = {
   /** The page's own address, once it has said hello; questions wait until then. */
   origin: string | null;
@@ -415,6 +436,9 @@ function across(frame: HTMLIFrameElement): FramePage {
     boxAt: (x, y, reach = {}) => ask<Box | null>({ what: "box", x, y, deep: reach.deep !== false, groups: reach.groups, from: reach.from ? { selector: reach.from.selector, into: !!reach.from.into } : undefined, components: designSystem ?? undefined }, ASK_MS, null),
     partAt: (x, y, deep = true, from) => ask<Part | null>({ what: "part", x, y, deep, from, components: designSystem ?? undefined }, ASK_MS, null).then(heardPart),
     fonts: (css) => ask<Face[]>({ what: "fonts", css }, 8000, []),
+    tree: () => ask<PageTree | null>({ what: "tree" }, 5000, null),
+    boxOf: (selector) => ask<Box | null>({ what: "selectorBox", selector }, ASK_MS, null),
+    partOf: (selector, components) => ask<Part | null>({ what: "partOf", selector, components: [...(designSystem ?? []), ...(components ?? [])] }, ASK_MS, null).then(heardPart),
     anchorOf: (selector) => ask<Anchor | null>({ what: "anchorOf", selector, owns: [...new URL(frame.src, window.location.href).searchParams.keys()] }, ASK_MS, null),
     scrollAt: (x, y, dx, dy) => {
       if (win) send(win, linkOf(win), { type: "studio:comments:scroll", x, y, dx, dy });

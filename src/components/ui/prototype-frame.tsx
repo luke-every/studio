@@ -14,7 +14,7 @@ import { MotionSheet } from "@/components/motion";
 import { ShareMenu } from "@/components/prototype/share-menu";
 import { deviceIcons } from "@/components/prototype/view-menu";
 
-import { CodeIcon, CommentIcon, ComponentIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, FoldIcon, GithubIcon, SlidersIcon } from "@/components/shell/nav-icons";
+import { CodeIcon, CommentIcon, ComponentIcon, LayersIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, FoldIcon, GithubIcon, SlidersIcon } from "@/components/shell/nav-icons";
 import { ComponentsPanel, SHOW_COMPONENTS } from "@/components/prototype/components-panel";
 
 import { controlOn, IconButton } from "./button";
@@ -30,11 +30,13 @@ import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
 import { describePart, partIn, type Part, type Tokens } from "@/lib/edit-part";
 import { copyDocument } from "@/components/prototype/copy-page";
-import { CanvasZoomMenu } from "@/components/prototype/canvas-zoom-menu";
+import { CanvasPlayButton, CanvasZoomMenu } from "@/components/prototype/canvas-zoom-menu";
+import { ALWAYS_ON_SHARE_LINKS, CanvasIntro } from "@/components/prototype/canvas-intro";
 import { EditLayer } from "@/components/prototype/edit-layer";
 import type { SourceEl } from "@/lib/handoff-clip";
 import type { Selection } from "@/lib/handoff-selection";
 import { followPart, setDesignSystem, watchScrolled } from "@/components/prototype/frame-page";
+import { refreshCopies } from "@/lib/screen-copies";
 import { designSystemOf } from "@/lib/registry/actions";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
 import { watchTaps } from "@/lib/anchor";
@@ -219,6 +221,10 @@ export function PrototypeFrame({
   // The website's components, to pick from, on the canvas only (the options panel is for the prototype's own view, so the two never
   // share the left). It is mounted the first time it is opened, which is when its list is asked for, and kept after, so closing
   // and reopening is instant.
+  // The layers panel, on the left of the canvas; the components panel stands to the right of it when both are open.
+  const [layersOpen, setLayersOpen] = useState(true);
+  // ⌘. puts every control away, to look at the canvas alone, and brings them back.
+  const [uiHidden, setUiHidden] = useState(false);
   const [componentsOpen, setComponentsOpen] = useState(false);
   const [componentsSeen, setComponentsSeen] = useState(false);
   const toggleComponents = () => {
@@ -233,6 +239,17 @@ export function PrototypeFrame({
   const flowCanvas = flow || !variants ? { flow: flow ?? single, setups: undefined } : null;
   const canvas = (canvasKind === "variants" ? variants : flowCanvas) ?? flowCanvas ?? variants ?? null;
   const showingFlow = flowOpen && !!canvas && !!addressed;
+  useEffect(() => {
+    if (!showingFlow) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.code !== "Period" || !(event.metaKey || event.ctrlKey) || event.altKey || event.repeat || target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")) return;
+      event.preventDefault();
+      setUiHidden((now) => !now);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showingFlow]);
   const showingVariants = showingFlow && !!canvas?.setups;
   // The devices on the canvas: every screen is shown on each, side by side. It opens with the main view's alone, and
   // they are switched on and off from the bar; closed, it goes back to that one. When the main view's device is changed
@@ -269,7 +286,7 @@ export function PrototypeFrame({
     const id = window.setTimeout(preloadComments, 1000);
     return () => window.clearTimeout(id);
   }, []);
-  const [canvasHintSeen, markCanvasHintSeen] = useFlag("proto.canvas-hint");
+  const [, markCanvasHintSeen] = useFlag("proto.canvas-hint");
   const [pinsChosen, setShowPins] = useShowComments();
   // A share page shows comments only while commenting, so the show and hide switch is not offered there.
   const showPins = pinsChosen && !minimal;
@@ -335,19 +352,26 @@ export function PrototypeFrame({
   const [panelKind, setPanelKind] = useState<"dev" | "edit" | "comments">("dev");
   const wantedKind = editing ? "edit" : dev ? "dev" : "comments";
   if (panelOpen && panelKind !== wantedKind) setPanelKind(wantedKind);
+  // The comments are wider than the panels for editing and for dev mode.
+  const panelWidth = panelKind === "comments" ? "w-[var(--comments-panel-width)]" : "w-[var(--dev-panel-width)]";
   // The frames the version is on screen in: the prototype's own, or on the canvas one a screen, and an edit is drawn in all of them (see `useEditSession`).
   const canvasBox = useRef<HTMLDivElement>(null);
   const editFrames = () => [...((showingFlow ? canvasBox.current : stage.current)?.querySelectorAll("iframe") ?? [])];
   // The screens drawn as copies are painted too, each through its own scoped document (see `copyDocument`).
   const editCopies = () => [...((showingFlow ? canvasBox.current : null)?.querySelectorAll<HTMLElement>("[data-copy]") ?? [])].flatMap((host) => (host.shadowRoot ? [copyDocument(host.shadowRoot)] : []));
   const session = useEditSession(url, editFrames, editCopies);
+  // The bar of Cancel, undo, redo and Save is for a mode being worked in. On the canvas, picking an element is only looking at it: the bar comes once a change is made.
+  const modeBar = commenting || (dev && !(editing && showingFlow && !session.edits.length));
   // A live version can always be edited: what is picked inside one of its design system's components is that component (see `setDesignSystem`). The names are there before the first pick, not after it.
   const liveSlug = edit?.live ? edit.slug : null;
   useEffect(() => {
     if (!liveSlug) return undefined;
     let stale = false;
     void designSystemOf(liveSlug).then((result) => {
-      if (!stale && result.ok) setDesignSystem(result.value.names);
+      if (stale || !result.ok) return;
+      setDesignSystem(result.value.names);
+      // Screens copied before the names arrived have no components in them: they are read again.
+      refreshCopies();
     });
     return () => {
       stale = true;
@@ -464,14 +488,18 @@ export function PrototypeFrame({
         return;
       }
     }
-    // The canvas closes on Escape (a screen selected on it lets go first, which is the canvas's own). It is full screen
-    // itself, so that is no reason to wait: full screen chosen before it opened is what is left next.
-    if (event.key === "Escape" && showingFlow && !commenting && !dev) {
-      onFlowOpen(false);
+    // Escape never closes the canvas. What is selected on it lets go first (which is the canvas's own), then a part picked to edit, then
+    // edit mode itself; comment mode is left above.
+    if (event.key === "Escape" && showingFlow && editing) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (part) letGo();
+      else exitMode();
       return;
     }
     if (mode === "view" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      if (event.key.toLowerCase() === "f" && url) {
+      // On the canvas F is the frame tool, not full screen.
+      if (event.key.toLowerCase() === "f" && url && !showingFlow) {
         event.preventDefault();
         onFullscreen(!fullscreen);
         return;
@@ -516,7 +544,9 @@ export function PrototypeFrame({
       // dropdown, a tick) holds one value that is committed as it changes, so ⌘Z there undoes the edit it made.
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || target.tagName === "TEXTAREA")) return;
-      if (target && ["INPUT", "SELECT"].includes(target.tagName)) {
+      // Escape in a text or number field of a panel: the field is let go of and the key goes on, so one press closes the panel as it does anywhere else.
+      if (event.key === "Escape" && target?.tagName === "INPUT" && !target.closest("[data-native-undo]")) target.blur();
+      else if (target && ["INPUT", "SELECT"].includes(target.tagName)) {
         // Only ⌘Z and ⌘Y are ours, and not in a field where a name is being typed.
         const undoKey = (event.metaKey || event.ctrlKey) && ["z", "y"].includes(event.key.toLowerCase());
         if (!undoKey || target.closest("[data-native-undo]")) return;
@@ -648,23 +678,22 @@ export function PrototypeFrame({
     if (next) onDevice?.(next);
   };
 
-  // The comment buttons: in the bar on a wider screen, under the prototype on a phone.
-  const pinButtons = commentsOf || showingFlow ? (
-    <>
-      {showingFlow ? <CanvasZoomMenu /> : null}
-      {commentsOf && comments.length && !minimal ? (
-        <IconButton label={showPins ? "Hide comments" : "Show comments"} onClick={() => setShowPins(!showPins)}>
-          {showPins ? <EyeIcon /> : <EyeOffIcon />}
-        </IconButton>
-      ) : null}
-      {commentsOf ? (
-        <IconButton label="Comment (C)" onClick={() => { changeMode("comment"); setListing(true); }}>
+  // The comment buttons: in the bar on a wider screen, under the prototype on a phone, and on the canvas in its own bar at the foot (`inBar`).
+  const commentButtons = (inBar: boolean) =>
+    commentsOf ? (
+      <>
+        {comments.length && !minimal ? (
+          <IconButton label={showPins ? "Hide comments" : "Show comments"} variant={inBar ? "ghost" : undefined} tooltipSide={inBar ? "above" : undefined} onClick={() => setShowPins(!showPins)}>
+            {showPins ? <EyeIcon /> : <EyeOffIcon />}
+          </IconButton>
+        ) : null}
+        <IconButton label="Comment (C)" variant={inBar ? "ghost" : undefined} tooltipSide={inBar ? "above" : undefined} onClick={() => { changeMode("comment"); setListing(true); }}>
           <CommentIcon />
           {openCount ? openCount : null}
         </IconButton>
-      ) : null}
-    </>
-  ) : null;
+      </>
+    ) : null;
+  const pinButtons = commentButtons(false);
 
   // A set height, the window's on a wide screen: a bigger phone scrolls inside the tile instead of stretching the page.
   return (
@@ -676,9 +705,9 @@ export function PrototypeFrame({
       className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${bare || showingFlow ? "" : "max-sm:px-6 max-sm:pb-14 max-sm:pt-8"} ${fullscreen ? "lg:rounded-none" : ""}`}
     >
       {/* Before the bar, at the same level, so the bar's menus (version, share) open over it. */}
-      {SHOW_COMPONENTS && showingFlow && componentsSeen && !dev && !commenting && !bare ? (
+      {SHOW_COMPONENTS && showingFlow && !minimal && componentsSeen && !dev && !commenting && !bare ? (
         // Floats over the canvas and takes a press only on the panel itself.
-        <div className="pointer-events-none absolute bottom-8 left-8 top-24 z-[var(--z-raised)] flex w-72 flex-col max-sm:hidden">
+        <div inert={uiHidden} className={`pointer-events-none absolute bottom-8 top-24 z-[var(--z-raised)] flex w-72 flex-col transition-[left,opacity] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:hidden ${layersOpen ? "left-[17rem]" : "left-8"} ${uiHidden ? "opacity-0" : ""}`}>
           <div
             inert={!componentsOpen}
             className={`min-h-0 w-full flex-1 origin-top-left transition-[opacity,scale] duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${
@@ -702,9 +731,11 @@ export function PrototypeFrame({
           </div>
         </div>
       ) : null}
+      {/* Once per person: the canvas is new, and a card from the corner says so. */}
+      {url && addressed && !bare ? <CanvasIntro quiet={showingFlow} always={minimal && ALWAYS_ON_SHARE_LINKS} onOpen={() => { if (!(minimal && ALWAYS_ON_SHARE_LINKS)) markCanvasHintSeen(); onFlowOpen(true); }} /> : null}
       {/* The bar lies over the top of the canvas: only its controls take a press, so a screen or button under the gaps between them can still be used. */}
-      <div key={dev || commenting ? "mode" : "view"} style={bare ? { display: "none" } : undefined} className="bar-in pointer-events-none relative z-[var(--z-raised)] grid *:pointer-events-auto min-h-16 items-center gap-3 max-sm:mb-2 max-sm:grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] sm:px-8 sm:py-8">
-        {dev || commenting ? (
+      <div key={modeBar ? "mode" : "view"} inert={uiHidden && showingFlow} style={bare ? { display: "none" } : undefined} className={`${uiHidden && showingFlow ? "!opacity-0 " : ""}transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] bar-in pointer-events-none relative z-[var(--z-raised)] grid *:pointer-events-auto min-h-16 items-center gap-3 max-sm:mb-2 max-sm:grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] sm:px-8 sm:py-8`}>
+        {modeBar ? (
           // Editing, dev or comment mode is the only thing going on: a way out, how clicks behave, and (editing) undo, redo and Save.
           <>
             <IconButton onClick={exitMode} className="justify-self-start">
@@ -761,13 +792,6 @@ export function PrototypeFrame({
                   </IconButton>
                 </span>
               ) : null}
-              {SHOW_COMPONENTS && showingFlow ? (
-                <span className="max-sm:hidden">
-                  <IconButton label={componentsOpen ? "Hide components" : "Show components"} aria-expanded={componentsOpen} tooltipAlign="start" onClick={toggleComponents} className={componentsOpen ? controlOn : ""}>
-                    <ComponentIcon />
-                  </IconButton>
-                </span>
-              ) : null}
               {minimal && githubUrl && url && !showingFlow ? (
                 <span className="hidden lg:block">
                   <IconButton label="Open in GitHub" href={githubUrl} external>
@@ -789,16 +813,6 @@ export function PrototypeFrame({
                     >
                       <FlowIcon />
                     </IconButton>
-                    {/* Once per person, on a share page, where the canvas is easy to miss. */}
-                    {minimal && !bare && !canvasHintSeen ? (
-                      <button
-                        type="button"
-                        onClick={markCanvasHintSeen}
-                        className="fade-enter absolute left-0 top-[calc(100%+0.5rem)] z-[var(--z-popover)] w-max max-w-64 rounded-[var(--r-control)] bg-accent px-3 py-2 text-left text-sm text-accent-foreground shadow-floating"
-                      >
-                        <span className="font-medium">New!</span> See all screens on the canvas
-                      </button>
-                    ) : null}
                   </div>
                 )
               ) : null}
@@ -856,12 +870,22 @@ export function PrototypeFrame({
             {bottom ? <div className="justify-self-center sm:hidden max-sm:[grid-area:1/2]">{bottom}</div> : null}
             {url ? (
               <div className="flex items-center gap-2 [grid-column:3] justify-self-end max-sm:contents">
-                {pinButtons ? <div className="flex items-center gap-2 max-sm:hidden">{pinButtons}</div> : null}
+                {pinButtons && !showingFlow ? <div className="flex items-center gap-2 max-sm:hidden">{pinButtons}</div> : null}
                 {minimal && onOpenPrototype && !fullscreen ? (
                   <span className="hidden lg:block">
                     <IconButton label="Open the prototype" tooltipAlign="end" onClick={onOpenPrototype}>
                       <ExternalIcon />
                     </IconButton>
+                  </span>
+                ) : null}
+                {showingFlow ? (
+                  <span className="max-sm:hidden">
+                    <CanvasZoomMenu />
+                  </span>
+                ) : null}
+                {showingFlow ? (
+                  <span className="max-sm:hidden">
+                    <CanvasPlayButton />
                   </span>
                 ) : null}
                 {share ? (
@@ -973,6 +997,27 @@ export function PrototypeFrame({
       {(showingFlow || (canvasKey && warmKey === canvasKey)) && canvas && addressed ? (
         <div ref={canvasBox} inert={!showingFlow} className={`absolute inset-0 ${showingFlow ? "" : "pointer-events-none invisible"}`}>
           <FlowCanvas
+            viewOnly={minimal}
+            // The website's components, with the text and image tools at the foot.
+            layersOpen={layersOpen}
+            onLayersOpen={setLayersOpen}
+            uiHidden={uiHidden && showingFlow}
+            tools={!minimal ? (
+              <>
+                <IconButton label={layersOpen ? "Hide layers" : "Show layers"} variant="ghost" tooltipSide="above" aria-expanded={layersOpen} onClick={() => setLayersOpen((now) => !now)} className={layersOpen ? controlOn : ""}>
+                  <LayersIcon />
+                </IconButton>
+                {SHOW_COMPONENTS ? (
+                  <IconButton label={componentsOpen ? "Hide components" : "Show components"} variant="ghost" tooltipSide="above" aria-expanded={componentsOpen} onClick={toggleComponents} className={componentsOpen ? controlOn : ""}>
+                    <ComponentIcon />
+                  </IconButton>
+                ) : null}
+              </>
+            ) : undefined}
+            // The zoom and the comment buttons sit in the canvas's own bar at the foot.
+            bar={
+              commentButtons(true)
+            }
             fold={fold}
             inspect={handoffInspect}
             sheet={handoffSheet}
@@ -983,6 +1028,7 @@ export function PrototypeFrame({
             flow={canvas.flow}
             setups={canvas.setups}
             base={addressed.split("?")[0]}
+            cloud={commentsOf ? { slug: commentsOf.slug, version: commentsOf.version } : undefined}
             device={device}
             devices={canvasDevices}
             controls={center}
@@ -1004,17 +1050,17 @@ export function PrototypeFrame({
     <div
       inert={!panelOpen}
       className={`hidden transition-[width,margin,visibility] duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:block ${
-        showingFlow ? "absolute bottom-4 right-4 top-26 z-[var(--z-raised)] w-[var(--dev-panel-width)]" : "relative shrink-0"
+        showingFlow ? `absolute bottom-4 right-4 top-26 z-[var(--z-raised)] ${panelWidth}` : "relative shrink-0"
       } ${
         // Hidden outright once it has gone, not only moved out of sight.
-        panelOpen ? (showingFlow ? "" : "w-[var(--dev-panel-width)]") : showingFlow ? "invisible" : "invisible -ml-4 w-0"
+        panelOpen ? (showingFlow ? "" : panelWidth) : showingFlow ? "invisible" : "invisible -ml-4 w-0"
       }`}
     >
-      {/* It travels in from the right and fades in as the space opens for it, at the same pace as the left column goes. */}
+      {/* It slides in a short way (24px) from the right and fades in as the space opens for it, at the same pace as the left column goes. */}
       <div
-        className={`absolute inset-y-0 right-0 w-[var(--dev-panel-width)] overflow-y-auto rounded-[var(--r-tile)] ${showingFlow ? "border border-border bg-surface-elevated shadow-floating" : `bg-tile ${fullscreen ? "lg:rounded-none" : ""}`} transition-[translate,opacity] duration-[var(--dur-standard)] ease-[var(--curve-standard)] [scrollbar-width:thin] ${
+        className={`absolute inset-y-0 right-0 ${panelWidth} overflow-y-auto rounded-[var(--r-tile)] ${showingFlow ? "border border-border bg-surface-elevated shadow-floating" : `bg-tile ${fullscreen ? "lg:rounded-none" : ""}`} transition-[translate,opacity] duration-[var(--dur-standard)] ease-[var(--curve-standard)] [scrollbar-width:thin] ${
           // With reduced motion it only fades: the travel is left out.
-          panelOpen ? "" : "translate-x-full opacity-0 motion-reduce:translate-x-0"
+          panelOpen ? "" : "translate-x-6 opacity-0 motion-reduce:translate-x-0"
         }`}
       >
         {inspectShown ? inspectPanel : null}

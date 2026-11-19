@@ -71,6 +71,11 @@
   --welcome-in-scale: 1.08;
   /* How far below its place each line starts. */
   --welcome-rise: var(--motion-travel-lg);
+  /* intro-card: a card announcing something new, rising from the corner it sits in a moment after the page is there. */
+  --intro-rise: var(--motion-travel-lg);
+  --intro-scale: 0.92;
+  --intro-blur: 8px;
+  --intro-wait: 1.2s;
   --welcome-out-scale: 0.92;
   --welcome-hold: 500ms;
   /* The least time the door spends checking a password, so the spinner is
@@ -113,6 +118,9 @@
     --welcome-blur: 0px;
     --welcome-in-scale: 1;
     --welcome-out-scale: 1;
+    --intro-scale: 1;
+    --intro-blur: 0px;
+    --intro-wait: 0.4s;
   }
 }
 
@@ -390,6 +398,38 @@
 
 @utility welcome-out {
   animation: welcome-out var(--dur-deliberate) var(--curve-exit) both;
+}
+
+/* ---------------------------------------------------------------------------
+ * intro-card — a card that announces something new. It rises from the corner
+ * it sits in (the component sets which, with `origin-*`), growing out of a little blur,
+ * after `--intro-wait`; it goes back down into the corner the same way.
+ * Animated while MOTION_ENABLED is off, like the others here; reduced motion
+ * keeps the fade and drops the travel.
+ * ------------------------------------------------------------------------- */
+@keyframes intro-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--intro-rise)) scale(var(--intro-scale));
+    filter: blur(var(--intro-blur));
+  }
+}
+
+@keyframes intro-card-out {
+  to {
+    opacity: 0;
+    transform: translateY(var(--intro-rise)) scale(var(--intro-scale));
+    filter: blur(var(--intro-blur));
+  }
+}
+
+@utility intro-card-in {
+  animation: intro-card-in var(--dur-immersive) var(--curve-spatial) backwards;
+  animation-delay: var(--intro-wait);
+}
+
+@utility intro-card-out {
+  animation: intro-card-out var(--dur-deliberate) var(--curve-exit) both;
 }
 
 /* ---------------------------------------------------------------------------

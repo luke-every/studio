@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { canHover, MotionPopover } from "@/components/motion";
-import { ChevronDownIcon, FitIcon, MinusIcon, PlusIcon } from "@/components/shell/nav-icons";
+import { ChevronDownIcon, FitIcon, MinusIcon, PlayIcon, PlusIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { useCanvasZoom } from "@/lib/canvas-zoom";
 
@@ -11,7 +11,7 @@ const percent = (scale: number) => `${Math.round(scale * 100)}%`;
 const step = "grid size-8 place-items-center rounded-[var(--r-full)] text-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover";
 const row = "flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[var(--r-control)] border border-border bg-surface px-3 text-sm font-medium text-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-[var(--control-hover)]";
 
-/** The canvas's zoom, in the bar beside the comments: where it is now, a step either way, back to 100%, and fitting everything in. Nothing when there is no canvas. */
+/** The canvas's zoom, in the top bar beside share: where it is now, a step either way, back to 100%, and fitting everything in. Nothing when there is no canvas. */
 export function CanvasZoomMenu() {
   const zoom = useCanvasZoom();
   const [open, setOpen] = useState(false);
@@ -53,5 +53,21 @@ export function CanvasZoomMenu() {
         </div>
       </div>
     </MotionPopover>
+  );
+}
+
+/** Opens the screen selected on the canvas (or the one an element selected is in) to use it: blue when there is one, dim when not. */
+export function CanvasPlayButton() {
+  const zoom = useCanvasZoom();
+  if (!zoom) return null;
+  return (
+    <IconButton
+      label="Interact"
+      disabled={!zoom.play}
+      className={zoom.play ? "!bg-[var(--selection)] !text-[var(--selection-foreground)] hover:!bg-[var(--selection-hover)]" : ""}
+      onClick={() => zoom.play?.()}
+    >
+      <PlayIcon />
+    </IconButton>
   );
 }

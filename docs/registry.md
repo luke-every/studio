@@ -22,6 +22,8 @@ GitHub   registry.json                  teams, projects, prototypes, versions
          p/<slug>/<version>/<...>       every other file in the folder pushed
          comments/<slug>/<version>.json comments and replies left on that version
          handoff/<slug>/<version>.json  that version's handoff: findings, decisions, sign-off
+         canvas/<slug>/<version>.json   where that version's screens, frames and layers were put on the canvas
+         canvas/<slug>/images/<name>.json  a picture the canvas uses (a data address, written once)
 ```
 
 A version isn't forced into one file, and nothing about it is rewritten. The
@@ -47,6 +49,14 @@ Every version is one commit, written through GitHub's Git Data API (a blob
 per file, one tree, one commit, move the branch ref) — never a local `git`
 checkout, and never this application's own repository. A version's path is
 checked for existence first and never replaced, the same as it was in Blob.
+
+A canvas is kept the same way (`src/lib/registry/canvas.ts`): one file per version, read and written
+by the browser through server actions, saved a few seconds after the last change (the last save wins),
+and read, never written, from a share link. Each save is a commit to the content repository, so the
+browser waits for a pause rather than saving every drag. A working copy's (v0.0) is kept in its
+`.studio/canvas.json`. The browser keeps its own copy as well, which is what the canvas opens with and
+what is left offline; opening takes the cloud's copy unless this browser has changes it has not saved yet.
+Its pictures are files of their own, written once.
 
 A handoff is kept the same way, one file per version (`src/lib/registry/handoff.ts`). /handoff
 scans the prototype on the designer's machine and posts the findings to `/api/handoff` with the

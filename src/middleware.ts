@@ -52,6 +52,8 @@ export async function middleware(request: NextRequest) {
     pathname === "/studio-anchor.js" ||
     // The same anchor code for a live version on its own dev server, loaded by its page when the studio asks.
     pathname === "/studio-comments.js" ||
+    // A text or image placed on a canvas, drawn in a frame of the page.
+    pathname === "/canvas-layer.html" ||
     // The service worker and manifest are fetched by the browser without the cookie.
     pathname === "/sw.js" ||
     pathname === "/manifest.webmanifest" ||

@@ -6,7 +6,7 @@
  *
  * Prints nothing when everything holds, and the failures when something doesn't.
  */
-import { measure, snapMove } from "../src/lib/canvas-geometry.ts";
+import { measure, snapGaps, snapMove, snapResize } from "../src/lib/canvas-geometry.ts";
 
 const failures = [];
 const check = (name, ok, detail = "") => {
@@ -71,6 +71,26 @@ const rect = (id, x, y, width, height) => ({ id, x, y, width, height });
 
   const apart = measure(rect("a", 0, 0, 20, 20), rect("b", 100, 100, 20, 20));
   check("two spans when apart on both axes", apart.length === 2 && apart.every((s) => s.length === 80), JSON.stringify(apart));
+}
+
+// Resizing: only the edge being pulled snaps.
+{
+  const out = snapResize(rect("m", 0, 0, 96, 40), [1, 0.5], [rect("t", 200, 0, 50, 50)], 4);
+  check("resize snaps the pulled edge", out.area.width === 96 && out.area.x === 0);
+  const near = snapResize(rect("m", 0, 0, 198, 40), [1, 0.5], [rect("t", 200, 0, 50, 50)], 4);
+  check("resize snaps to a near edge", near.area.width === 200 && near.guides.length === 1, JSON.stringify(near));
+  const left = snapResize(rect("m", 3, 0, 97, 40), [0, 0.5], [rect("t", 0, 0, 50, 50)], 4);
+  check("pulling the start keeps the end", left.area.x === 0 && left.area.width === 100, JSON.stringify(left.area));
+}
+
+// Equal spacing: between two things, and beside one with the gap it has to the one before.
+{
+  const between = snapGaps(rect("m", 52, 0, 20, 20), [rect("l", 0, 0, 20, 20), rect("r", 100, 0, 20, 20)], 4);
+  check("equal room between two", between.dx === -2 && between.spans.length === 2, JSON.stringify(between));
+  const beside = snapGaps(rect("m", 78, 0, 20, 20), [rect("a", 0, 0, 20, 20), rect("b", 40, 0, 20, 20)], 4);
+  check("same gap as the pair before", beside.dx === 2 && beside.spans.length === 2, JSON.stringify(beside));
+  const far = snapGaps(rect("m", 300, 0, 20, 20), [rect("a", 0, 0, 20, 20), rect("b", 40, 0, 20, 20)], 4);
+  check("nothing near", far.dx === 0 && far.spans.length === 0);
 }
 
 if (failures.length) {
