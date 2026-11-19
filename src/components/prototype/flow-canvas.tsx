@@ -696,9 +696,11 @@ export function FlowCanvas({
         const spot = at(copy.id);
         const world = { x: spot.x + found.left * SCREEN_SCALE, y: spot.y + found.top * SCREEN_SCALE, width: found.width * SCREEN_SCALE, height: found.height * SCREEN_SCALE };
         const space = clear(size);
-        // Not closer than 150%: one short line shouldn't fill the window.
-        const scale = Math.min(1.5 / SCREEN_SCALE, MAX_ZOOM, space.width / (world.width * 1.25), space.height / (world.height * 1.25));
+        // Not closer than 100%, with room around it: the section is seen among its page, not filling the window.
+        const scale = Math.min(1 / SCREEN_SCALE, MAX_ZOOM, space.width / (world.width * 1.7), space.height / (world.height * 1.7));
         touch(true);
+        // And outlined, so what it is can be seen.
+        setInspected({ id: "section", copyId: copy.id, box: { left: found.left, top: found.top, width: found.width, height: found.height } });
         camera.set({ scale, x: size.width / 2 - (world.x + world.width / 2) * scale, y: INSET.top + space.height / 2 - (world.y + world.height / 2) * scale }, { glide: true });
         return;
       }

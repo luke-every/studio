@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { SelectionPanel } from "@/components/handoff/part-panel";
+import { useUrlParam } from "@/components/prototype/prototype-detail";
 import { useSharedHandoff } from "@/components/handoff/use-shared-handoff";
 import type { Selection } from "@/lib/handoff-selection";
 
@@ -104,6 +105,9 @@ function Shared({
   const phone = useMediaQuery("(max-width: 639px)");
   // What the iframe is given: `studio=1` added, held still once the prototype can take control changes as messages.
   const [flowOpen, setFlowOpen] = useState(false);
+  // Lines of one section of the copy (a link from a copy doc): the canvas opens zoomed to them.
+  const findParam = useUrlParam("find");
+  const focusFind = useMemo(() => (findParam ? findParam.split("|").filter(Boolean) : undefined), [findParam]);
   // A canvas link (`#canvas`) opens straight onto it, except on a phone, which has no way to leave it.
   useEffect(() => {
     if (window.location.hash !== "#canvas" || !window.matchMedia("(min-width: 640px)").matches) return;
@@ -292,6 +296,7 @@ function Shared({
           }
           flowOpen={flowOpen}
           onFlowOpen={setFlowOpen}
+          focusFind={focusFind}
           mode={mode}
           onMode={changeMode}
           listing={listing}

@@ -36,15 +36,43 @@ export function unionBox(boxes: Box[]): Box | null {
   return { left, top, width: right - left, height: bottom - top };
 }
 
-/** In a live page's own document: the words' boxes, in the page's pixels. */
+/** The element that holds all of the nodes: the section they are in. */
+export function commonElement(nodes: Node[]): Element | null {
+  const chains = nodes.map((node) => {
+    const chain: Element[] = [];
+    for (let at = node.parentElement; at; at = at.parentElement) chain.unshift(at);
+    return chain;
+  });
+  let common: Element | null = null;
+  for (let index = 0; ; index++) {
+    const first = chains[0]?.[index];
+    if (!first || chains.some((chain) => chain[index] !== first)) break;
+    common = first;
+  }
+  return common;
+}
+
+/** What a link points at: the section's own element where it is one (not the whole page), and the words' own box when the element would be most of the page. */
+export function sectionBox(element: Box | null, words: Box | null, pageHeight: number): Box | null {
+  if (element && words && element.height > pageHeight * 0.9) return words;
+  return element ?? words;
+}
+
+/** In a live page's own document: the section's element, in the page's pixels. */
 export function boxOfTexts(doc: Document, finds: string[]): Box | null {
   if (!doc.body) return null;
   const view = doc.defaultView;
-  const boxes = uniqueTextNodes(doc, doc.body, finds).flatMap((node) => {
-    const range = doc.createRange();
-    range.selectNodeContents(node);
-    const rect = range.getBoundingClientRect();
-    return rect.width && rect.height ? [{ left: rect.left + (view?.scrollX ?? 0), top: rect.top + (view?.scrollY ?? 0), width: rect.width, height: rect.height }] : [];
-  });
-  return unionBox(boxes);
+  const nodes = uniqueTextNodes(doc, doc.body, finds);
+  const measure = (rect: DOMRect): Box | null => (rect.width && rect.height ? { left: rect.left + (view?.scrollX ?? 0), top: rect.top + (view?.scrollY ?? 0), width: rect.width, height: rect.height } : null);
+  const words = unionBox(
+    nodes.flatMap((node) => {
+      const range = doc.createRange();
+      range.selectNodeContents(node);
+      const found = measure(range.getBoundingClientRect());
+      return found ? [found] : [];
+    }),
+  );
+  const holder = nodes.length ? commonElement(nodes) : null;
+  const element = holder && holder !== doc.body && holder !== doc.documentElement ? measure(holder.getBoundingClientRect()) : null;
+  return sectionBox(element, words, doc.documentElement.scrollHeight);
 }

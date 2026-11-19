@@ -16,6 +16,7 @@ import {
 import { reviewCopy, rowsFromTable, type PastedRow } from "@/lib/copy-import";
 import { tablesFromDocXml } from "@/lib/doc-xml";
 import { getPrototypeHistory } from "@/lib/registry";
+import { LATEST, mintShareToken } from "@/lib/share";
 
 import {
   readStudioFile,
@@ -414,18 +415,21 @@ const setTask = (
  * whole screen when it can't.
  */
 async function sectionLinks(slug: string) {
-  const config = await readFile(join(homedir(), ".claude", "prototype-studio.json"), "utf8").then(
-    (text) => (JSON.parse(text) as { url?: unknown }).url,
-    () => undefined,
+  const settings = await readFile(join(homedir(), ".claude", "prototype-studio.json"), "utf8").then(
+    (text) => JSON.parse(text) as { url?: unknown; password?: unknown },
+    () => ({}) as { url?: unknown; password?: unknown },
   );
+  const config = settings.url;
   if (typeof config !== "string" || !/^https?:\/\//.test(config)) return undefined;
   const pushed = (await getPrototypeHistory(slug)).some((version) => !version.live);
   if (!pushed) return undefined;
-  const base = `${config.replace(/\/+$/, "")}/prototypes/${encodeURIComponent(slug)}`;
+  // A share link, not the studio's own page: it opens the prototype for looking at, with nothing to edit, and follows its current version. It is signed with the
+  // studio's password (the one /push uses), as the deployed studio checks it, so it opens for anyone with the link and for no one else.
+  const base = `${config.replace(/\/+$/, "")}/s/${mintShareToken(slug, LATEST, typeof settings.password === "string" && settings.password ? settings.password : undefined)}`;
   return (group: { find: string[] }) => {
     if (!group.find.length) return null;
     const find = group.find.filter((line) => !line.includes("|")).map((line) => encodeURIComponent(line).replace(/\(/g, "%28").replace(/\)/g, "%29")).join("%7C");
-    return `${base}?canvas=1&find=${find}`;
+    return `${base}?find=${find}#canvas`;
   };
 }
 
