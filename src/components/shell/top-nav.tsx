@@ -17,7 +17,7 @@ import { SettingsDialog } from "./settings-dialog";
 import { PlusIcon, SearchIcon } from "./nav-icons";
 import { NotificationsMenu } from "./notifications-menu";
 import { SearchDialog } from "./search-dialog";
-import { DesignQaLink, PulseLink, StorybookLink, TeamMenu, TeamRow } from "./team-menu";
+import { DesignQaLink, StorybookLink, TeamMenu, TeamRow } from "./team-menu";
 import { UserMenu } from "./user-menu";
 
 /**
@@ -52,7 +52,6 @@ export function TopNav({ feed, onSwitchUser }: { feed: ActivityFeed; onSwitchUse
               <>
                 <TeamMenu />
                 <DesignQaLink />
-                <PulseLink />
                 <StorybookLink />
               </>
             ) : (

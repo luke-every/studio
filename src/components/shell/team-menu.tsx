@@ -46,9 +46,6 @@ export function TeamRow() {
           {entry.label}
         </IconButton>
       ))}
-      <IconButton href={PULSE_HREF} className={onPulse ? controlOn : ""}>
-        Weekly Pulse
-      </IconButton>
       {SHOW_STORYBOOK ? (
         <IconButton href={DESIGN_QA_HREF} className={pathname === DESIGN_QA_HREF ? controlOn : ""}>
           Design QA
@@ -68,17 +65,6 @@ const STORYBOOK_HREF = "/storybook";
 const DESIGN_QA_HREF = "/design-qa";
 /** Local only: the tab is not built into the live studio. */
 const SHOW_STORYBOOK = process.env.NODE_ENV === "development";
-
-/** Weekly Pulse, beside the Home menu. */
-export function PulseLink() {
-  const onPulse = usePathname() === PULSE_HREF;
-
-  return (
-    <IconButton href={PULSE_HREF} className={onPulse ? controlOn : ""} aria-current={onPulse ? "page" : undefined}>
-      Weekly Pulse
-    </IconButton>
-  );
-}
 
 /** Design QA, beside Prototypes. On this machine only. */
 export function DesignQaLink() {
