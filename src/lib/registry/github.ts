@@ -2,6 +2,7 @@ import "server-only";
 
 import { WORKING_SEGMENT, workingFile } from "./local-prototypes";
 import { versionSegment } from "./version";
+import { InfraError } from "./errors";
 
 /**
  * The content repository.
@@ -48,7 +49,7 @@ export function isContentRepoConfigured() {
 function requireConfig(): Config {
   const cfg = config();
   if (!cfg) {
-    throw new Error(
+    throw new InfraError(
       "No content repository is connected. Set STUDIO_GITHUB_TOKEN and STUDIO_CONTENT_REPO in Vercel.",
     );
   }
@@ -193,7 +194,7 @@ async function api(path: string, cfg: Config, init: RequestInit = {}) {
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw Object.assign(
-      new Error(`GitHub ${init.method ?? "GET"} ${path} failed (${response.status}): ${body.slice(0, 300)}`),
+      new InfraError(`GitHub ${init.method ?? "GET"} ${path} failed (${response.status}): ${body.slice(0, 300)}`),
       { status: response.status },
     );
   }
@@ -215,7 +216,7 @@ export async function readRepoFile(path: string): Promise<string | null> {
     { headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github.raw+json" } },
   );
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Could not read ${path} (${response.status}).`);
+  if (!response.ok) throw new InfraError(`Could not read ${path} (${response.status}).`);
   return response.text();
 }
 
@@ -235,14 +236,14 @@ export async function readRepoFileWithSha(path: string): Promise<{ text: string;
     cache: "no-store",
   });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Could not read ${path} (${response.status}).`);
+  if (!response.ok) throw new InfraError(`Could not read ${path} (${response.status}).`);
   const file = (await response.json()) as { sha: string; content: string; encoding: string };
   if (file.encoding === "base64") return { text: Buffer.from(file.content, "base64").toString("utf8"), sha: file.sha };
   const raw = await fetch(`${API}${url}?ref=${file.sha}`, {
     headers: { authorization: `Bearer ${cfg.token}`, accept: "application/vnd.github.raw+json" },
     cache: "no-store",
   });
-  if (!raw.ok) throw new Error(`Could not read ${path} (${raw.status}).`);
+  if (!raw.ok) throw new InfraError(`Could not read ${path} (${raw.status}).`);
   return { text: await raw.text(), sha: file.sha };
 }
 
@@ -354,14 +355,15 @@ export async function commitPrototypeVersion(
 }
 
 /**
- * Delete a version's files, and the comments left on it, from the content
- * repository in one commit, so the number can be pushed again. A version that
- * is already gone is not an error.
+ * Delete a version's files, and what was left on it (its comments, its canvas, its handoff), from the content
+ * repository in one commit, so the number can be pushed again clean. A version that is already gone is not an error.
  */
 export async function removePrototypeVersion(slug: string, version: string) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("That isn't a prototype.");
   const prefix = versionPrefix(slug, version);
   const commentsPath = `comments/${slug}/${versionSegment(version)}.json`;
+  const canvasPath = `canvas/${slug}/${versionSegment(version)}.json`;
+  const handoffPath = `handoff/${slug}/${versionSegment(version)}.json`;
   const cfg = config();
   if (!cfg) {
     if (process.env.NODE_ENV === "production") requireConfig();
@@ -373,7 +375,7 @@ export async function removePrototypeVersion(slug: string, version: string) {
     return;
   }
 
-  await removeFromRepo(cfg, `Remove ${slug} ${version}`, [prefix, commentsPath]);
+  await removeFromRepo(cfg, `Remove ${slug} ${version}`, [prefix, commentsPath, canvasPath, handoffPath]);
 }
 
 /**

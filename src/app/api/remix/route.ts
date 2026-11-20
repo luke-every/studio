@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getPrototypes } from "@/lib/registry";
 import { contentRepoAccess, versionPrefix } from "@/lib/registry/github";
+import { userMessage } from "@/lib/registry/errors";
 
 /**
  * What a remix needs to copy one version: its name, its team, and the
@@ -31,6 +32,6 @@ export async function GET(request: NextRequest) {
       repository: contentRepoAccess(),
     });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Couldn't start the remix." }, { status: 400 });
+    return NextResponse.json({ error: userMessage(error, "Couldn't start the remix.") }, { status: 400 });
   }
 }

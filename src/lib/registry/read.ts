@@ -7,6 +7,7 @@ import { readStudioFile, WORKING_VERSION, workingCopies } from "./local-prototyp
 import { aliased } from "./people";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
 import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
+import { InfraError } from "./errors";
 
 /**
  * Reading the registry.
@@ -76,7 +77,7 @@ export async function loadRegistry(): Promise<RegistryDocument> {
 
   const problems = checkRelationships(document);
   if (problems.length > 0) {
-    throw new Error(
+    throw new InfraError(
       `Registry is invalid:\n${problems.map((problem) => `  • ${problem}`).join("\n")}`,
     );
   }

@@ -110,11 +110,7 @@ export function applyControls(url: string, controls: Controls | null, values: Co
   return query ? `${url}?${query}` : url;
 }
 
-/**
- * Asks for a prototype's page as a preview (a canvas screen, a tile): no video or audio, and storage of its own (see the
- * /p route). Its value changes whenever what a preview is does, since a page is cached for good under its address.
- */
-export const PREVIEW_QUERY = "preview=2";
+export { PREVIEW_QUERY } from "@/lib/preview-query";
 
 /** Tells a prototype it is shown inside the studio (so it can hide its own switcher). For iframes only, never thumbnails. */
 export const EMBED_PARAM = "studio";

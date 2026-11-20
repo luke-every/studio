@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["*.local"],
   // The Next.js dev tools badge, hidden everywhere in the local studio.
   devIndicators: false,
+  // Next stops a server action's body at 1MB unless told otherwise; the upload checks (4MB each) sit under this.
+  experimental: { serverActions: { bodySizeLimit: "4mb" } },
   env: {
     NEXT_PUBLIC_STUDIO_COMMIT: process.env.VERCEL_GIT_COMMIT_SHA ?? "",
     NEXT_PUBLIC_STUDIO_CHANGE: (process.env.VERCEL_GIT_COMMIT_MESSAGE ?? "").split("\n")[0],

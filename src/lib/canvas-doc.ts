@@ -20,8 +20,8 @@ export type CanvasDoc = z.infer<typeof canvasDocSchema>;
 
 /** The name a picture is kept under: what the canvas makes (`piece-ab12cd`), and nothing that could become another path. */
 export const IMAGE_NAME = /^[a-z0-9-]{3,40}$/;
-/** A picture as a data address: a PNG or JPEG, as large as the canvas ever makes one (it shrinks them to 1600px). */
-export const IMAGE_DATA = /^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/=]+$/;
+/** A picture as a data address: a PNG, JPEG or WebP, as large as the canvas ever makes one (see `encodeImage`: 1600px). */
+export const IMAGE_DATA = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 export const MAX_IMAGE_CHARS = 4_000_000;
 
 /**

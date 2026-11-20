@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { EDIT_IMAGE_DIR, mergeEdits, type Edit } from "@/lib/edits";
+import { dataUrlOf, fitImage } from "@/lib/image";
 import { painter, type Part } from "@/lib/edit-part";
 
 import { paintFrames } from "./frame-page";
@@ -84,7 +85,9 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
   };
 
   /** Swaps the picture of the element `selector` names. */
-  const setImage = (selector: string, file: File, copy?: number | null) => {
+  const setImage = async (selector: string, picked: File, copy?: number | null) => {
+    // One over the limit is shrunk first, so it can be kept.
+    const file = await fitImage(picked);
     const extension = (file.name.split(".").pop() ?? "png").toLowerCase().replace(/[^a-z0-9]/g, "");
     const path = `${EDIT_IMAGE_DIR}/image-${Date.now().toString(36)}.${extension}`;
     // Shown from the file itself for now; the saved version carries it at `path`.
@@ -92,12 +95,10 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
     images.set(path, kept);
     apply({ kind: "image", selector, src: path, copy: copy ?? undefined }, `image:${selector}:${path}`);
     // A page on another address can only be shown the picture itself: read it, and draw again with it.
-    const reader = new FileReader();
-    reader.onload = () => {
-      kept.data = String(reader.result);
+    void dataUrlOf(file).then((data) => {
+      kept.data = data;
       paint(latest.current.edits);
-    };
-    reader.readAsDataURL(file);
+    });
   };
 
   /** Put one element back as it was. */

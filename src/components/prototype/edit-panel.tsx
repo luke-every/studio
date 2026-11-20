@@ -195,7 +195,7 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
 
             {picture && element.pictureKind === "img" ? (
               <Section title="Image">
-                <ImageRow shown={session.imageOf(picture) ?? element.pictureSrc} onPick={(file) => (session.setImage(picture, file, element.pictureCopy), bump())} />
+                <ImageRow shown={session.imageOf(picture) ?? element.pictureSrc} onPick={(file) => void session.setImage(picture, file, element.pictureCopy).then(bump)} />
               </Section>
             ) : null}
 
@@ -520,7 +520,7 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
               onAdd={() => set(["background-color", "#ffffff"])}
               action={removeButton("Remove fill", () => set(["background-color", "transparent"], ["background-image", "none"]))}
             >
-              {picture && element.pictureKind === "fill" ? <ImageRow shown={session.imageOf(picture) ?? element.pictureSrc} onPick={(file) => (session.setImage(picture, file, element.pictureCopy), bump())} /> : null}
+              {picture && element.pictureKind === "fill" ? <ImageRow shown={session.imageOf(picture) ?? element.pictureSrc} onPick={(file) => void session.setImage(picture, file, element.pictureCopy).then(bump)} /> : null}
               {coloured("Background", read("background-color"), (option) => set(["background-color", option.css]), (value) => set(["background-color", value]), { none: true })}
             </Section>
 

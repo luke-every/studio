@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { anchorSchema } from "@/lib/comments";
 import { checkReviewToken } from "@/lib/review";
 import * as comments from "@/lib/registry/comments";
+import { userMessage } from "@/lib/registry/errors";
 
 /**
  * Where a comment left from a phone lands. The phone has no password and no
@@ -34,6 +35,6 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true, n: comment.n });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Something failed." }, { status: 400 });
+    return NextResponse.json({ error: userMessage(error, "Something failed.") }, { status: 400 });
   }
 }
