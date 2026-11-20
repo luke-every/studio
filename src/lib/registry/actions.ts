@@ -18,6 +18,7 @@ import * as handoff from "./handoff";
 import * as liveEdits from "./live-edits";
 import * as push from "./push";
 import * as registry from "./write";
+import { IMAGE_MAX_BYTES } from "@/lib/image";
 import { userMessage } from "./errors";
 
 /**
@@ -89,7 +90,7 @@ export async function createPrototype(form: FormData) {
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false as const, error: "Choose an HTML file to upload." };
   }
-  if (file.size > 4_000_000) {
+  if (file.size > IMAGE_MAX_BYTES) {
     return { ok: false as const, error: "That file is larger than 4MB." };
   }
 
@@ -119,7 +120,7 @@ export async function saveEdits(form: FormData) {
   for (const [key, value] of form.entries()) {
     if (!key.startsWith(`${EDIT_IMAGE_DIR}/`) || !(value instanceof File)) continue;
     if (!/^_edits\/[\w.-]+$/.test(key)) return { ok: false as const, error: "That image has an odd name." };
-    if (value.size > 4_000_000) return { ok: false as const, error: "Images can be up to 4MB each." };
+    if (value.size > IMAGE_MAX_BYTES) return { ok: false as const, error: "Images can be up to 4MB each." };
     images.push({ path: key, content: await value.arrayBuffer() });
   }
 
@@ -293,7 +294,7 @@ export async function saveLiveEdits(form: FormData) {
   for (const [key, value] of form.entries()) {
     if (!key.startsWith(`${EDIT_IMAGE_DIR}/`) || !(value instanceof File)) continue;
     if (!/^_edits\/[\w.-]+$/.test(key)) return { ok: false as const, error: "That image has an odd name." };
-    if (value.size > 4_000_000) return { ok: false as const, error: "Images can be up to 4MB each." };
+    if (value.size > IMAGE_MAX_BYTES) return { ok: false as const, error: "Images can be up to 4MB each." };
     uploads.set(key, { name: value.name, bytes: Buffer.from(await value.arrayBuffer()) });
   }
   return attempt(() => liveEdits.saveLiveEdits(String(form.get("slug") ?? ""), edits, uploads), []);

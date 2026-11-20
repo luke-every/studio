@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, us
 
 import { ArrowIcon, CodeIcon, EllipseIcon, PolygonIcon, StarIcon, FrameIcon, LineIcon, RectangleIcon, ImageIcon, PlayIcon, PointerIcon, TextIcon } from "@/components/shell/nav-icons";
 import { CanvasCamera, zoomAbout } from "@/lib/canvas-camera";
+import { dataUrlOf, encodeImage } from "@/lib/image";
 import { detectLayout, flow as flowLayout, paddingOf, type Layout } from "@/lib/canvas-layout";
 import { copiedFill } from "@/lib/canvas-clipboard";
 import { fillsOf, readCanvas, STICKY_COLORS, writeCanvas, type CanvasFrame, type CanvasShape, type FillLayer, type Offsets, type Piece } from "@/lib/canvas-saved";
@@ -2593,23 +2594,17 @@ export function FlowCanvas({
   // A picture from disk, kept in this browser (shrunk first, so it fits) under a name; where it goes is up to the caller.
   const storeImage = async (file: File) => {
     try {
-      const bitmap = await createImageBitmap(file);
-      const k = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(bitmap.width * k);
-      canvas.height = Math.round(bitmap.height * k);
-      canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      // A big picture would fill the browser's storage on its own: past a megabyte and a half it is kept as WebP or JPEG, and smaller.
+      const encoded = await encodeImage(file, { maxSide: 1600, maxBytes: 1_500_000 });
+      const data = await dataUrlOf(encoded.blob);
       const name = newId();
-      let data = canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
-      // A big PNG would fill the browser's storage on its own: past a couple of megabytes it is kept as a JPEG.
-      if (data.length > 2_000_000) data = canvas.toDataURL("image/jpeg", 0.85);
       pictures.set(name, data);
       try {
         localStorage.setItem(`proto:canvas-image:${name}`, data);
       } catch {
         // Storage full: it is there for this session, and not kept for the next.
       }
-      return { name, width: bitmap.width, height: bitmap.height };
+      return { name, width: encoded.sourceWidth, height: encoded.sourceHeight };
     } catch {
       // A file that isn't a picture the browser can read, or storage that is full: nothing is kept.
       return null;
