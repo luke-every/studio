@@ -373,20 +373,25 @@ export async function removePrototypeVersion(slug: string, version: string) {
     return;
   }
 
+  await removeFromRepo(cfg, `Remove ${slug} ${version}`, [prefix, commentsPath]);
+}
+
+/**
+ * Takes folders and files out of the content repository in one commit; any that aren't there are skipped. A folder goes
+ * as one tree entry set to null, however many files it holds.
+ */
+async function removeFromRepo(cfg: Config, message: string, paths: string[]) {
   const repo = `/repos/${cfg.owner}/${cfg.name}`;
-  // A folder goes as one tree entry set to null, however many files it holds.
-  const entryIn = async (folder: string, name: string) => {
-    const listing = await api(`${repo}/git/trees/${cfg.branch}:${folder}`, cfg).catch((error: { status?: number }) => {
+  const entryAt = async (path: string) => {
+    const at = path.lastIndexOf("/");
+    const listing = await api(`${repo}/git/trees/${cfg.branch}:${path.slice(0, at)}`, cfg).catch((error: { status?: number }) => {
       if (error.status === 404) return null;
       throw error;
     });
-    return ((listing?.tree ?? []) as { path: string; mode: string; type: string }[]).find((entry) => entry.path === name);
+    const entry = ((listing?.tree ?? []) as { path: string; mode: string; type: string }[]).find((item) => item.path === path.slice(at + 1));
+    return entry && { ...entry, path };
   };
-  const [files, comments] = await Promise.all([
-    entryIn(`p/${slug}`, versionSegment(version)),
-    entryIn(`comments/${slug}`, `${versionSegment(version)}.json`),
-  ]);
-  const gone = [files && { ...files, path: prefix }, comments && { ...comments, path: commentsPath }].filter((entry) => !!entry);
+  const gone = (await Promise.all(paths.map(entryAt))).filter((entry) => !!entry);
   if (!gone.length) return;
 
   const ref = await api(`${repo}/git/ref/heads/${cfg.branch}`, cfg);
@@ -398,9 +403,24 @@ export async function removePrototypeVersion(slug: string, version: string) {
   });
   const commit = await api(`${repo}/git/commits`, cfg, {
     method: "POST",
-    body: JSON.stringify({ message: `Remove ${slug} ${version}`, tree: newTree.sha, parents: [baseCommitSha] }),
+    body: JSON.stringify({ message, tree: newTree.sha, parents: [baseCommitSha] }),
   });
   await api(`${repo}/git/refs/heads/${cfg.branch}`, cfg, { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
+}
+
+/** Everything the content repository holds for a prototype but its record in the registry: every version's files, its comments, canvas and handoff. */
+export async function removePrototype(slug: string) {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("That isn't a prototype.");
+  const paths = [`p/${slug}`, `comments/${slug}`, `canvas/${slug}`, `handoff/${slug}`];
+  const cfg = config();
+  if (!cfg) {
+    if (process.env.NODE_ENV === "production") requireConfig();
+    const { rm } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    for (const path of paths) await rm(join(process.cwd(), ".local", path), { recursive: true, force: true });
+    return;
+  }
+  await removeFromRepo(cfg, `Remove ${slug}`, paths);
 }
 
 /**

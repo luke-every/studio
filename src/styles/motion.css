@@ -42,6 +42,15 @@
   /* tab-slide: the pill under the current tab moving to the next. */
   --tab-slide-duration: var(--dur-standard);
   --tab-slide-curve: var(--curve-spatial);
+  /* step-in / step-out: a dialog moving between its steps. Both use the same distance, timing and curve; the step
+   * coming in waits `--step-delay` first, so it follows the one going rather than crossing it. The curve is even
+   * (slow, quick, slow): the usual ones do nearly all their moving at the start, which, after a delay and from
+   * nothing, leaves the step coming in looking as if it only faded. */
+  --step-duration: var(--dur-standard);
+  --step-curve: cubic-bezier(0.65, 0, 0.35, 1);
+  --step-delay: 0.1s;
+  /* How far a step moves, going and coming: the same each way. */
+  --step-travel: 24px;
   /* A layer (a modal) arriving, and leaving: it leaves in half the time it took to
    * arrive, so when one closes as another opens both are seen moving.
    * Mirrored for JS as `layerEnter` / `layerExit` in tokens.ts. */
@@ -109,6 +118,8 @@
     --dur-immersive: 140ms;
     --layer-enter-duration: 120ms;
     --layer-exit-duration: 100ms;
+    --step-delay: 0s;
+    --step-travel: 0px;
 
     --motion-lift: 0px;
     --motion-travel-sm: 0px;
@@ -313,6 +324,49 @@
 
 @utility popover-out {
   animation: popover-out var(--dur-fast) var(--curve-exit) both;
+}
+
+/* ---------------------------------------------------------------------------
+ * step-in / step-out — a dialog moving between its steps (MotionStepModal): the
+ * step it leaves slides out and fades, the next slides in from the other side.
+ * Going forward the content moves left, going back it moves right. In and out
+ * share one duration and curve; the one coming in starts `--step-delay` late
+ * (and waits invisible until then), so the two read as one staggered move.
+ * `--step-shift` is which way and how far; with reduced motion the distance is
+ * zero, there is no delay, and they only fade.
+ * ------------------------------------------------------------------------- */
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--step-shift));
+  }
+}
+
+@keyframes step-out {
+  to {
+    opacity: 0;
+    transform: translateX(var(--step-shift));
+  }
+}
+
+@utility step-in-right {
+  --step-shift: var(--step-travel);
+  animation: step-in var(--step-duration) var(--step-curve) var(--step-delay) both;
+}
+
+@utility step-in-left {
+  --step-shift: calc(var(--step-travel) * -1);
+  animation: step-in var(--step-duration) var(--step-curve) var(--step-delay) both;
+}
+
+@utility step-out-left {
+  --step-shift: calc(var(--step-travel) * -1);
+  animation: step-out var(--step-duration) var(--step-curve) both;
+}
+
+@utility step-out-right {
+  --step-shift: var(--step-travel);
+  animation: step-out var(--step-duration) var(--step-curve) both;
 }
 
 /* ---------------------------------------------------------------------------

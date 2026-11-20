@@ -5,5 +5,6 @@ export { MotionPanel } from "./motion-panel";
 export { MotionPopover, canHover } from "./motion-popover";
 export { MotionScrim } from "./motion-scrim";
 export { MotionModal } from "./motion-modal";
+export { MotionStepModal, ModalStep } from "./motion-step-modal";
 export { MotionSheet } from "./motion-sheet";
 export { MotionFocusLayer, FocusPlaceholder } from "./motion-focus-layer";

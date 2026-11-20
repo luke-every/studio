@@ -17,6 +17,7 @@ import {
   createProject as createProjectAction,
   createTeam as createTeamAction,
   filePrototype as filePrototypeAction,
+  deletePrototype as deletePrototypeAction,
   deleteVersion as deleteVersionAction,
   renameVersion as renameVersionAction,
   updatePrototype as updatePrototypeAction,
@@ -53,6 +54,8 @@ type StudioContextValue = {
   renameVersion: (input: Parameters<typeof renameVersionAction>[0], keys: string[], message?: string) => void;
   /** Take a version out of the history. Resolves when it is done and the screen has been refreshed; a problem comes back as text. */
   deleteVersion: (input: Parameters<typeof deleteVersionAction>[0], message?: string) => Promise<string | null>;
+  /** Delete a whole prototype (see `deletePrototype` in write.ts). Resolves when it is done and the screen has been refreshed; a problem comes back as text. */
+  deletePrototype: (input: Parameters<typeof deletePrototypeAction>[0], message?: string) => Promise<string | null>;
   /** Which saves are in flight, by the keys they were started with. */
   isSaving: (key: string) => boolean;
   /** Say something short at the top of the screen. */
@@ -196,6 +199,17 @@ export function StudioProvider({
     [after, notify],
   );
 
+  const deletePrototype = useCallback<StudioContextValue["deletePrototype"]>(
+    async (input, message = "Deleted") => {
+      const result = await deletePrototypeAction(input);
+      if (!result.ok) return result.error;
+      after();
+      notify(message);
+      return null;
+    },
+    [after, notify],
+  );
+
   const isSaving = useCallback(
     (key: string) =>
       inFlight.includes(key) ||
@@ -224,6 +238,7 @@ export function StudioProvider({
       updatePrototype,
       renameVersion,
       deleteVersion,
+      deletePrototype,
       isSaving,
       notify,
       markOpened,
@@ -232,7 +247,7 @@ export function StudioProvider({
       error,
       dismissError,
     }),
-    [snapshot, addTeam, addProject, filePrototype, updatePrototype, renameVersion, deleteVersion, isSaving, notify, markOpened, opened, saving, pending, error, dismissError],
+    [snapshot, addTeam, addProject, filePrototype, updatePrototype, renameVersion, deleteVersion, deletePrototype, isSaving, notify, markOpened, opened, saving, pending, error, dismissError],
   );
 
   return (

@@ -26,6 +26,10 @@
 
   --surface: var(--paper-50);
   --surface-elevated: #ffffff;
+  /* The terminal stays dark in either theme: Claude Code draws for a dark screen and its text would vanish on a light one. */
+  --terminal-background: var(--ink-900);
+  --terminal-foreground: var(--paper-50);
+  --terminal-muted: var(--ink-400);
   --surface-inset: var(--paper-200);
   --surface-hover: var(--alpha-ink-04);
   --menu-hover: var(--graphite-100);

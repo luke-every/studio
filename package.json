@@ -8,18 +8,23 @@
     "prebuild": "tsx scripts/build-anchor.ts",
     "build": "next build",
     "start": "next start",
+    "terminal": "node scripts/terminal-server.mjs",
     "lint": "eslint",
     "check": "sh scripts/check.sh",
     "skill:install": "tsx scripts/install-skill.ts"
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "motion": "^13.4.0",
     "next": "16.3.5",
+    "node-pty": "^1.1.0",
     "qrcode-generator": "^2.0.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",
     "web-push": "^3.6.7",
+    "ws": "^8.23.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -28,6 +33,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.2",
     "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",

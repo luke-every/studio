@@ -19,6 +19,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { useUser } from "@/lib/use-user";
 
 import { ShareQr } from "./share-qr";
+import { SharedDocsMenu, type DocLinks } from "./shared-docs-menu";
 
 import { MotionProvider, useOverlayBehaviour } from "@/lib/motion";
 import { MotionScrim } from "@/components/motion";
@@ -67,7 +68,7 @@ function Shared({
   review,
   slug,
   versionKey,
-  githubUrl,
+  docs,
   token,
 }: {
   name: string;
@@ -82,8 +83,8 @@ function Shared({
   slug: string;
   /** The version as it is stored (v2.0), which comments are filed under. */
   versionKey: string;
-  /** Its files on GitHub, for engineers. */
-  githubUrl?: string;
+  /** Where its design, write-up, copy documents and files on GitHub are, for those that exist. */
+  docs: DocLinks;
 }) {
   const offered = usePrototypeControls(version.url);
   const variants = useVersionVariants(version.url);
@@ -238,7 +239,7 @@ function Shared({
   }
 
   return (
-    <div className={`flex w-full flex-col gap-6 overflow-x-clip py-4 sm:px-8 ${full ? "max-lg:!p-0" : ""} lg:h-dvh lg:flex-row lg:gap-4 lg:transition-[padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${full ? "lg:p-0" : "lg:p-4"}`}>
+    <div className={`flex w-full flex-col gap-6 overflow-x-clip py-4 sm:px-8 ${full || flowOpen ? "max-lg:!p-0" : ""} lg:h-dvh lg:flex-row lg:gap-4 lg:transition-[padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${full || flowOpen ? "lg:p-0" : "lg:p-4"}`}>
       {columnOpen && !full ? <ColumnHandle offset={drag} onDrag={setDrag} onHide={() => setHidden(true)} edge="1rem" vertical="inset-y-4" /> : null}
       {hidden && !full && wide ? <RevealTab onShow={() => setHidden(false)} /> : null}
       <aside
@@ -315,7 +316,7 @@ function Shared({
             }
           }}
           onOpenPrototype={() => window.location.assign(address)}
-          githubUrl={full ? undefined : githubUrl}
+          docs={<SharedDocsMenu links={docs} />}
           minimal
           corner={full ? undefined : <ShareQr />}
         />

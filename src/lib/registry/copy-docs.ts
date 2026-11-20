@@ -112,6 +112,16 @@ export async function readCopyDocs(slug: string): Promise<CopyDocs> {
   return { ...docs, ...(Object.keys(tasks).length ? { tasks } : {}), ...(pendingDeletes ? { pendingDeletes } : {}) };
 }
 
+/** Where the copy documents are, and nothing else of them: for a share link, which only ever opens them. Empty where the folder isn't there. */
+export async function readSharedDocLinks(slug: string): Promise<{ claude?: string; notion?: string }> {
+  try {
+    const docs = JSON.parse((await readStudioFile(slug, FILE)) ?? "{}") as CopyDocs;
+    return { ...(docs.claude ? { claude: docs.claude.url } : {}), ...(docs.notion ? { notion: docs.notion.url } : {}) };
+  } catch {
+    return {};
+  }
+}
+
 const change = (slug: string, apply: (docs: CopyDocs) => CopyDocs) =>
   updateStudioFile(slug, FILE, (text) => {
     let docs: CopyDocs = {};

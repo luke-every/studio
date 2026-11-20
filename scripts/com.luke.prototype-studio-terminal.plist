@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.luke.prototype-studio-terminal</string>
+  <key>WorkingDirectory</key><string>/Users/luke/Claude/TestKitchen</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/luke/.nvm/versions/node/v24.21.0/bin/node</string>
+    <string>scripts/terminal-server.mjs</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/luke/.nvm/versions/node/v24.21.0/bin:/usr/local/bin:/opt/homebrew/bin:/usr/sbin:/usr/bin:/bin:/sbin</string>
+    <key>HOME</key><string>/Users/luke</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/luke/Library/Logs/prototype-studio-terminal.log</string>
+  <key>StandardErrorPath</key><string>/Users/luke/Library/Logs/prototype-studio-terminal.log</string>
+</dict>
+</plist>

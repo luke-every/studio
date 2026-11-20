@@ -224,7 +224,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
   const githubUrl = repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}${selected.source ? "/_source" : ""}` : undefined;
 
-  // The name is in the nav (see `Breadcrumbs`); the menu sits beside it, in the slots the nav leaves for it.
+  // The name is in the nav (see `Breadcrumbs`); the version list and the menu sit beside it, in the slots the nav leaves for them.
   const [slots, setSlots] = useState<Element[]>([]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the nav is outside this page; its slots can only be found once the page is on screen
   useEffect(() => setSlots([...document.querySelectorAll("[data-nav-slot]")]), []);
@@ -272,9 +272,20 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       }`}
     >
 
-      {slots.map((slot, index) => createPortal(menu, slot, String(index)))}
+      {slots.map((slot, index) =>
+        createPortal(
+          <>
+            {versionMenu}
+            {menu}
+          </>,
+          slot,
+          String(index),
+        ),
+      )}
       <div className="stagger-in [--i:0] min-w-0 flex-1 lg:min-h-0">
         <PrototypeFrame
+          // The version list is in the nav, beside the name.
+          leading={null}
           url={frameUrl}
           openUrl={address}
           docs={!prototype.slug.startsWith("qa-") ? <CopyDocsMenu slug={prototype.slug} name={prototype.name} figmaUrl={prototype.figmaUrl} githubUrl={githubUrl} notionUrl={prototype.notionUrl} /> : undefined}
@@ -346,7 +357,6 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
             if (next) hintFullscreen(notify);
           }}
           title={`${prototype.name} ${selected.version}`}
-          leading={versionMenu}
           share={{ slug: prototype.slug }}
           side={
             side && !focus && options ? <div className="flex flex-col gap-6 rounded-[var(--r-control)] border border-border p-4">{options}</div> : undefined

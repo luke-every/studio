@@ -1,13 +1,17 @@
 import "server-only";
 
+import { existsSync } from "node:fs";
+
 import { revalidatePath } from "next/cache";
 
 import { linkProblem, type LinkKind } from "@/lib/links";
 
 import { isStoreConfigured, readRegistryDocument, updateRegistryDocument, type RegistryDocument } from "./store";
 import { aliased } from "./people";
-import { commitPrototypeVersion, fetchPrototypeFile, prototypeVersionExists, removePrototypeVersion, verifyPrototypeVersion, versionPrefix } from "./github";
+import { commitPrototypeVersion, fetchPrototypeFile, prototypeVersionExists, removePrototype, removePrototypeVersion, verifyPrototypeVersion, versionPrefix } from "./github";
 import { applierScript, describeEdits, mergeEdits, variantIdPattern, type Edit, type EditsFile, type EditVariant } from "@/lib/edits";
+import { endTerminal, moveToTrash, stopDevServer, updateStudioFile, workingCopiesOn, workingFolder } from "./local-prototypes";
+import { forgetActivity } from "./activity";
 import { compareVersions, readSeed } from "./read";
 import { prototypeSchema, versionSchema } from "./schema";
 import type { PrototypeRecord, VersionRecord } from "./schema";
@@ -532,6 +536,22 @@ export async function updatePrototype(input: {
   notionUrl?: string;
   archived?: boolean;
 }) {
+  // A prototype that is only a folder on this machine, never pushed, isn't in the registry, so there is nothing there to
+  // change. Archiving it is kept in its own folder (`.studio/archived.json`, read by `addWorkingCopies`), nothing is deleted.
+  if (input.archived !== undefined && workingCopiesOn() && !(await load()).prototypes.some((item) => item.slug === input.slug)) {
+    const folder = (() => {
+      try {
+        return workingFolder(input.slug);
+      } catch {
+        return null;
+      }
+    })();
+    if (!folder || !existsSync(folder)) throw new StoreError(`No prototype called "${input.slug}".`);
+    const archived = input.archived;
+    await updateStudioFile(input.slug, "archived.json", () => ({ content: JSON.stringify({ archived }) }));
+    revalidatePath("/", "layout");
+    return;
+  }
   return mutate((document) => {
     const prototype = document.prototypes.find((item) => item.slug === input.slug);
     if (!prototype) throw new StoreError(`No prototype called "${input.slug}".`);
@@ -570,6 +590,51 @@ export async function updatePrototype(input: {
 
     prototypeSchema.parse(prototype);
   });
+}
+
+/**
+ * Delete a prototype outright, and say what went: its folder on this machine moves to the Trash (`folder`, only where
+ * the studio is running here and the caller says it has one), and if it is in the registry, its record, every version's
+ * files, its comments, canvas and handoff are deleted from the content repository. This is the one thing that deletes a
+ * prototype's history; Archive is the way to put it out of sight. The Trash goes first because it can be undone: if
+ * the repository then fails, nothing there has been touched.
+ */
+export async function deletePrototype(input: { slug: string; folder?: boolean }) {
+  const document = await load();
+  const inRegistry = document.prototypes.some((item) => item.slug === input.slug);
+  const folder = (() => {
+    if (!input.folder || !workingCopiesOn()) return null;
+    try {
+      const path = workingFolder(input.slug);
+      return existsSync(path) ? path : null;
+    } catch {
+      return null;
+    }
+  })();
+  if (!inRegistry && !folder) throw new StoreError(`No prototype called "${input.slug}".`);
+
+  if (folder) {
+    await endTerminal(input.slug);
+    await stopDevServer(input.slug);
+    try {
+      await moveToTrash(folder);
+    } catch {
+      throw new StoreError("Couldn't move the folder to the Trash. Nothing was deleted.");
+    }
+  }
+  if (inRegistry) {
+    try {
+      await removePrototype(input.slug);
+      await mutate((current) => {
+        current.prototypes = current.prototypes.filter((item) => item.slug !== input.slug);
+        current.versions = current.versions.filter((item) => item.prototypeSlug !== input.slug);
+      });
+      await forgetActivity(input.slug).catch(() => {});
+    } catch {
+      throw new StoreError(`${folder ? "The folder is in the Trash, but " : ""}the prototype couldn't be deleted from GitHub. Try again.`);
+    }
+  }
+  revalidatePath("/", "layout");
 }
 
 /**

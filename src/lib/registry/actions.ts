@@ -74,6 +74,10 @@ export async function renameVersion(input: Parameters<typeof registry.renameVers
   return attempt(() => registry.renameVersion(input), ["/"]);
 }
 
+export async function deletePrototype(input: Parameters<typeof registry.deletePrototype>[0]) {
+  return attempt(() => registry.deletePrototype(input), ["/"]);
+}
+
 export async function deleteVersion(input: Parameters<typeof registry.deleteVersion>[0]) {
   return attempt(() => registry.deleteVersion(input), ["/"]);
 }

@@ -17,6 +17,13 @@ export async function readActivity(): Promise<Activity[]> {
   return text ? (JSON.parse(text) as Activity[]) : [];
 }
 
+/** A deleted prototype's comments no longer lead anywhere, so they leave the feed. */
+export const forgetActivity = (slug: string) =>
+  updateStoreFile(PATH, (text) => {
+    const current = text ? (JSON.parse(text) as Activity[]) : [];
+    return { content: JSON.stringify(current.filter((item) => item.slug !== slug)), message: `Forget ${slug}'s comments` };
+  });
+
 export const recordActivity = (entry: Activity) =>
   updateStoreFile(PATH, (text) => {
     const current = text ? (JSON.parse(text) as Activity[]) : [];

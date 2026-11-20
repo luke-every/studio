@@ -239,6 +239,14 @@ export function CodeIcon(props: IconProps) {
   );
 }
 
+export function TerminalIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="m3.5 5 3 3-3 3M8 11.5h4.5" />
+    </Frame>
+  );
+}
+
 export function UndoIcon(props: IconProps) {
   return (
     <Frame {...props}>

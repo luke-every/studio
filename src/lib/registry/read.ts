@@ -3,7 +3,7 @@ import "server-only";
 import { isStoreConfigured, readRegistryDocument, type RegistryDocument } from "./store";
 import { contentRepoUrl, isContentRepoConfigured } from "./github";
 import { versionSegment } from "./version";
-import { WORKING_VERSION, workingCopies } from "./local-prototypes";
+import { readStudioFile, WORKING_VERSION, workingCopies } from "./local-prototypes";
 import { aliased } from "./people";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
 import type { Person, Project, Prototype, PrototypeVersion, RegistrySnapshot, Team } from "./types";
@@ -84,11 +84,27 @@ export async function loadRegistry(): Promise<RegistryDocument> {
   return document;
 }
 
+/** The name and team chosen in the studio's New prototype dialog (`.studio/new.json`), and whether it has been archived (`.studio/archived.json`: a prototype never pushed has no registry entry to say so). */
+async function madeHere(slug: string) {
+  const read = async (name: "new.json" | "archived.json") => {
+    try {
+      return JSON.parse((await readStudioFile(slug, name)) ?? "") as { name?: unknown; team?: unknown; archived?: unknown };
+    } catch {
+      return {};
+    }
+  };
+  const [made, kept] = await Promise.all([read("new.json"), read("archived.json")]);
+  return { name: typeof made.name === "string" ? made.name : undefined, team: typeof made.team === "string" ? made.team : undefined, archived: kept.archived === true };
+}
+
 /** On this machine, the built folders in ~/Claude/prototypes, as prototypes of their own (see `local-prototypes.ts`). A prototype the registry already has gets the working copy as one more version, `v0.0`, which opens by default while its dev server is running. */
 async function addWorkingCopies(document: RegistryDocument) {
   const team = document.teams.find((item) => !item.archived);
   if (!team) return;
   for (const { slug, builtAt, live, port, qa } of await workingCopies()) {
+    // A prototype started from the studio keeps the name and team it was given there.
+    const made = await madeHere(slug);
+    const home = document.teams.find((item) => item.slug === made.team && !item.archived) ?? team;
     // With the content repository connected, what isn't running is read from there: the latest push, not a stale build.
     if (!live && isContentRepoConfigured()) continue;
     const id = `${slug}-${WORKING_VERSION}`;
@@ -96,24 +112,24 @@ async function addWorkingCopies(document: RegistryDocument) {
     const existing = document.prototypes.find((item) => item.slug === slug);
     const known = !!existing;
     // The working copy is the prototype's own owner's, not the team lead's: otherwise one person shows up twice, under two logins.
-    const author = existing?.owner ?? team.lead;
+    const author = existing?.owner ?? home.lead;
     if (known && document.versions.some((item) => item.id === id || (item.prototypeSlug === slug && item.version === WORKING_VERSION))) continue;
     if (!known) document.prototypes.push(
       prototypeSchema.parse({
         slug,
-        teamSlug: team.slug,
-        name: qa ?? slug.replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase()),
+        teamSlug: home.slug,
+        name: qa ?? made.name ?? slug.replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase()),
         // A branch being checked is kept out of the feed and the teams, like an archived prototype, and opened from Design QA.
-        archived: qa !== undefined,
+        archived: qa !== undefined || made.archived,
         description: qa
           ? `A design QA of ${qa}.`
           : live
           ? `Running from ~/Claude/prototypes/${slug}, so a change shows as soon as you save it.`
           : `Served from ~/Claude/prototypes/${slug}/out, so a rebuild is all it takes to see a change.`,
-        owner: team.lead,
+        owner: home.lead,
         preview: { tint: ["#e8e6e1", "#8b8880"], caption: slug },
         currentVersion: id,
-        created: { by: team.lead, at: at.slice(0, 10) },
+        created: { by: home.lead, at: at.slice(0, 10) },
         updatedAt: at,
       }),
     );

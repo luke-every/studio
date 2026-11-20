@@ -13,7 +13,7 @@ import type { Prototype } from "@/lib/registry/types";
 import { RemixDialog } from "./remix-dialog";
 import { menuItem } from "@/components/ui/menu-item";
 
-type Dialog = "rename" | "move" | "remix" | "archive" | "delete";
+type Dialog = "rename" | "move" | "remix" | "archive" | "delete" | "delete-prototype";
 
 const item = menuItem;
 
@@ -22,6 +22,8 @@ export function PrototypeMenu({ prototype, version, githubUrl, onHandoff, onEdit
   const { isSaving, updatePrototype } = useStudio();
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  // A design QA is managed from Design QA, not here.
+  const deletable = !prototype.slug.startsWith("qa-");
 
   const choose = (next: Dialog) => {
     setOpen(false);
@@ -126,6 +128,15 @@ export function PrototypeMenu({ prototype, version, githubUrl, onHandoff, onEdit
               </button>
             </>
           )}
+          {deletable ? (
+            <>
+              {prototype.archived ? <div role="separator" className="my-1 h-px bg-border" /> : null}
+              <button type="button" role="menuitem" onClick={() => choose("delete-prototype")} className={`${item} text-destructive`}>
+                <TrashIcon />
+                Delete prototype
+              </button>
+            </>
+          ) : null}
         </div>
       </MotionPopover>
 
@@ -134,6 +145,7 @@ export function PrototypeMenu({ prototype, version, githubUrl, onHandoff, onEdit
       {dialog === "move" ? <MoveDialog prototype={prototype} onClose={close} /> : null}
       {dialog === "delete" ? <DeleteVersionDialog prototype={prototype} version={version} onClose={close} /> : null}
             {dialog === "archive" ? <ArchiveDialog prototype={prototype} onClose={close} /> : null}
+      {dialog === "delete-prototype" ? <DeletePrototypeDialog prototype={prototype} onClose={close} /> : null}
     </>
   );
 }
@@ -229,6 +241,41 @@ function DeleteVersionDialog({ prototype, version, onClose }: { prototype: Proto
       destructive
       onClose={onClose}
       onSubmit={() => deleteVersion({ slug: prototype.slug, versionId: target.id }, `Deleted ${version}`)}
+    />
+  );
+}
+
+/** What a working copy on this machine is called among a prototype's versions (`WORKING_VERSION` in local-prototypes.ts, which can't be imported here). */
+const WORKING_COPY = "v0.0";
+
+/**
+ * Deletes the prototype, and says what that takes with it: the versions on GitHub (which can't be got back) and its
+ * folder on this Mac (which goes to the Trash). Archive is the way to put one out of sight without losing anything.
+ */
+function DeletePrototypeDialog({ prototype, onClose }: { prototype: Prototype; onClose: () => void }) {
+  const router = useRouter();
+  const { deletePrototype } = useStudio();
+  const pushed = prototype.versions.filter((item) => item.version !== WORKING_COPY).length;
+  const onDisk = prototype.versions.some((item) => item.version === WORKING_COPY);
+  const goes = [
+    pushed ? `${pushed === 1 ? "Its version" : `All ${pushed} versions`} on GitHub, with their files and comments, are deleted. This can't be undone.` : "",
+    onDisk ? `Its folder, ~/Claude/prototypes/${prototype.slug}, moves to the Trash.` : "",
+  ].filter(Boolean);
+
+  return (
+    <DialogForm
+      title={`Delete “${prototype.name}”?`}
+      description={goes.join(" ")}
+      submitLabel="Delete"
+      busyLabel="Deleting…"
+      destructive
+      onClose={onClose}
+      onSubmit={async () => {
+        const problem = await deletePrototype({ slug: prototype.slug, folder: onDisk }, `Deleted ${prototype.name}`);
+        if (problem) return problem;
+        router.push("/");
+        return null;
+      }}
     />
   );
 }

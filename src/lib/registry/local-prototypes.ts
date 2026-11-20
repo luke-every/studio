@@ -107,6 +107,24 @@ export async function stopDevServer(slug: string) {
   return true;
 }
 
+/** The terminal helper keeps a Claude session running in a prototype's folder; this ends it, so nothing is left running in a folder that is going. Best effort: the helper may not be running. */
+export async function endTerminal(slug: string) {
+  await fetch(`http://127.0.0.1:4748/end?slug=${slug}`, { method: "POST", headers: { Origin: "http://localhost:4747" }, signal: AbortSignal.timeout(2000) }).catch(() => {});
+}
+
+/**
+ * Moves a working copy's folder to the Trash, where it can still be got back. Renaming it in is tried first; where that
+ * isn't possible (macOS won't allow it, the disk is another one, or something of that name is already in the Trash, which
+ * can't be listed to check) Finder is asked to do it, and gives it a name of its own.
+ */
+export async function moveToTrash(folder: string) {
+  try {
+    await rename(folder, join(homedir(), ".Trash", folder.slice(folder.lastIndexOf("/") + 1)));
+  } catch {
+    await run("osascript", ["-e", 'on run argv\ntell application "Finder" to delete POSIX file (item 1 of argv)\nend run', folder]);
+  }
+}
+
 /** The prototype folders that are running or have been built, with when they last were built. */
 export async function workingCopies() {
   if (!workingCopiesOn()) return [];
@@ -158,7 +176,7 @@ export function workingFolder(slug: string) {
  * The folder starts with a dot, so /push leaves it out of what it uploads, and the starter's .gitignore leaves it out
  * of the prototype's own repository. `handoff.json` is its handoff (see `handoff.ts`).
  */
-export type StudioFile = "comments.json" | "claude.json" | "handoff.json" | "canvas.json" | "copy-docs.json";
+export type StudioFile = "comments.json" | "claude.json" | "handoff.json" | "canvas.json" | "copy-docs.json" | "new.json" | "archived.json";
 export const studioPath = (slug: string, name: string) => join(workingFolder(slug), ".studio", name);
 
 export const readStudioFile = (slug: string, name: StudioFile) => readFile(studioPath(slug, name), "utf8").catch(() => null);

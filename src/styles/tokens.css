@@ -142,6 +142,9 @@
   /* One family. The files are licensed and supplied locally (public/fonts,
    * never committed); without them the stack falls back to the system face. */
   --font-family: "ABC Diatype", ui-sans-serif, system-ui, sans-serif;
+  /* The one exception: a terminal draws on a grid of equal cells, so it is the only place a monospaced face is used. */
+  --font-terminal: ui-monospace, "SF Mono", Menlo, monospace;
+  --terminal-font-size: 12;
 
   /* --- Layout ------------------------------------------------------------- */
   --nav-height: 4rem;
@@ -170,6 +173,8 @@
   --detail-side-width: 21.75rem;
   /* A modal that is a place to work (a handoff's review): most of a wide window, never wider than this. */
   --modal-fill-width: 90rem;
+  /* A dialog with steps keeps one height, so moving between them never makes it jump: what a step holds beyond it scrolls. */
+  --modal-steps-height: 36rem;
   /* A handoff's list of findings, beside the one open. */
   --handoff-queue-width: 16rem;
   /* What is written under a prototype: narrow enough to read. */
@@ -177,6 +182,8 @@
   --dev-panel-width: 14rem;
   /* The comments panel reads like a conversation, so it keeps the wider column the side panels used to share. */
   --comments-panel-width: 20rem;
+  /* The terminal needs room for a Claude Code screen: about 80 columns at its size. */
+  --terminal-panel-width: 36rem;
 
   /* --- Radii -------------------------------------------------------------- */
   --r-xs: 0.125rem;

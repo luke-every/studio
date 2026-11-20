@@ -15,7 +15,7 @@ import { MotionSheet } from "@/components/motion";
 import { ShareMenu } from "@/components/prototype/share-menu";
 import { deviceIcons } from "@/components/prototype/view-menu";
 
-import { CloseIcon, CodeIcon, NoteIcon, CommentIcon, ComponentIcon, LayersIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, FoldIcon, GithubIcon, SidebarIcon, SlidersIcon } from "@/components/shell/nav-icons";
+import { CloseIcon, CodeIcon, NoteIcon, TerminalIcon, CommentIcon, ComponentIcon, LayersIcon, ExpandIcon, ExternalIcon, EyeIcon, EyeOffIcon, FlowIcon, FoldIcon, SidebarIcon, SlidersIcon } from "@/components/shell/nav-icons";
 import { ComponentsPanel, SHOW_COMPONENTS } from "@/components/prototype/components-panel";
 
 import { controlOn, IconButton } from "./button";
@@ -32,6 +32,8 @@ import { editInPlace } from "@/lib/edit-dom";
 import { describePart, partIn, type Part, type Tokens } from "@/lib/edit-part";
 import { copyDocument } from "@/components/prototype/copy-page";
 import { NotesPanel } from "@/components/prototype/notes-panel";
+import { SelectLayer, type Selected } from "@/components/prototype/select-layer";
+import { sendSelection, useTerminal } from "@/lib/terminal";
 import { CanvasViewMenu } from "@/components/prototype/canvas-view-menu";
 import { CanvasPlayButton, CanvasZoomMenu } from "@/components/prototype/canvas-zoom-menu";
 import { ALWAYS_ON_SHARE_LINKS, CanvasIntro } from "@/components/prototype/canvas-intro";
@@ -52,6 +54,7 @@ const EditHistory = dynamic(() => import("@/components/prototype/edit-bar").then
 const EditPanel = dynamic(() => import("@/components/prototype/edit-panel").then((m) => m.EditPanel), { ssr: false });
 const FlowCanvas = dynamic(() => import("@/components/prototype/flow-canvas").then((m) => m.FlowCanvas), { ssr: false });
 // The comments code is fetched once the page has painted, so it is ready without being asked for and never holds the prototype up.
+const TerminalDock = dynamic(() => import("@/components/prototype/terminal-dock").then((m) => m.TerminalDock), { ssr: false });
 const CommentsPanel = dynamic(() => import("@/components/prototype/comments-panel").then((m) => m.CommentsPanel), { ssr: false });
 const CommentLayer = dynamic(() => import("@/components/prototype/comment-layer").then((m) => m.CommentLayer), { ssr: false });
 const preloadComments = () => {
@@ -125,7 +128,6 @@ export function PrototypeFrame({
   bare = false,
   onBare,
   onOpenPrototype,
-  githubUrl,
   docs,
   minimal = false,
   onPlace,
@@ -212,7 +214,6 @@ export function PrototypeFrame({
   /** A share page's button for the prototype itself: it loads in this tab, as it would opened on its own. */
   onOpenPrototype?: () => void;
   /** A share page's link to the version's files on GitHub, for engineers. */
-  githubUrl?: string;
   /** Beside the canvas button: the prototype's documents and links (a menu of its own). */
   docs?: ReactNode;
   /** A share page: the version, the viewport, the comment buttons and full screen on the bar, and no look toggle, canvas, restart or share. */
@@ -385,6 +386,34 @@ export function PrototypeFrame({
   // On the canvas it opens for an element selected there, and closes when that is let go of.
   // What an engineer picked (a design, or a section of its code) gets the side panel on the canvas, with or without an element to edit.
   const inspectShown = inspectInPanel && inspecting && showingFlow && !!inspectPanel;
+  // Claude Code in the prototype's folder (see `scripts/terminal-server.mjs`). While it is open it has the panel to itself.
+  const terminalSlug = givenComments?.slug ?? edit?.slug ?? null;
+  const terminal = useTerminal(terminalSlug);
+  // The terminal is beside the prototype or canvas, not only on the phone-sized windows it is never drawn on.
+  const terminalShown = terminal.open && !bare;
+  // Choosing an element in the prototype to tell Claude about (see `SelectLayer`): picking is the switch in the terminal's bar, the choice is
+  // told to the helper, and `claudeWorking` is whether Claude is answering, which the choice's outline breathes to. All of it ends when the
+  // terminal is closed, or when anything but looking at the prototype begins; it isn't offered on the canvas.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Selected | null>(null);
+  const [claudeWorking, setClaudeWorking] = useState(false);
+  const canSelect = terminalShown && mode === "view" && !showingFlow && !minimal;
+  if (!canSelect && (selecting || selected || claudeWorking)) {
+    setSelecting(false);
+    setSelected(null);
+    setClaudeWorking(false);
+  }
+  const told = useRef(false);
+  useEffect(() => {
+    if (!terminalSlug) return;
+    if (selected) {
+      sendSelection(terminalSlug, selected.line);
+      told.current = true;
+    } else if (told.current) {
+      sendSelection(terminalSlug, null);
+      told.current = false;
+    }
+  }, [terminalSlug, selected]);
   const panelOpen = (dev && !showingFlow) || (editing && showingFlow && !!part) || (commenting && (listing || showingFlow)) || inspectShown;
   const [panelKind, setPanelKind] = useState<"dev" | "edit" | "comments">("dev");
   const wantedKind = editing ? "edit" : dev ? "dev" : "comments";
@@ -785,6 +814,15 @@ export function PrototypeFrame({
     ) : null;
   const pinButtons = commentButtons(false);
 
+  // Claude Code in the prototype's folder (see `scripts/terminal-server.mjs`), as a column on the right. Only where it can start, and not on a phone or a share page.
+  const terminalToggle = (variant?: "ghost") =>
+    terminal.available && !minimal ? (
+      <span className="max-sm:hidden">
+        <IconButton variant={variant} label={terminal.open ? "Close Claude" : "Open Claude"} tooltipSide="below" tooltipAlign="end" aria-pressed={terminal.open} className={terminal.open ? controlOn : undefined} onClick={terminal.toggle}>
+          <TerminalIcon />
+        </IconButton>
+      </span>
+    ) : null;
   // A design QA is never shared: its place in the bar is a way to open it in a browser tab at once.
   const shareControl = share ? (
     share.slug.startsWith("qa-") && newTab ? (
@@ -821,7 +859,7 @@ export function PrototypeFrame({
       // Clicking the tile around the phone lets go of what was picked, unless it was a button that was pressed. A click inside the prototype never reaches here.
       // On the canvas that is the canvas's own to decide: a click there may be the picking itself.
       onClick={(event) => dev && !showingFlow && !(event.target as Element).closest("button, a") && deselect()}
-      className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${bare || showingFlow ? "" : "max-sm:px-6 max-sm:pb-14 max-sm:pt-8"} ${fullscreen ? "lg:rounded-none" : ""}`}
+      className={`relative flex min-w-0 flex-1 flex-col rounded-[var(--r-tile)] bg-tile transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] max-sm:rounded-none ${bare || showingFlow ? "" : "max-sm:px-6 max-sm:pb-14 max-sm:pt-8"} ${fullscreen || (minimal && showingFlow) ? (terminalShown ? "lg:rounded-l-none" : "lg:rounded-none") : ""}`}
     >
       {/* Before the bar, at the same level, so the bar's menus (version, share) open over it. */}
       {SHOW_COMPONENTS && showingFlow && !minimal && componentsSeen && !dev && !commenting && !bare ? (
@@ -908,13 +946,6 @@ export function PrototypeFrame({
                 <span className="max-sm:hidden">
                   <IconButton label={sideOpen ? "Hide options" : "Show options"} aria-expanded={sideOpen} tooltipAlign="start" onClick={() => setSideOpen((now) => !now)} className={sideOpen ? controlOn : ""}>
                     <SlidersIcon />
-                  </IconButton>
-                </span>
-              ) : null}
-              {minimal && githubUrl && url && !showingFlow ? (
-                <span className="hidden lg:block">
-                  <IconButton label="Open in GitHub" href={githubUrl} external>
-                    <GithubIcon />
                   </IconButton>
                 </span>
               ) : null}
@@ -1020,6 +1051,7 @@ export function PrototypeFrame({
                     <ExpandIcon />
                   </IconButton>
                 </span>
+                {showingFlow ? null : terminalToggle()}
               </div>
             ) : null}
           </>
@@ -1063,6 +1095,7 @@ export function PrototypeFrame({
               inspect={dev && !showingFlow ? { ...inspect, picking: !interacting } : null}
               // A page on another address (a live version) can't be picked from inside: it is asked, through the studio's own layer over it.
               across={editing && !interacting && !showingFlow ? { part, onPick: pickPart, onText: session.setText } : null}
+              select={canSelect ? { picking: selecting, selected, pulse: claudeWorking, onSelect: setSelected, onExit: () => setSelecting(false) } : null}
               onKey={(event) => hotkeyRef.current(event)}
               comments={showingFlow ? null : commentsUi}
               onPlace={onPlace}
@@ -1106,7 +1139,7 @@ export function PrototypeFrame({
       ) : null}
 
       {(showingFlow || (canvasKey && warmKey === canvasKey)) && canvas && addressed ? (
-        <div ref={canvasBox} inert={!showingFlow} className={`absolute inset-0 ${showingFlow ? "" : "pointer-events-none invisible"}`}>
+        <div ref={canvasBox} inert={!showingFlow} className={`absolute inset-0 transition-[border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${showingFlow ? "" : "pointer-events-none invisible"} ${terminalShown ? "overflow-hidden rounded-r-[var(--r-tile)]" : ""}`}>
           <FlowCanvas
             viewOnly={minimal}
             // The website's components, with the text and image tools at the foot.
@@ -1154,6 +1187,7 @@ export function PrototypeFrame({
                 <CanvasZoomMenu ghost />
                 <CanvasPlayButton />
                 {shareControl}
+                {terminalToggle("ghost")}
               </>
             }
             uiHidden={uiHidden && showingFlow}
@@ -1217,6 +1251,9 @@ export function PrototypeFrame({
       </div>
     </div>
 
+
+    {/* Claude Code in the prototype's folder: a column of its own on the right, for the canvas and the prototype alike, with a grip to resize it. Not when only the prototype is on screen. */}
+    {terminalSlug && terminal.available ? <TerminalDock slug={terminalSlug} open={terminalShown} onStop={terminal.stop} square={fullscreen} select={canSelect ? { picking: selecting, onPicking: setSelecting, chip: selected?.chip ?? null, onClear: () => setSelected(null), onWorking: setClaudeWorking } : null} /> : null}
 
     {/* On a phone the list is a sheet over the prototype. */}
     <MotionSheet open={narrow && listOpen} onClose={() => setListOpen(false)} label="Comments">
@@ -1304,6 +1341,7 @@ function FrameBody({
   sizing,
   inspect,
   across,
+  select,
   onKey,
   comments,
   onPlace,
@@ -1324,6 +1362,8 @@ function FrameBody({
   inspect: { picking: boolean; onPick: (picked: Picked, element: Element) => void; onMotion: (seen: MotionSeen) => void; onEdit: (element: Element) => void; onKey: (event: KeyboardEvent) => void } | null;
   /** Edit mode on a page on another address (a live version), which `inspect` can't reach into: the part picked, and what to tell (see `EditLayer`). */
   across: { part: Part | null; onPick: (frame: HTMLIFrameElement, part: Part | null) => void; onText: (part: Part, text: string) => void } | null;
+  /** Choosing an element for Claude (see `SelectLayer`). */
+  select: { picking: boolean; selected: Selected | null; pulse: boolean; onSelect: (selected: Selected) => void; onExit: () => void } | null;
   /** Keys pressed inside the prototype, for the studio's own shortcuts. Dev mode takes them through `inspect` instead. */
   onKey: (event: KeyboardEvent) => void;
   comments: CommentsUi | null;
@@ -1461,6 +1501,7 @@ function FrameBody({
         sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
       />
       ) : null}
+      {scale && select ? <SelectLayer frame={frame} scale={scale} {...select} /> : null}
       {scale && across && elsewhere ? <EditLayer frame={frame} scale={scale} part={across.part} onPick={across.onPick} onText={across.onText} /> : null}
       {scale && comments ? <CommentLayer key={comments.placing ? "placing" : "looking"} frame={frame} scale={scale} comments={comments} /> : null}
       {loaded ? null : poster && !posterFailed ? (
