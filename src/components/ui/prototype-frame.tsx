@@ -1163,7 +1163,7 @@ export function PrototypeFrame({
             deviceChoice={chosenDevices}
             onDeviceChoice={keepDevices}
             sideFull={commenting}
-            sidePanel={panelOpen ? <div className={panelWidth}>{panelBody}</div> : undefined}
+            sidePanel={panelOpen ? <div className={`${panelWidth} min-w-full`}>{panelBody}</div> : undefined}
             focusFind={focusFind}
             editHistory={editing && edit ? <EditHistory session={session} /> : undefined}
             topRight={

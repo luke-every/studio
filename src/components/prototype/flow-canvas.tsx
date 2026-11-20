@@ -2924,6 +2924,12 @@ export function FlowCanvas({
   }, [view.scale, canPlay]);
   const needsLive = placing || !!inspect || (visible && !!list?.length);
   const asCopies = copiesChosen && !needsLive;
+  // What the card at the top right has properties for: a text, image or component that is selected (and nothing of it picked), a group, or a frame.
+  // Worked out here rather than left to `:has(:empty)` in CSS, which Safari and Chrome don't always look at again when a panel arrives a level down.
+  const selectedPiece = selected && isPiece(selected) && !picking?.target && !framing && !interact ? pieces.find((one) => copyKey("stage", one.id) === selected) : undefined;
+  const grouped = !viewOnly && !framing && bunch.copies.length + bunch.frames.length > 1;
+  const frameSelected = !framing && shapes.some((one) => one.id === shape);
+  const hasProperties = !!selectedPiece || grouped || frameSelected;
 
   return (
     <div
@@ -3692,13 +3698,13 @@ export function FlowCanvas({
           className={`pointer-events-auto flex max-h-full flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${sidePanel && sideFull ? "h-full" : ""} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
         >
           {topRight ? <div className="flex shrink-0 items-center justify-end gap-1 p-1.5">{topRight}</div> : null}
-          <div className="hidden min-h-0 flex-1 overflow-y-auto border-t border-divider [scrollbar-width:thin] has-[>:not(:empty)]:block">
+          <div className={`min-h-0 flex-1 overflow-y-auto border-t border-divider [scrollbar-width:thin] ${sidePanel || hasProperties ? "" : "hidden"}`}>
             {sidePanel}
-            <div className="w-[var(--dev-panel-width)] empty:hidden">
+            <div className={`w-[var(--dev-panel-width)] min-w-full ${hasProperties ? "" : "hidden"}`}>
       {/* A selected frame's properties, beside the canvas. */}
       {(() => {
-        // A text, image or component that is selected (and nothing of it picked): where it is, from its frame's corner when it is in one.
-        const piece = selected && isPiece(selected) && !picking?.target && !framing && !interact ? pieces.find((one) => copyKey("stage", one.id) === selected) : undefined;
+        // A text, image or component that is selected: where it is, from its frame's corner when it is in one.
+        const piece = selectedPiece;
         if (!piece || !selected) return null;
         const frame = piece.parent ? shapes.find((one) => one.id === piece.parent) : undefined;
         const spot = at(selected);
@@ -3735,12 +3741,12 @@ export function FlowCanvas({
           </div>
         );
       })()}
-      {!viewOnly && !framing && bunch.copies.length + bunch.frames.length > 1 ? (
+      {grouped ? (
         <div>
           <BunchPanel count={bunch.copies.length + bunch.frames.length} onAlign={alignSelected} />
         </div>
       ) : null}
-      {shapes.find((one) => one.id === shape) && !framing ? (
+      {frameSelected ? (
         <div>
           <FramePanel frame={shapes.find((one) => one.id === shape)!} onFillImage={(file, at) => fillWith(shape!, file, at)} pictures={pictureOf} onAlign={shapes.find((one) => one.id === shape)?.parent ? alignSelected : undefined} pin={(() => { const own = shapes.find((one) => one.id === shape); const parent = shapes.find((one) => one.id === own?.parent); return own && parent && !parent.layout ? { x: own.pin?.x ?? "none", y: own.pin?.y ?? "none", onChange: (axis: "x" | "y", value: "none" | "start" | "end" | "both" | "center") => pinLayer(`frame:${own.id}`, axis, value) } : undefined; })()} inLayout={!!shapes.find((one) => one.id === shapes.find((item) => item.id === shape)?.parent)?.layout} unit={1 / SCREEN_SCALE} surface="#ffffff" onChange={(patch) => {
                 const current = shapes.find((one) => one.id === shape);
