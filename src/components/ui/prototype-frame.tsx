@@ -23,6 +23,7 @@ import { Dot, type Tone } from "./chip";
 import { DialogForm } from "./dialog-form";
 import { Toggle } from "./toggle";
 import { withParams, type Flow, type FlowScreen } from "@/lib/flow";
+import { PREVIEW_QUERY } from "@/lib/preview-query";
 import { InAppChrome } from "@/components/prototype/in-app-chrome";
 import { DEFAULT_DEVICE, DEVICES, IN_APPS, barsOf, type Device, type InApp } from "@/lib/phone";
 import { useFlag } from "@/lib/use-flag";
@@ -54,6 +55,7 @@ const EditHistory = dynamic(() => import("@/components/prototype/edit-bar").then
 const EditPanel = dynamic(() => import("@/components/prototype/edit-panel").then((m) => m.EditPanel), { ssr: false });
 const FlowCanvas = dynamic(() => import("@/components/prototype/flow-canvas").then((m) => m.FlowCanvas), { ssr: false });
 // The comments code is fetched once the page has painted, so it is ready without being asked for and never holds the prototype up.
+const ExportImagesMenu = dynamic(() => import("@/components/prototype/export-images-menu").then((m) => m.ExportImagesMenu), { ssr: false });
 const TerminalDock = dynamic(() => import("@/components/prototype/terminal-dock").then((m) => m.TerminalDock), { ssr: false });
 const CommentsPanel = dynamic(() => import("@/components/prototype/comments-panel").then((m) => m.CommentsPanel), { ssr: false });
 const CommentLayer = dynamic(() => import("@/components/prototype/comment-layer").then((m) => m.CommentLayer), { ssr: false });
@@ -426,6 +428,13 @@ export function PrototypeFrame({
   // The screens drawn as copies are painted too, each through its own scoped document (see `copyDocument`).
   const editCopies = () => [...((showingFlow ? canvasBox.current : null)?.querySelectorAll<HTMLElement>("[data-copy]") ?? [])].flatMap((host) => (host.shadowRoot ? [copyDocument(host.shadowRoot)] : []));
   const session = useEditSession(url, editFrames, editCopies);
+  // The pictures of the whole prototype, to export (see `ExportImagesMenu`): every screen of its flow and its variants, whichever the page shows; on this machine only, where the prototype's folder is.
+  const exportScreens = () => {
+    const base = (addressed ?? "").split("?")[0];
+    const list = [...(flow?.screens ?? []), ...(variants?.flow.screens ?? [])];
+    return (list.length ? list : single.screens).map((screen) => ({ name: screen.name, src: `${withParams(screen.url ?? base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}` }));
+  };
+  const exportControl = (variant?: "ghost") => (process.env.NODE_ENV !== "production" && terminalSlug && !minimal ? <span className="max-sm:hidden"><ExportImagesMenu slug={terminalSlug} screens={exportScreens} device={canvasDevices[0] ?? DEVICES[1]} variant={variant} /></span> : null);
   // The bar of Cancel, undo, redo and Save is for a mode being worked in. On the canvas, picking an element is only looking at it: the bar comes once a change is made.
   const modeBar = commenting || (dev && !(editing && showingFlow && !session.edits.length));
   // A live version can always be edited: what is picked inside one of its design system's components is that component (see `setDesignSystem`). The names are there before the first pick, not after it.
@@ -1051,6 +1060,7 @@ export function PrototypeFrame({
                     <ExpandIcon />
                   </IconButton>
                 </span>
+                {showingFlow ? null : exportControl()}
                 {showingFlow ? null : terminalToggle()}
               </div>
             ) : null}
@@ -1187,6 +1197,7 @@ export function PrototypeFrame({
                 <CanvasZoomMenu ghost />
                 <CanvasPlayButton />
                 {shareControl}
+                {exportControl("ghost")}
                 {terminalToggle("ghost")}
               </>
             }

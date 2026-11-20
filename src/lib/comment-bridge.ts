@@ -4,6 +4,7 @@ import { describePart, facesFor, hideWords, hoverBox, painter, partIn, reachFrom
 import type { Edit } from "@/lib/edits";
 import { treeOf } from "@/lib/page-tree";
 import { findClip, isFind, partBox, setMarks, sourceAt } from "@/lib/handoff-clip";
+import { readPage } from "@/lib/export-images";
 
 /**
  * Comments on, and edits to, a prototype the studio can't see into: a live version, running on its own dev server at
@@ -182,6 +183,11 @@ const ANYWAY_MS = 1000;
         if (data.what === "sourceAt") {
           const elements = Array.isArray(data.elements) ? data.elements.filter((item: { file?: unknown; find?: unknown }) => typeof item?.file === "string" && isFind(item.find)) : [];
           return answer(point && document.body ? sourceAt(document, data.x, data.y, elements) : null);
+        }
+        // An export of the prototype's pictures: what this page draws, read from in here as the studio reads a page it can see into.
+        if (data.what === "images") {
+          const height = Number(data.height) || window.innerHeight;
+          return void readPage(window, typeof data.screen === "string" ? data.screen : "", Array.isArray(data.sections) ? data.sections : [], height).then(answer, () => answer(null));
         }
         if (data.what === "selectorBox") {
           const element = typeof data.selector === "string" && document.body ? partIn(document, data.selector) : null;

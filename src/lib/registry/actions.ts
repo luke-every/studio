@@ -20,6 +20,7 @@ import * as push from "./push";
 import * as registry from "./write";
 import { IMAGE_MAX_BYTES } from "@/lib/image";
 import { userMessage } from "./errors";
+import * as imageExport from "./export-images";
 
 /**
  * Writes.
@@ -425,4 +426,9 @@ export async function dismissCopyDocDelete(slug: string, kind: copyDocs.CopyKind
 }
 export async function pullCopyFromDoc(slug: string) {
   return attempt(() => copyDocs.pullClaudeDoc(slug), []);
+}
+
+/** The sections of a prototype's copy, to say which one each of its pictures is in (see `export-images.ts`). */
+export async function listCopySections(slug: string) {
+  return attempt(() => imageExport.copySections(slug), []);
 }

@@ -11,8 +11,10 @@ export const IMAGE_MAX_BYTES = 4_000_000;
 
 type Format = "image/png" | "image/jpeg" | "image/webp";
 export type EncodeOptions = {
-  /** The longest side it may have, in pixels; larger is scaled down, smaller is left. */
+  /** The longest side it may have, in pixels; larger is scaled down, smaller is left (unless `enlarge`). */
   maxSide?: number;
+  /** Make it exactly `maxSide` on its longest side even when it has fewer pixels, as an export at 2× of a 1× picture does. */
+  enlarge?: boolean;
   maxBytes?: number;
   /** One format and nothing else, as it comes. Absent: a PNG stays a PNG while it fits (so its transparency does), then WebP, then JPEG. */
   type?: Format;
@@ -24,17 +26,19 @@ const EXTENSIONS: Record<string, string> = { "image/png": "png", "image/jpeg": "
 const SHRINKS = 4;
 
 /** A picture as a blob in a format, scaled by `scale`. A browser that can't write the format says so by handing back another type. */
-export async function encodeImage(source: Blob, { maxSide = 2048, maxBytes = IMAGE_MAX_BYTES, type, quality = 0.85 }: EncodeOptions = {}): Promise<Encoded> {
+export async function encodeImage(source: Blob, { maxSide = 2048, enlarge = false, maxBytes = IMAGE_MAX_BYTES, type, quality = 0.85 }: EncodeOptions = {}): Promise<Encoded> {
   const bitmap = await createImageBitmap(source);
   try {
     const formats: Format[] = type ? [type] : [...(source.type === "image/png" ? (["image/png"] as const) : []), "image/webp", "image/jpeg"];
-    let scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const fit = maxSide / Math.max(bitmap.width, bitmap.height);
+    let scale = enlarge ? fit : Math.min(1, fit);
     for (let pass = 0; pass < SHRINKS; pass++, scale *= 0.75) {
       const [width, height] = [Math.max(1, Math.round(bitmap.width * scale)), Math.max(1, Math.round(bitmap.height * scale))];
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       const context = canvas.getContext("2d");
+      if (context) context.imageSmoothingQuality = "high";
       context?.drawImage(bitmap, 0, 0, width, height);
       for (const format of formats) {
         // JPEG has no transparency: what there is goes onto white rather than black.

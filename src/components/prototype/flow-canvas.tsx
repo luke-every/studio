@@ -754,6 +754,8 @@ export function FlowCanvas({
     const element = box.current;
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
+      // Over something that scrolls (the panel's properties) a plain scroll is its own: the canvas neither pans nor stops it. Pinch and ⌘-scroll still zoom the canvas.
+      if (!event.ctrlKey && !event.metaKey && (event.target as Element | null)?.closest?.("[data-scroll]")) return;
       event.preventDefault();
       // Over an opened screen the canvas stays where it is, and the browser isn't zoomed instead.
       if (interactNow.current) return;
@@ -2744,7 +2746,7 @@ export function FlowCanvas({
   const pick = async (clientX: number, clientY: number, deep: boolean, into = false) => {
     const found = picking && pointIn(clientX, clientY);
     if (!picking || !found) return;
-    if (isLayer(found.copy.id)) {
+    if (isLayer(found.copy.id, deep)) {
       if (picking.target) picking.onPick(null, null);
       setPickedOn(null);
       return;
@@ -2812,9 +2814,10 @@ export function FlowCanvas({
     const piece = pieceByKey(id);
     return piece && !piece.kind ? [piece.component ?? piece.label] : undefined;
   };
-  const isLayer = (id: string) => {
+  // With ⌘ held (`deep`) a component isn't one thing: pointing at it or tapping it reaches the element under the pointer, as in Figma, without entering it first.
+  const isLayer = (id: string, deep = false) => {
     const piece = pieceByKey(id);
-    return !!piece && (!!piece.kind || enteredNow.current !== id);
+    return !!piece && (!!piece.kind || (enteredNow.current !== id && !deep));
   };
   const point = (at: { x: number; y: number } | null, deep = false) => {
     pointer.current = at;
@@ -2830,7 +2833,7 @@ export function FlowCanvas({
       asking.current = 0;
       const now = pointer.current;
       const found = now && pointIn(now.x, now.y);
-      if (!found || isLayer(found.copy.id)) return setTarget(null);
+      if (!found || isLayer(found.copy.id, reaching.current)) return setTarget(null);
       // Components are told by where the handoff found them, as a page's React tree can't say for the ones the server draws.
       const wholes = inspect ? componentRoots(inspect.elements) : [];
       // Placing a comment pins to the deepest element, and handoff picks by section, so both reach all the way in; only editing starts at the group.
@@ -3143,6 +3146,8 @@ export function FlowCanvas({
             <Screen
               key={id}
               data-screen=""
+              // What the export names this screen's folder after (see `exportRoots`).
+              data-screen-label={devices.length > 1 ? `${screen.name} · ${on.name}` : screen.name}
               {...(USE_IN_PLACE ? { role: "button", tabIndex: 0 } : { type: "button" })}
               onPointerDown={(event: React.PointerEvent) => grab(event, id)}
               onContextMenu={(event: React.MouseEvent) => openMenu(event, { copy: id })}
@@ -3151,7 +3156,7 @@ export function FlowCanvas({
                 const deep = event.metaKey || event.ctrlKey;
                 // What is in a frame is pointed at directly, as in Figma; the frame is what its bare background is.
                 setHoverShape(null);
-                setHoverLayer((now) => { const next = isLayer(id) && !event.buttons ? id : null; return now === next ? now : next; });
+                setHoverLayer((now) => { const next = isLayer(id, event.metaKey || event.ctrlKey) && !event.buttons ? id : null; return now === next ? now : next; });
                 if (selecting && !placing) point(event.buttons ? null : { x: event.clientX, y: event.clientY }, deep);
               }}
               onPointerLeave={() => {
@@ -3698,7 +3703,7 @@ export function FlowCanvas({
           className={`pointer-events-auto flex max-h-full flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${sidePanel && sideFull ? "h-full" : ""} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
         >
           {topRight ? <div className="flex shrink-0 items-center justify-end gap-1 p-1.5">{topRight}</div> : null}
-          <div className={`min-h-0 flex-1 overflow-y-auto border-t border-divider [scrollbar-width:thin] ${sidePanel || hasProperties ? "" : "hidden"}`}>
+          <div data-scroll="" className={`min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-divider [scrollbar-width:thin] ${sidePanel || hasProperties ? "" : "hidden"}`}>
             {sidePanel}
             <div className={`w-[var(--dev-panel-width)] min-w-full ${hasProperties ? "" : "hidden"}`}>
       {/* A selected frame's properties, beside the canvas. */}

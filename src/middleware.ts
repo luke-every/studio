@@ -82,5 +82,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  // Not the image export either: a request middleware sees is held in memory and cut off at 10MB, and an export is often more (it checks the door itself).
+  matcher: ["/((?!_next/static|_next/image|api/export-images).*)"],
 };

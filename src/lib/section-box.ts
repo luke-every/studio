@@ -5,7 +5,7 @@
  */
 export type Box = { left: number; top: number; width: number; height: number };
 
-const plain = (text: string) => text.replace(/[⁠‌‍]/g, "").replace(/\s+/g, " ").trim();
+export const plain = (text: string) => text.replace(/[⁠‌‍]/g, "").replace(/\s+/g, " ").trim();
 
 /** The text nodes under `root` that hold one of the lines, each line counted only when it is in exactly one node. */
 export function uniqueTextNodes(doc: Document, root: Node, finds: string[]): Text[] {
