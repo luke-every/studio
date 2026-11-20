@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { carryHandoff, findVersion, readHandoff, saveFindings } from "@/lib/registry/handoff";
+import { userMessage } from "@/lib/registry/errors";
 
 /**
  * Where /handoff lands, and where it reads the decisions back from.
@@ -16,7 +17,7 @@ function locked(request: NextRequest) {
   return !!password && request.headers.get("x-studio-password")?.trim() !== password;
 }
 const refused = () => NextResponse.json({ error: "Wrong or missing studio password." }, { status: 401 });
-const failed = (error: unknown) => NextResponse.json({ error: error instanceof Error ? error.message : "Something failed." }, { status: 400 });
+const failed = (error: unknown) => NextResponse.json({ error: userMessage(error, "Something failed.") }, { status: 400 });
 
 export async function POST(request: NextRequest) {
   if (locked(request)) return refused();

@@ -11,6 +11,7 @@ import type { Comment } from "@/lib/comments";
 import { recordActivity } from "./activity";
 import { getPrototype } from "./index";
 import { readStoreFile, updateStoreFile } from "./store";
+import { InfraError } from "./errors";
 
 /**
  * Push notifications: a phone's comment reaching the people who asked to hear.
@@ -88,7 +89,7 @@ export async function sendTest(endpoint: string) {
     );
   } catch (error) {
     const failure = error as { statusCode?: number; body?: string };
-    throw new Error(`The push service refused it (${failure.statusCode ?? "no answer"}): ${failure.body || "no reason given"}`);
+    throw new InfraError(`The push service refused it (${failure.statusCode ?? "no answer"}): ${failure.body || "no reason given"}`);
   }
 }
 

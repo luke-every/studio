@@ -40,7 +40,9 @@ export function useToast() {
     setState((now) => (now ? "out" : now));
   }, []);
 
-  return { state, show, leave, done: () => setState(null) };
+  const done = useCallback(() => setState(null), []);
+
+  return { state, show, leave, done };
 }
 
 /** The icon that matches what the message says; a tick for anything that just saved. */

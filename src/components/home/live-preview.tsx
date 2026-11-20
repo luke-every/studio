@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { PREVIEW_QUERY } from "@/lib/controls";
+import { PREVIEW_QUERY } from "@/lib/preview-query";
 import { PHONE_HEIGHT, PHONE_WIDTH } from "@/lib/phone";
 
 

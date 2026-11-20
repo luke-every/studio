@@ -4,7 +4,7 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 
 import { avatarSrc, colorVar, type Profile } from "@/lib/avatars";
-import { CLAUDE_AUTHOR } from "@/lib/comments";
+import { CLAUDE_AUTHOR } from "@/lib/claude-author";
 import type { Person } from "@/lib/registry/types";
 import { useUser } from "@/lib/use-user";
 

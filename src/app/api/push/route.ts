@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import * as registry from "@/lib/registry/write";
+import { userMessage } from "@/lib/registry/errors";
 
 /**
  * Where /push lands.
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Saving failed." },
+      { error: userMessage(error, "Saving failed.") },
       { status: 400 },
     );
   }

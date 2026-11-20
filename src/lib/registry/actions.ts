@@ -18,6 +18,7 @@ import * as handoff from "./handoff";
 import * as liveEdits from "./live-edits";
 import * as push from "./push";
 import * as registry from "./write";
+import { userMessage } from "./errors";
 
 /**
  * Writes.
@@ -43,7 +44,7 @@ async function attempt<T>(
     paths.forEach((path) => revalidatePath(path, "layout"));
     return { ok: true, value };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Something failed." };
+    return { ok: false, error: userMessage(error) };
   }
 }
 
@@ -88,8 +89,8 @@ export async function createPrototype(form: FormData) {
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false as const, error: "Choose an HTML file to upload." };
   }
-  if (file.size > 8_000_000) {
-    return { ok: false as const, error: "That file is larger than 8MB." };
+  if (file.size > 4_000_000) {
+    return { ok: false as const, error: "That file is larger than 4MB." };
   }
 
   const bytes = await file.arrayBuffer();
@@ -181,7 +182,7 @@ async function shared<T>(token: string, work: (at: { slug: string; version: stri
   try {
     return { ok: true, value: await work({ slug: named.slug, version: named.key }) };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Something failed." };
+    return { ok: false, error: userMessage(error) };
   }
 }
 
@@ -292,7 +293,7 @@ export async function saveLiveEdits(form: FormData) {
   for (const [key, value] of form.entries()) {
     if (!key.startsWith(`${EDIT_IMAGE_DIR}/`) || !(value instanceof File)) continue;
     if (!/^_edits\/[\w.-]+$/.test(key)) return { ok: false as const, error: "That image has an odd name." };
-    if (value.size > 8_000_000) return { ok: false as const, error: "Images can be up to 8MB each." };
+    if (value.size > 4_000_000) return { ok: false as const, error: "Images can be up to 4MB each." };
     uploads.set(key, { name: value.name, bytes: Buffer.from(await value.arrayBuffer()) });
   }
   return attempt(() => liveEdits.saveLiveEdits(String(form.get("slug") ?? ""), edits, uploads), []);

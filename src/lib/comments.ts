@@ -65,8 +65,7 @@ export const commentSchema = z.object({
   undo: z.enum(["offered", "undone"]).optional(),
 });
 
-/** Who Claude's replies are from, on a live version (see `registry/claude-runs.ts`). */
-export const CLAUDE_AUTHOR = { login: "claude", name: "Claude" };
+export { CLAUDE_AUTHOR } from "@/lib/claude-author";
 
 export const commentsFileSchema = z.array(commentSchema);
 

@@ -200,8 +200,9 @@ export function useCloudCanvas({
         attempts.current += 1;
       }
     };
+    // Only marks it unsent: `flush` does the diff, once, when the timer fires, not on every frame of a drag.
     send.current = () => {
-      if (!pending()) return;
+      if (!synced.current) return;
       flag(base, true);
       if (!firstUnsaved.current) firstUnsaved.current = Date.now();
       if (!inflight.current) later(SAVE_AFTER_MS);

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { contentRepoAccess } from "@/lib/registry/github";
 import * as registry from "@/lib/registry/write";
+import { userMessage } from "@/lib/registry/errors";
 
 /**
  * The first half of /push.
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ...planned, repository: contentRepoAccess() });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Couldn't start the push." },
+      { error: userMessage(error, "Couldn't start the push.") },
       { status: 400 },
     );
   }

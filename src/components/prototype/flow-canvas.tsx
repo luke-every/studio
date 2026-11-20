@@ -395,7 +395,25 @@ export function FlowCanvas({
   // Kept as they change, so the canvas is as it was left when it is opened again.
   // The frames drawn with the F tool (see below), kept the same way.
   const [shapes, setShapes] = useState<CanvasFrame[]>(() => readCanvas(base).frames);
-  useEffect(() => writeCanvas(base, { offsets, pieces, frames: shapes, devices: deviceChoice }), [base, offsets, pieces, shapes, deviceChoice]);
+  // Written a moment after the last change rather than on every frame of a drag, and at once when the page is left.
+  const unwritten = useRef<{ base: string; saved: Parameters<typeof writeCanvas>[1] } | null>(null);
+  const writeNow = useCallback(() => {
+    if (unwritten.current) writeCanvas(unwritten.current.base, unwritten.current.saved);
+    unwritten.current = null;
+  }, []);
+  useEffect(() => {
+    if (unwritten.current && unwritten.current.base !== base) writeNow();
+    unwritten.current = { base, saved: { offsets, pieces, frames: shapes, devices: deviceChoice } };
+    const timer = window.setTimeout(writeNow, 300);
+    return () => window.clearTimeout(timer);
+  }, [base, offsets, pieces, shapes, deviceChoice, writeNow]);
+  useEffect(() => {
+    window.addEventListener("pagehide", writeNow);
+    return () => {
+      window.removeEventListener("pagehide", writeNow);
+      writeNow();
+    };
+  }, [writeNow]);
   // Opened: the choice this browser kept is put back (the cloud's, when it has one, comes with the canvas).
   const keptDevices = useRef(onDeviceChoice);
   useEffect(() => {

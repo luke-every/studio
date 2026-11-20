@@ -144,14 +144,16 @@ export function StudioProvider({
     [after],
   );
 
+  // `show` is stable; `toast` is a new object each time one appears, which would change `notify` and the whole context with it.
+  const showToast = toast.show;
   const notify = useCallback(
     (message: string, error = false, action?: ToastAction) => {
       setToastText(message);
       setToastError(error);
       setToastAction(action);
-      toast.show(!!action);
+      showToast(!!action);
     },
-    [toast],
+    [showToast],
   );
 
   // A save that runs in the background: nothing waits for it. Its keys are
