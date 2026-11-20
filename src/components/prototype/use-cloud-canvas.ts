@@ -181,6 +181,14 @@ export function useCloudCanvas({
         if (data && !uploaded.current.has(name)) {
           const result = await storeCanvasImage(slug, name, data).catch(() => null);
           if (result?.ok) uploaded.current.add(name);
+          else {
+            // Not sent without it: everyone else would be given a layer whose picture never arrived. Tried again, later each time.
+            inflight.current = false;
+            mark("offline");
+            later(Math.min(RETRY_MAX_MS, RETRY_MIN_MS * 2 ** attempts.current));
+            attempts.current += 1;
+            return;
+          }
         }
       }
       const result = await patchCanvas(slug, version, patch, latest.current.by).catch(() => null);
