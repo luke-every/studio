@@ -12,7 +12,7 @@ import { paintFrames } from "./frame-page";
 const SAME_STEP_MS = 800;
 
 /** What a change is made to: the part as it was described when it was changed. */
-type Touched = Pick<Part, "selector">;
+type Touched = Pick<Part, "selector" | "loc"> & { tag?: string };
 
 /**
  * Edits made to the prototype on screen, with their history.
@@ -42,6 +42,10 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
   });
 
   const [images] = useState(() => new Map<string, { file: File; url: string; data?: string }>());
+  // The page the part being changed is on (see `Edit.page`): what an edit is made on is what it belongs to.
+  const scope = useRef<string | undefined>(undefined);
+  // How wide that page is drawn: a style change is for the desktop breakpoint, or for all, by it.
+  const width = useRef<number | undefined>(undefined);
   const [brush] = useState(() => painter((src) => images.get(src)?.url));
   const lastStep = useRef<{ key: string; at: number } | null>(null);
 
@@ -55,6 +59,18 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
       copies?.(),
     );
 
+  // The page is drawn at most once a frame, from the list as it is then: a drag makes an edit on every move of the pointer, and each is only worth drawing once the
+  // frame is, since the one after replaces it. (The list itself is kept at once, so nothing is lost.)
+  const frame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  const paintSoon = () => {
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      paint(latest.current.edits);
+    });
+  };
+
   /** Make `edits` the new state. `key` names what changed, so a drag is one step. */
   const commit = (edits: Edit[], key: string) => {
     const now = Date.now();
@@ -64,18 +80,26 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
     const next = { url, edits, past: same ? before.past : [...before.past, before.edits], future: [] as Edit[][] };
     latest.current = next;
     setState(next);
-    paint(edits);
+    paintSoon();
   };
 
-  const apply = (edit: Edit, key: string) => commit(mergeEdits(latest.current.edits, [edit]), key);
+  const apply = (edit: Edit, key: string) => commit(
+      mergeEdits(latest.current.edits, [{ ...edit, ...(scope.current ? { page: scope.current } : {}), ...(edit.kind === "style" && width.current !== undefined ? { at: width.current } : {}) }]),
+      scope.current ? `${scope.current}:${key}` : key,
+    );
 
   /** Change several properties of one element as a single step to undo. */
   const setStyles = (part: Touched, css: Record<string, string>) => {
-    apply({ kind: "style", selector: part.selector, css }, `style:${part.selector}:${Object.keys(css).join(",")}`);
+    apply({ kind: "style", selector: part.selector, css, loc: part.loc }, `style:${part.selector}:${Object.keys(css).join(",")}`);
   };
 
-  const setText = (part: Pick<Part, "selector" | "text" | "copy"> & { node?: number }, text: string) => {
-    apply({ kind: "text", selector: part.selector, text, node: part.node, copy: part.copy ?? undefined, was: part.copy === null ? undefined : (part.text ?? undefined) }, `text:${part.selector}:${part.node ?? ""}`);
+  /** Takes an element out: drawn hidden at once, and removed from the code where it is written. */
+  const remove = (part: Touched) => {
+    apply({ kind: "style", selector: part.selector, css: { display: "none" }, loc: part.loc, remove: true, expect: part.tag?.toLowerCase() }, `remove:${part.selector}`);
+  };
+
+  const setText = (part: Pick<Part, "selector" | "text" | "copy" | "loc"> & { node?: number }, text: string) => {
+    apply({ kind: "text", selector: part.selector, text, node: part.node, loc: part.loc, copy: part.copy ?? undefined, was: part.loc || part.copy !== null ? (part.text ?? undefined) : undefined }, `text:${part.selector}:${part.node ?? ""}`);
   };
 
   /** Changes a prop of a design-system component instance, drawn by the page itself when it can preview props. */
@@ -102,10 +126,19 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
   };
 
   /** Put one element back as it was. */
-  const reset = (selector: string) => commit(latest.current.edits.filter((edit) => edit.selector !== selector), `reset:${selector}`);
+  const reset = (selector: string, page?: string | null) => {
+    const on = page === undefined ? scope.current : (page ?? undefined);
+    commit(latest.current.edits.filter((edit) => edit.selector !== selector || edit.page !== on), `reset:${selector}`);
+  };
 
   /** Put everything back as it was. */
   const discard = () => commit([], "discard");
+
+  /** What was done has been written into the code: there is nothing left of it to undo here (⌘Z is for the code now), and its history would only bring it back. */
+  const settle = () => {
+    latest.current = { ...latest.current, past: [], future: [] };
+    setState(latest.current);
+  };
 
   const undo = () => {
     const { past, edits, future } = latest.current;
@@ -137,6 +170,7 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
     canUndo: current.past.length > 0,
     canRedo: current.future.length > 0,
     setStyles,
+    remove,
     setText,
     setProp,
     setImage,
@@ -144,8 +178,14 @@ export function useEditSession(url: string | undefined, frames: () => HTMLIFrame
     undo,
     redo,
     discard,
+    settle,
     /** Draws the edits again: a page has just loaded that should show them too. */
     redraw: () => paint(latest.current.edits),
+    /** Which page the part that is picked is on, so what is changed on it belongs to that page. */
+    setScope: (page: string | undefined, wide?: number) => {
+      scope.current = page;
+      width.current = wide === undefined ? undefined : Math.round(wide);
+    },
     imagesInUse,
     /** The picture an element's swap shows, if it has been swapped: to preview it. */
     imageOf: (selector: string) => {

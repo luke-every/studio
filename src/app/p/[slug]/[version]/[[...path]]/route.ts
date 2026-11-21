@@ -53,7 +53,9 @@ export async function GET(
 
   // A prototype being worked on here is its running dev server. The page itself is that server's own address, so its
   // scripts and assets load as they do in development; what the studio reads beside it (studio.json, flow.json) is passed through.
-  const live = version === WORKING_SEGMENT ? await liveOrigin(slug) : null;
+  // The stage that draws the canvas's components is the exception: it is always served from its build, on the studio's own address, so the canvas can read into it
+  // (a page it can't read is drawn as a soft, scaled frame instead of a sharp copy). `npm run studio` in its folder makes the build.
+  const live = version === WORKING_SEGMENT && slug !== "stage" ? await liveOrigin(slug) : null;
   if (live) {
     const { search } = new URL(request.url);
     // Opened from a phone, "localhost" is the phone: send it to the host it used to reach the studio. That is the Host header: Next reports request.url as localhost.
@@ -100,7 +102,8 @@ export async function GET(
     // forever. A byte range is kept only by the browser that asked, briefly:
     // Safari opens a video by asking for its first two bytes, and a shared
     // cache that kept that answer would hand the same two bytes to everyone.
-    "cache-control": upstream.status === 206 ? "private, max-age=3600" : "public, max-age=31536000, immutable",
+    // A working copy (v0.0) is rebuilt in place, so it is never kept: a browser holding last build's page would draw the old one.
+    "cache-control": version === WORKING_SEGMENT ? "no-store" : upstream.status === 206 ? "private, max-age=3600" : "public, max-age=31536000, immutable",
     "accept-ranges": "bytes",
     // Nothing here should end up in a search index.
     "x-robots-tag": "noindex",

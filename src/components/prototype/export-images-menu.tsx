@@ -37,7 +37,7 @@ const field = "h-8 rounded-[var(--r-control)] bg-surface-inset px-2 text-sm text
  * chosen, and put in a folder in the prototype's own folder, which opens in Finder. The list is organised as the folders are: variant, then section, each
  * section open or folded. Only on this machine, where that folder is.
  */
-export function ExportImagesMenu({ slug, screens: screensOf, device, variant }: { slug: string; /** Every screen of the prototype, in the flow and in the variants, whichever the page is showing. */ screens: () => ScreenToRead[]; /** The device the screens are opened at. */ device: { width: number; height: number }; variant?: "ghost" }) {
+export function ExportImagesMenu({ slug, screens: screensOf, device, variant, tooltipAlign = "end" }: { slug: string; /** Which side of the button its label lines up with. */ tooltipAlign?: "start" | "end"; /** Every screen of the prototype, in the flow and in the variants, whichever the page is showing. */ screens: () => ScreenToRead[]; /** The device the screens are opened at. */ device: { width: number; height: number }; variant?: "ghost" }) {
   const { notify } = useStudio();
   const [open, setOpen] = useState(false);
   const [found, setFound] = useState<FoundImage[]>([]);
@@ -140,7 +140,7 @@ export function ExportImagesMenu({ slug, screens: screensOf, device, variant }: 
   const widest = Math.max(...scales);
   return (
     <>
-      <IconButton label="Export images" variant={variant} tooltipSide="below" tooltipAlign="end" aria-haspopup="dialog" onClick={show}>
+      <IconButton label="Export images" variant={variant} tooltipSide="below" tooltipAlign={tooltipAlign} aria-haspopup="dialog" onClick={show}>
         <ImageIcon />
       </IconButton>
       {/* In the page itself rather than the canvas: the canvas takes the wheel for panning, and would not let the list scroll. */}

@@ -39,18 +39,28 @@
   /* hover-lift: tune its timing here, once, for every place it is used. */
   --lift-duration: var(--dur-standard);
   --lift-curve: var(--curve-standard);
+  /* How far a button shrinks while it is held down. */
+  --press-scale: 0.97;
+  /* pull-lift / pull-drop: an element pulled out onto the canvas is lifted (it fades in and grows to `--pull-scale` from `--pull-from-scale`, settling on a soft
+   * spring: `linear()` points that overshoot a touch) and, let go of, put down: it presses in to `--pull-drop-dip` on landing, springs back past its size to
+   * `--pull-drop-rebound`, and settles. */
+  --pull-scale: 1.03;
+  --pull-from-scale: 0.94;
+  --pull-lift-duration: var(--dur-deliberate);
+  --pull-lift-spring: linear(0, 0.2 6%, 0.62 14%, 0.93 24%, 1.07 36%, 1.08 42%, 1.02 56%, 0.99 68%, 1.005 82%, 1);
+  --pull-drop-duration: var(--dur-immersive);
+  --pull-drop-dip: 0.92;
+  --pull-drop-rebound: 1.045;
   /* tab-slide: the pill under the current tab moving to the next. */
   --tab-slide-duration: var(--dur-standard);
   --tab-slide-curve: var(--curve-spatial);
-  /* step-in / step-out: a dialog moving between its steps. Both use the same distance, timing and curve; the step
-   * coming in waits `--step-delay` first, so it follows the one going rather than crossing it. The curve is even
-   * (slow, quick, slow): the usual ones do nearly all their moving at the start, which, after a delay and from
-   * nothing, leaves the step coming in looking as if it only faded. */
+  /* step-in / step-out: a dialog moving between its steps. Each way is the same move: it fades, blurs and slides
+   * `--step-travel`, on one duration and `--curve-standard`; the step coming waits `--step-delay` so it follows the one
+   * going rather than crossing it. */
   --step-duration: var(--dur-standard);
-  --step-curve: cubic-bezier(0.65, 0, 0.35, 1);
   --step-delay: 0.1s;
-  /* How far a step moves, going and coming: the same each way. */
-  --step-travel: 24px;
+  --step-travel: 8px;
+  --step-blur: 8px;
   /* A layer (a modal) arriving, and leaving: it leaves in half the time it took to
    * arrive, so when one closes as another opens both are seen moving.
    * Mirrored for JS as `layerEnter` / `layerExit` in tokens.ts. */
@@ -119,6 +129,7 @@
     --layer-enter-duration: 120ms;
     --layer-exit-duration: 100ms;
     --step-delay: 0s;
+    --step-blur: 0px;
     --step-travel: 0px;
 
     --motion-lift: 0px;
@@ -145,6 +156,68 @@
  * first interaction reintroduced on its own merits. Reduced motion zeroes the
  * duration, so the state still changes, instantly.
  * ------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+ * pull-lift / pull-drop — an element pulled out of a screen onto the canvas.
+ * Lifted, it fades in and grows a touch on a soft spring; let go of, it is put
+ * down: it presses in, springs back past its size and settles. Set `transform-origin` on the
+ * element to where it is held, so it grows round the grip. Transform and opacity
+ * only. Animated while MOTION_ENABLED is off, like hover-lift; reduced motion
+ * keeps the fade and takes the movement away.
+ * ------------------------------------------------------------------------- */
+@keyframes pull-lift {
+  from {
+    opacity: 0;
+    transform: scale(var(--pull-from-scale));
+  }
+  to {
+    opacity: 1;
+    transform: scale(var(--pull-scale));
+  }
+}
+
+@keyframes pull-drop {
+  0% {
+    transform: scale(var(--pull-scale));
+  }
+  28% {
+    transform: scale(var(--pull-drop-dip));
+  }
+  54% {
+    transform: scale(var(--pull-drop-rebound));
+  }
+  76% {
+    transform: scale(0.985);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes pull-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@utility pull-lift {
+  animation: pull-lift var(--pull-lift-duration) var(--pull-lift-spring) both;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: pull-fade var(--dur-standard) var(--curve-entrance) both;
+  }
+}
+
+@utility pull-drop {
+  animation: pull-drop var(--pull-drop-duration) var(--curve-spatial) both;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 @utility hover-lift {
   transition:
     background-color var(--lift-duration) var(--lift-curve);
@@ -328,16 +401,17 @@
 
 /* ---------------------------------------------------------------------------
  * step-in / step-out — a dialog moving between its steps (MotionStepModal): the
- * step it leaves slides out and fades, the next slides in from the other side.
- * Going forward the content moves left, going back it moves right. In and out
- * share one duration and curve; the one coming in starts `--step-delay` late
- * (and waits invisible until then), so the two read as one staggered move.
+ * body of the step it leaves slides out and fades, the next one's slides in from the other side.
+ * Going forward the content moves left, going back it moves right. Both fade,
+ * blur and slide the same way on `--curve-standard`, and the one coming
+ * starts `--step-delay` late (and waits invisible until then).
  * `--step-shift` is which way and how far; with reduced motion the distance is
  * zero, there is no delay, and they only fade.
  * ------------------------------------------------------------------------- */
 @keyframes step-in {
   from {
     opacity: 0;
+    filter: blur(var(--step-blur));
     transform: translateX(var(--step-shift));
   }
 }
@@ -345,28 +419,63 @@
 @keyframes step-out {
   to {
     opacity: 0;
+    filter: blur(var(--step-blur));
     transform: translateX(var(--step-shift));
+  }
+}
+
+/* Only a step's body (`data-step-body`) moves, blurs and fades. Its title and buttons (`data-step-fixed`) stay where they
+ * are and cross-fade, the one going out as the one coming in follows. */
+@keyframes step-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes step-fade-out {
+  to {
+    opacity: 0;
   }
 }
 
 @utility step-in-right {
   --step-shift: var(--step-travel);
-  animation: step-in var(--step-duration) var(--step-curve) var(--step-delay) both;
+  & [data-step-body] {
+    animation: step-in var(--step-duration) var(--curve-standard) var(--step-delay) both;
+  }
+  & [data-step-fixed] {
+    animation: step-fade-in var(--step-duration) var(--curve-standard) var(--step-delay) both;
+  }
 }
 
 @utility step-in-left {
   --step-shift: calc(var(--step-travel) * -1);
-  animation: step-in var(--step-duration) var(--step-curve) var(--step-delay) both;
+  & [data-step-body] {
+    animation: step-in var(--step-duration) var(--curve-standard) var(--step-delay) both;
+  }
+  & [data-step-fixed] {
+    animation: step-fade-in var(--step-duration) var(--curve-standard) var(--step-delay) both;
+  }
 }
 
 @utility step-out-left {
   --step-shift: calc(var(--step-travel) * -1);
-  animation: step-out var(--step-duration) var(--step-curve) both;
+  & [data-step-body] {
+    animation: step-out var(--step-duration) var(--curve-standard) both;
+  }
+  & [data-step-fixed] {
+    animation: step-fade-out var(--step-duration) var(--curve-standard) both;
+  }
 }
 
 @utility step-out-right {
   --step-shift: var(--step-travel);
-  animation: step-out var(--step-duration) var(--step-curve) both;
+  & [data-step-body] {
+    animation: step-out var(--step-duration) var(--curve-standard) both;
+  }
+  & [data-step-fixed] {
+    animation: step-fade-out var(--step-duration) var(--curve-standard) both;
+  }
 }
 
 /* ---------------------------------------------------------------------------

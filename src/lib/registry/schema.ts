@@ -116,6 +116,8 @@ export const versionSchema = z.object({
   live: z.boolean().optional(),
   /** Its address on this machine, to copy. */
   liveUrl: z.string().optional(),
+  /** A project's canvas, with no prototype in it yet (see `local-prototypes.ts`). Never stored. */
+  blank: z.boolean().optional(),
 });
 
 export const prototypeSchema = z.object({

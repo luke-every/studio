@@ -207,6 +207,23 @@ export function PencilIcon(props: IconProps) {
   );
 }
 
+export function IsolateIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M2.5 6V4a1.5 1.5 0 0 1 1.5-1.5h2M10 2.5h2A1.5 1.5 0 0 1 13.5 4v2M13.5 10v2a1.5 1.5 0 0 1-1.5 1.5h-2M6 13.5H4A1.5 1.5 0 0 1 2.5 12v-2" />
+      <rect x="5.5" y="5.5" width="5" height="5" rx="0.75" />
+    </Frame>
+  );
+}
+
+export function StopIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <rect x="4" y="4" width="8" height="8" rx="1.25" />
+    </Frame>
+  );
+}
+
 export function PlayIcon(props: IconProps) {
   return (
     <Frame {...props}>
@@ -227,6 +244,15 @@ export function ComponentIcon(props: IconProps) {
   return (
     <Frame {...props}>
       <path d="M8 2 10 4 8 6 6 4ZM8 10l2 2-2 2-2-2ZM4 6l2 2-2 2-2-2ZM12 6l2 2-2 2-2-2Z" />
+    </Frame>
+  );
+}
+
+/** One diamond, outlined: an instance of a component or a fork, where the component itself is four filled in a mark. */
+export function InstanceIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="M8 2.5 13.5 8 8 13.5 2.5 8Z" />
     </Frame>
   );
 }
@@ -427,12 +453,12 @@ export function StickyIcon(props: IconProps) {
   );
 }
 
+/** A comment with code in it: a note for developers. */
 export function NoteIcon(props: IconProps) {
   return (
     <Frame {...props}>
-      <circle cx="2.75" cy="8" r="0.75" />
-      <path d="M4.5 8h2" strokeDasharray="1.5 1.5" />
-      <rect x="8" y="4.25" width="5.75" height="7.5" rx="1.25" />
+      <path d="M3.5 2.75h9a1.25 1.25 0 0 1 1.25 1.25v6a1.25 1.25 0 0 1-1.25 1.25H8L5 13.75v-2.5H3.5A1.25 1.25 0 0 1 2.25 10V4A1.25 1.25 0 0 1 3.5 2.75Z" />
+      <path d="M6.25 5.25 4.75 7l1.5 1.75M9.75 5.25 11.25 7l-1.5 1.75M8.6 5 7.4 9" />
     </Frame>
   );
 }

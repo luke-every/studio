@@ -3,6 +3,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Layer</title>
 <style>
+  /* The brand's face, as the studio itself has it. */
+  @font-face { font-family: "ABC Diatype"; src: url("/fonts/ABCDiatype-Regular.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "ABC Diatype"; src: url("/fonts/ABCDiatype-Medium.woff2") format("woff2"); font-weight: 500; }
+  @font-face { font-family: "ABC Diatype"; src: url("/fonts/ABCDiatype-Bold.woff2") format("woff2"); font-weight: 700; }
   html, body { margin: 0; background: transparent; }
   [data-stage] { display: inline-block; max-width: 100%; }
   .text { font: 400 var(--size, 24px) / 1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color: #111; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -33,6 +37,10 @@
     if (q.get("weight")) layer.style.fontWeight = q.get("weight");
     if (q.get("color")) layer.style.color = q.get("color");
     if (q.get("align")) layer.style.textAlign = q.get("align");
+    // The face, how tall a line is and how far apart the letters are, the last two as percentages (of the line's own size, and of the type's).
+    if (q.get("family") === "diatype") layer.style.fontFamily = '"ABC Diatype", -apple-system, BlinkMacSystemFont, system-ui, sans-serif';
+    if (Number(q.get("lineHeight"))) layer.style.lineHeight = String(Number(q.get("lineHeight")) / 100);
+    if (Number(q.get("letterSpacing"))) layer.style.letterSpacing = Number(q.get("letterSpacing")) / 100 + "em";
     if (Number(q.get("w"))) { layer.style.width = Number(q.get("w")) + "px"; layer.style.maxWidth = "none"; }
     // Without a width it never wraps: it is as wide as its words (a line break is only where one was typed), however the box round it was first guessed.
     else { layer.style.whiteSpace = "pre"; layer.style.maxWidth = "none"; }

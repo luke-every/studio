@@ -2,7 +2,7 @@
 
 import { useEffect, useReducer, useState } from "react";
 
-import { Check, Field, PanelButton, Section, SelectField } from "@/components/prototype/edit-fields";
+import { Check, Field, PanelButton, PanelTitle, SelectField } from "@/components/prototype/edit-fields";
 import type { EditSession } from "@/components/prototype/use-edit-session";
 import type { Part } from "@/lib/edit-part";
 import { designSystemOf } from "@/lib/registry/actions";
@@ -41,25 +41,7 @@ export function ComponentPanel({ part, slug, session }: { part: Part & { compone
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="flex h-12 items-center justify-between gap-3 border-b border-divider px-4">
-        <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <span aria-hidden className="size-2 rounded-full bg-[var(--component)]" />
-          {name}
-        </p>
-        {session.has(part.selector) ? (
-          <PanelButton
-            label="Reset this component"
-            onClick={() => {
-              session.reset(part.selector);
-              bump();
-            }}
-          >
-            Reset
-          </PanelButton>
-        ) : null}
-      </div>
-      <Section title="Props">
-        <p className="text-xs text-foreground-muted">Its look is set by the design system, so only its props can change here.</p>
+      <PanelTitle name={name} component>
         {preview ? null : <p className="text-xs text-foreground-muted">This prototype can&apos;t preview props yet.</p>}
         {typeof props.children === "string" ? (
           <Field caption="Text">
@@ -113,7 +95,20 @@ export function ComponentPanel({ part, slug, session }: { part: Part & { compone
           }
           return null;
         })}
-      </Section>
+      </PanelTitle>
+      {session.has(part.selector) ? (
+        <div className="px-4 pt-3">
+          <PanelButton
+            label="Reset this component"
+            onClick={() => {
+              session.reset(part.selector);
+              bump();
+            }}
+          >
+            Reset
+          </PanelButton>
+        </div>
+      ) : null}
     </div>
   );
 }

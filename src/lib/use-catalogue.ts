@@ -16,7 +16,7 @@ export type CatalogueItem = {
   stories: number;
 };
 
-export type Catalogue = { key: string | null; items: CatalogueItem[] };
+export type Catalogue = { key: string | null; items: CatalogueItem[]; /** The stage that draws them hasn't been built. */ stopped?: boolean };
 
 /** Asked for once per page load and kept: the list is small, and the pictures are cached by the browser. */
 let asked: Promise<Catalogue> | null = null;

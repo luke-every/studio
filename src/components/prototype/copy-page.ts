@@ -187,12 +187,19 @@ export function copyPage(snapshot: Snapshot, shadow: ShadowRoot): FramePage {
       return root ? treeOfRoot(root, nameOfElement, (element) => {
         const ix = Number(element.getAttribute("data-ix"));
         return !!g.drawn[ix] || element.children.length > 0;
+      }, (element) => {
+        // Named for the component it is the root of, as the copy was read (see `partFor`).
+        const ix = Number(element.getAttribute("data-ix"));
+        const one = g.components[g.inComponent[ix]];
+        return one && one.root === ix ? one.name : null;
       }) : null;
     },
     boxOf: async (selector) => {
       const ix = indexOfSelector(selector);
       return ix >= 0 ? box(ix) : null;
     },
+    // A static copy has nothing running behind it to read.
+    capture: async () => null,
     partOf: async (selector) => {
       const ix = indexOfSelector(selector);
       return ix >= 0 ? partFor(ix) : null;

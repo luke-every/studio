@@ -1,7 +1,11 @@
 "use client";
 
+import { useAddTemplate } from "@/components/prototype/add-template";
+import { HandoffSheet } from "@/components/prototype/handoff-sheet";
+import { useEditComponent } from "@/components/prototype/use-fork";
 import { CopyDocsMenu } from "@/components/prototype/copy-docs-menu";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
@@ -31,6 +35,7 @@ import { useUser } from "@/lib/use-user";
 import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
 
 // The review and what it draws its previews with are only loaded once it is opened.
+const EMPTY_FLOW: Flow = { screens: [], edges: [] };
 const HandoffModal = dynamic(() => import("@/components/handoff/handoff-modal").then((module) => module.HandoffModal), { ssr: false });
 
 /**
@@ -46,6 +51,7 @@ const HandoffModal = dynamic(() => import("@/components/handoff/handoff-modal").
  * else can open.
  */
 export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
+  const router = useRouter();
   const { markOpened, repoUrl, notify } = useStudio();
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
@@ -112,7 +118,12 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   const extra = place.id === selected.id ? place.params : {};
   const withVariant = (url: string) => (variant ? withParams(url, { [VARIANT_PARAM]: variant }) : url);
   const controlled = selected.url ? withParams(applyControls(selected.url, offered, values), extra) : undefined;
-  const address = controlled ? withVariant(controlled) : undefined;
+  // A project with no prototype yet has nothing to serve: its canvas opens on an address that is never loaded, with no screens.
+  const canvasOnly = !!selected.blank;
+  // One template for a project: once it has one, this is a prototype and there is nothing more to add.
+  const editComponent = useEditComponent(prototype.slug, canvasOnly, (message) => notify(message, true));
+  const addTemplate = useAddTemplate(prototype.slug, canvasOnly, (message) => notify(message, true));
+  const address = controlled ? withVariant(controlled) : canvasOnly ? `/p/${prototype.slug}/v0-0` : undefined;
 
   // Comments are listed for the whole version; choosing one left on another setup puts the prototype in that setup.
   const showSetup = (setup: string) => {
@@ -162,8 +173,9 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   })();
 
   // The flow, when it has one, is looked at instead of the prototype; like a mode, it takes the side column's room.
-  const flow = usePrototypeFlow(address?.split("?")[0]);
-  const [flowOpen, setFlowOpen] = useState(false);
+  const fetchedFlow = usePrototypeFlow(canvasOnly ? undefined : address?.split("?")[0]);
+  const flow = canvasOnly ? EMPTY_FLOW : fetchedFlow;
+  const [flowOpen, setFlowOpen] = useState(canvasOnly);
   // A link into the canvas (`?canvas=1&find=…`, as the copy docs carry): it opens the canvas once, zoomed to the section the lines belong to.
   const canvasParam = useUrlParam("canvas");
   const findParam = useUrlParam("find");
@@ -174,6 +186,22 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     openedByLink.current = true;
     setFlowOpen(true);
   }, [canvasParam, address]);
+  // The canvas is in the address while it is open, so a refresh opens it again. Nothing is taken out of the address before it has been open:
+  // a link carrying `?canvas=1` is still waiting to be read.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (flowOpen) {
+      wasOpen.current = true;
+      if (url.searchParams.get("canvas") !== null) return;
+      url.searchParams.set("canvas", "1");
+    } else if (wasOpen.current) {
+      wasOpen.current = false;
+      url.searchParams.delete("canvas");
+      url.searchParams.delete("find");
+    } else return;
+    window.history.replaceState(null, "", url);
+  }, [flowOpen]);
   const showingFlow = flowOpen && !!address;
   // What the iframe is given: the address with `studio=1`, held still once the prototype can take control changes as messages.
   const live = useLiveControls(address, `${selected.url}|${variant ?? ""}`, { ...controlParams(offered, values), ...extra }, showingFlow);
@@ -289,6 +317,9 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           url={frameUrl}
           openUrl={address}
           docs={!prototype.slug.startsWith("qa-") ? <CopyDocsMenu slug={prototype.slug} name={prototype.name} figmaUrl={prototype.figmaUrl} githubUrl={githubUrl} notionUrl={prototype.notionUrl} /> : undefined}
+          // The same menu, its links and its documents, in the canvas bar.
+          canvasHandoff={!prototype.slug.startsWith("qa-") ? <HandoffSheet slug={prototype.slug} name={prototype.name} github={githubUrl} variant="ghost" /> : undefined}
+          canvasDocs={!prototype.slug.startsWith("qa-") ? <CopyDocsMenu slug={prototype.slug} name={prototype.name} figmaUrl={prototype.figmaUrl} githubUrl={githubUrl} notionUrl={prototype.notionUrl} variant="ghost" /> : undefined}
           device={device}
           onDevice={chooseDevice}
           zoom={zoom}
@@ -334,9 +365,18 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
               />
             ) : undefined
           }
-          flowOpen={flowOpen}
+          flowOpen={flowOpen || canvasOnly}
+          forkBase={prototype.versions.find((one) => one.live)?.liveUrl}
+          agentLink={async (loc) => {
+            const minted = await reviewToken(prototype.slug, folder, true);
+            if (!minted.ok) throw new Error(minted.error);
+            return `${window.location.origin}/api/handoff/element?${new URLSearchParams({ slug: prototype.slug, version: folder, token: minted.value, loc, ...(githubUrl ? { github: githubUrl.replace(/\/p\/.*$/, "") } : {}) })}`;
+          }}
+          addTemplate={addTemplate}
+          editComponent={editComponent}
           focusFind={focusFind}
-          onFlowOpen={setFlowOpen}
+          // A project's canvas is the whole page, so closing it leaves, back to where it was opened from.
+          onFlowOpen={(open) => (canvasOnly && !open ? (window.history.length > 1 ? router.back() : router.push(`/teams/${prototype.teamSlug}`)) : setFlowOpen(open))}
           mode={mode}
           onMode={setMode}
           listing={listing}

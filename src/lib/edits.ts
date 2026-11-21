@@ -9,19 +9,26 @@
  * on, so whoever (or whatever) continues the source can apply them there.
  */
 
+import { showsFrom } from "@/lib/tailwind-classes";
 import { z } from "zod";
 
-export type Edit =
+/**
+ * `page` is the page an edit belongs to, when it is one's own: an edit made on a fork (the project's own copy of a component) is drawn on that copy only, and an
+ * edit made anywhere else never on it. The copy has the same elements as the component it is a copy of, so without this each would be drawn on the other.
+ */
+export type Edit = (
   /**
    * On a live version, `copy` is which line of its copy file the words are, and `was` the words as that line had them
    * (to check it is still that line): what saving writes the change to. Both are from before the first edit.
    */
   | { kind: "text"; selector: string; text: string; /** Of an element with other elements among its words, the one piece of text this is: which of its child nodes. */ node?: number; copy?: number; was?: string }
-  | { kind: "style"; selector: string; css: Record<string, string> }
+  /** `remove`: the element is taken out of the code, not only hidden; until that is written it is drawn hidden (`display: none`). */
+  | { kind: "style"; selector: string; css: Record<string, string>; remove?: boolean; /** For a removal: the tag of the element, so that what is at the place in the file is checked to be it. */ expect?: string }
   /** `src` is a path inside the version's own folder. On a live version, `copy` is which line of its copy file the picture's address was, and saving writes the new picture there. */
   | { kind: "image"; selector: string; src: string; copy?: number }
   /** A prop of a design-system component instance, only ever made on a live version, where the page itself previews it. */
-  | { kind: "prop"; selector: string; component: string; prop: string; value: string | number | boolean };
+  | { kind: "prop"; selector: string; component: string; prop: string; value: string | number | boolean }
+) & { page?: string; /** Where the element is written in a fork's file (file:line:column), put on it while the page is built. */ loc?: string; /** For a style: the width of the frame it was made on, which says whether it is for the desktop breakpoint (`lg:`), the middle one (`md:`) or for all. */ at?: number };
 
 /** A named set of edits that is only shown when asked for, so the version itself stays as it was. */
 export type EditVariant = { id: string; label: string; edits: Edit[] };
@@ -37,10 +44,15 @@ export const variantIdPattern = /^[a-z0-9-]{1,48}$/;
 /** What the server accepts: these end up in a stylesheet and a script inside the prototype. */
 export const editsSchema = z.array(
   z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("text"), selector: z.string().min(1), text: z.string(), node: z.number().int().min(0).optional(), copy: z.number().int().min(0).optional(), was: z.string().optional() }),
+    z.object({ kind: z.literal("text"), selector: z.string().min(1), page: z.string().max(80).regex(/^[\w:.-]*$/).optional(), loc: z.string().max(300).optional(), text: z.string(), node: z.number().int().min(0).optional(), copy: z.number().int().min(0).optional(), was: z.string().optional() }),
     z.object({
       kind: z.literal("style"),
       selector: z.string().min(1),
+      page: z.string().max(80).regex(/^[\w:.-]*$/).optional(),
+      loc: z.string().max(300).optional(),
+      at: z.number().int().min(0).max(20000).optional(),
+      remove: z.literal(true).optional(),
+      expect: z.string().regex(/^[a-z][a-z0-9-]*$/).max(40).optional(),
       css: z.record(z.string().regex(/^[a-z-]+$/), z.string().regex(/^[^{};<>]*$/)),
     }),
     z.object({ kind: z.literal("image"), selector: z.string().min(1), src: z.string().regex(/^_edits\/[\w.-]+$/), copy: z.number().int().min(0).optional() }),
@@ -61,7 +73,7 @@ export const EDIT_IMAGE_DIR = "_edits";
 export function mergeEdits(earlier: Edit[], later: Edit[]): Edit[] {
   const merged = [...earlier];
   for (const edit of later) {
-    const at = merged.findIndex((other) => other.kind === edit.kind && other.selector === edit.selector && (edit.kind !== "prop" || (other as typeof edit).prop === edit.prop) && (edit.kind !== "text" || (other as typeof edit).node === edit.node));
+    const at = merged.findIndex((other) => other.kind === edit.kind && other.selector === edit.selector && other.page === edit.page && showsFrom(other.at) === showsFrom(edit.at) && (edit.kind !== "prop" || (other as typeof edit).prop === edit.prop) && (edit.kind !== "text" || (other as typeof edit).node === edit.node));
     if (at === -1) merged.push(edit);
     else if (edit.kind === "style" && merged[at].kind === "style") merged[at] = { ...edit, css: { ...merged[at].css, ...edit.css } };
     else if (edit.kind === "image" && merged[at].kind === "image") merged[at] = { ...edit, copy: (merged[at] as typeof edit).copy ?? edit.copy };

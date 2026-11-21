@@ -311,7 +311,7 @@ function geometryOf(doc: Document, context: Context, names: string[] | null): Ge
     }
     drawn[ix] = rect.width >= 8 && rect.height >= 8 && !flags[ix].contents ? 1 : 0;
     hittable[ix] = flags[ix].hittable ? 1 : 0;
-    const found = known ? componentOf(element, known) : null;
+    const found = componentOf(element, known ?? new Set<string>());
     const root = found ? at.get(found.root) : undefined;
     if (found && root !== undefined) {
       // One entry per instance, however many of its elements there are.

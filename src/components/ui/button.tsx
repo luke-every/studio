@@ -10,7 +10,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
  *   ghost      (icon buttons only) no fill until hovered, for chrome like the nav
  */
 const base =
-  "inline-flex shrink-0 items-center justify-center rounded-[var(--r-full)] text-ui font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] disabled:opacity-40";
+  "inline-flex shrink-0 items-center justify-center rounded-[var(--r-full)] text-ui font-medium transition-[color,background-color,border-color,opacity,transform] duration-[var(--dur-fast)] ease-[var(--curve-standard)] active:scale-[var(--press-scale)] motion-reduce:active:scale-100 disabled:opacity-40";
 
 const look = {
   primary: "bg-accent text-accent-foreground hover:bg-accent-hover",
@@ -28,7 +28,7 @@ type Look = keyof typeof look;
  * icon, a label, or both inside, so a row of them reads as one set.
  */
 const controlBase =
-  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ui font-medium transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] disabled:opacity-40";
+  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ui font-medium transition-[color,background-color,border-color,opacity,transform] duration-[var(--dur-fast)] ease-[var(--curve-standard)] active:scale-[var(--press-scale)] motion-reduce:active:scale-100 disabled:opacity-40";
 
 /** The two sizes of control: the one on a prototype's page, and a mini one for inside a list or a card. */
 const controlSize = {
@@ -43,6 +43,15 @@ export const barControl = `${controlBase} ${controlSize.md} border border-border
 /** What a control looks like while it is switched on. */
 export const controlOn = "!border-transparent !bg-accent !text-accent-foreground hover:!bg-accent-hover";
 
+/** A loading button keeps its label's room, invisible, with a spinner turning over it, so it never changes size. */
+function Spinner() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden className="spin absolute left-1/2 top-1/2 -ml-2 -mt-2 size-4">
+      <path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5" />
+    </svg>
+  );
+}
+
 type Props = {
   /** `destructive` is a primary button for something that can't be taken back. */
   variant?: "primary" | "secondary" | "destructive" | "positive";
@@ -51,7 +60,7 @@ type Props = {
   external?: boolean;
   /** Before the label. */
   icon?: ReactNode;
-  /** Working on it: the label breathes and the button can't be pressed again. */
+  /** Working on it: a spinner turns over the label and the button can't be pressed again. */
   loading?: boolean;
   children: ReactNode;
   className?: string;
@@ -60,9 +69,12 @@ type Props = {
 export function Button({ variant = "secondary", href, external, icon, loading, children, className, ...rest }: Props) {
   const classes = `${base} ${look[variant]} h-10 gap-2 px-5 ${className ?? ""}`;
   const content = (
-    <span className={`inline-flex items-center gap-2 ${loading ? "pulse-soft" : ""}`}>
-      {icon}
-      {children}
+    <span className="relative inline-flex items-center gap-2">
+      <span className={`inline-flex items-center gap-2 ${loading ? "invisible" : ""}`}>
+        {icon}
+        {children}
+      </span>
+      {loading ? <Spinner /> : null}
     </span>
   );
 
@@ -108,7 +120,7 @@ export function IconButton({
   ...rest
 }: {
   label?: string;
-  /** Working on it: the content breathes. */
+  /** Working on it: a spinner turns over the content. */
   loading?: boolean;
   variant?: Extract<Look, "primary" | "secondary" | "ghost">;
   /** `sm` is the mini one, for a control inside a list row or a card. */
@@ -148,7 +160,10 @@ export function IconButton({
         </Link>
       ) : (
         <button type="button" aria-label={label} aria-busy={loading || undefined} className={`${classes} peer`} {...rest}>
-          <span className={`inline-flex items-center gap-1.5 ${loading ? "pulse-soft" : ""}`}>{children}</span>
+          <span className="relative inline-flex items-center gap-1.5">
+            <span className={`inline-flex items-center gap-1.5 ${loading ? "invisible" : ""}`}>{children}</span>
+            {loading ? <Spinner /> : null}
+          </span>
         </button>
       )}
       {tip}

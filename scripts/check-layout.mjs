@@ -29,6 +29,14 @@ check("keeps a gap far from the scale", snapSpacing(150) === 150 || snapSpacing(
   check("size", out.width === 4 + 40 + 8 + 50 + 4 && out.height === 38, `${out.width}x${out.height}`);
 }
 
+// A grid: two columns, each as wide as its widest, each row as tall as its tallest, in reading order whatever order they come in.
+{
+  const out = flow([box("d", 50, 40, 10, 30), box("a", 0, 0, 40, 20), box("c", 0, 40, 40, 10), box("b", 50, 0, 20, 20)], { direction: "grid", columns: 2, gap: 8, rowGap: 4, align: "start", padding: 0 });
+  const at = (id) => JSON.stringify(out.positions[id]);
+  check("grid cells", at("a") === '{"x":0,"y":0}' && at("b") === '{"x":48,"y":0}' && at("c") === '{"x":0,"y":24}' && at("d") === '{"x":48,"y":24}', JSON.stringify(out.positions));
+  check("grid size", out.width === 68 && out.height === 54, `${out.width}x${out.height}`);
+}
+
 // Padding per side, and spreading along the direction.
 {
   const out = flow([box("a", 0, 0, 40, 20), box("b", 60, 0, 40, 20)], { direction: "row", gap: 8, align: "start", padding: 4, paddingX: 10, paddingY: 2, justify: "between" }, { main: 200 });

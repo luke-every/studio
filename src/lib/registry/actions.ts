@@ -15,6 +15,7 @@ import * as copyDocs from "./copy-docs";
 import * as designQa from "./design-qa";
 import * as system from "./design-system";
 import * as handoff from "./handoff";
+import * as changeSet from "./change-set";
 import * as liveEdits from "./live-edits";
 import * as push from "./push";
 import * as registry from "./write";
@@ -167,8 +168,8 @@ export async function addComment(input: Parameters<typeof comments.addComment>[0
 }
 
 /** A review link's token for a version, for the QR code: a phone that scans it can leave comments. `version` is the folder form (v0-2). */
-export async function reviewToken(slug: string, version: string) {
-  return attempt(async () => mintReviewToken(slug, version), []);
+export async function reviewToken(slug: string, version: string, forever = false) {
+  return attempt(async () => mintReviewToken(slug, version, { forever }), []);
 }
 
 /** A link that opens without the password, for sharing outside the studio. It follows the latest version, or with `key` (the version it is stored under, v2.0) stays on that one. */
@@ -285,6 +286,16 @@ export async function applyHandoffDecisions(input: Parameters<typeof handoff.app
 
 export async function undoHandoffDecisions(input: Parameters<typeof handoff.undoHandoffApply>[0]) {
   return attempt(() => handoff.undoHandoffApply(input), []);
+}
+
+/** What this prototype changes against production, for the handoff (see `change-set.ts`). Only on this machine, where the files are. */
+export async function buildHandoffPackage(slug: string, name: string) {
+  return attempt(() => changeSet.buildChangeSet(slug, name), []);
+}
+
+/** Puts back the last thing the studio wrote into this live version's files, or writes it again (see `written-history.ts`). */
+export async function stepWritten(slug: string, direction: "undo" | "redo") {
+  return attempt(() => liveEdits.stepLiveWrite(slug, direction), []);
 }
 
 /** Writes the edits made on a live version into its source, on this machine (see `live-edits.ts`). Pictures arrive as files named by the path their edit uses. */

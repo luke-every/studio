@@ -1,7 +1,8 @@
 import { anchorAt, anchorOf, elementAt, ownedBy, revealAnchor, scrollAt, spotOf, WAIT_FOR, type Box, type Reach, type Spot } from "@/lib/anchor";
 import type { Anchor } from "@/lib/comments";
-import { describePart, facesFor, hideWords, hoverBox, partIn, reachFrom, type From, type Face, type painter, type Part } from "@/lib/edit-part";
+import { describePart, facesFor, hideWords, hoverBox, partIn, reachFrom, type From, type Face, type painter, type Part, captureOf, type Capture } from "@/lib/edit-part";
 import type { Edit } from "@/lib/edits";
+import { showsFrom } from "@/lib/tailwind-classes";
 import { treeOf, type PageTree } from "@/lib/page-tree";
 import { findClip, partBox, setMarks, sourceAt, type Clip, type Find, type SourceEl, type SourceHit } from "@/lib/handoff-clip";
 
@@ -26,6 +27,8 @@ export type FramePage = {
   fonts(css: Record<string, string>): Promise<Face[]>;
   /** An anchor for the middle of the element a selector names, for a comment about it. Null when it isn't on the page. */
   anchorOf(selector: string): Promise<Anchor | null>;
+  /** The component an element is the top of and the ones that drew it, each with what it was given (see `captureOf`): what a copy of it is drawn with. Null when the page can't say. */
+  capture(selector: string): Promise<Capture | null>;
   /** Scrolls what is under (x, y) by (dx, dy), all in the page's own pixels. */
   scrollAt(x: number, y: number, dx: number, dy: number): void;
   /**
@@ -58,8 +61,38 @@ export const setDesignSystem = (names: string[] | null) => {
 };
 export const designSystemNames = () => designSystem;
 
+/**
+ * A page of the project's own copy of a component (a fork, drawn at `/studio-stage`) is not read as made of the design system's components: what is in it is
+ * ordinary elements, so all of it can be changed. Said by the page's address, so every question put to it, and the following of a picked part, agree.
+ */
+const plainFrame = (frame: HTMLIFrameElement) => {
+  try {
+    return new URL(frame.src).pathname === "/studio-stage";
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Told when a page's reader is ready: it says so after every load of a page, so this is the moment the studio can ask it things, with nothing to guess about how long
+ * a page takes. `win` is the window of the frame it is in.
+ */
+const readyListeners = new Set<(win: Window) => void>();
+export function onBridgeReady(listener: (win: Window) => void) {
+  readyListeners.add(listener);
+  return () => {
+    readyListeners.delete(listener);
+  };
+}
+
+/** Which page a frame shows, for the edits that belong to one (`Edit.page`): a fork is its own; any other frame has none. */
+export const scopeOf = (frame: HTMLIFrameElement) => {
+  if (!plainFrame(frame)) return undefined;
+  return `fork:${new URL(frame.src).searchParams.get("id") ?? ""}`;
+};
+
 export function pageOf(frame: HTMLIFrameElement): FramePage {
-  return frame.contentDocument ? near(frame) : across(frame);
+  return frame.contentDocument ? near(frame) : across(frame, plainFrame(frame));
 }
 
 /**
@@ -83,20 +116,26 @@ function hitting<T>(frame: HTMLIFrameElement, read: () => T): T {
  * left out there: a swapped one is a file in the studio, which that page can't be shown.
  */
 export function paintFrames(frames: HTMLIFrameElement[], edits: Edit[], brush: ReturnType<typeof painter>, pictures: Record<string, string> = {}, copies: Document[] = []) {
+  // An edit is drawn wherever its element is found, except that a fork and the rest of the canvas never draw each other's.
+  // A style made on a frame as wide as the desktop breakpoint is for that width and wider: it is not drawn on a narrower frame.
+  const forPage = (scope: string | undefined, width = Infinity) => edits.filter((edit) => edit.page === scope && !(edit.kind === "style" && width < showsFrom(edit.at)));
   const docs: Document[] = [...copies];
   for (const frame of frames) {
+    const scope = scopeOf(frame);
+    const mine = forPage(scope, frame.clientWidth || Infinity);
     const doc = frame.contentDocument;
     if (doc) {
-      if (doc.body) docs.push(doc);
+      if (doc.body && !scope) docs.push(doc);
+      else if (doc.body) brush.paint([doc], mine);
     } else if (frame.contentWindow) {
       const link = linkOf(frame.contentWindow);
       // A swapped picture is a file in the studio, which that page can't open: it is sent the picture itself (a data address), for those edits that use one.
-      link.edits = edits;
-      link.pictures = Object.fromEntries(edits.flatMap((edit) => (edit.kind === "image" && pictures[edit.src] ? [[edit.src, pictures[edit.src]]] : [])));
+      link.edits = mine;
+      link.pictures = Object.fromEntries(mine.flatMap((edit) => (edit.kind === "image" && pictures[edit.src] ? [[edit.src, pictures[edit.src]]] : [])));
       send(frame.contentWindow, link, { type: "studio:edits:paint", edits: link.edits, pictures: link.pictures });
     }
   }
-  brush.paint(docs, edits);
+  brush.paint(docs, forPage(undefined));
 }
 
 /**
@@ -107,8 +146,8 @@ export function followPart(frame: HTMLIFrameElement, selector: string, heard: (p
   const win = frame.contentWindow;
   if (!win) return () => {};
   const link = linkOf(win);
-  link.part = { selector, heard };
-  send(win, link, { type: "studio:edits:follow", selector, components: designSystem });
+  link.part = { selector, heard, plain: plainFrame(frame) };
+  send(win, link, { type: "studio:edits:follow", selector, components: link.part.plain ? [] : designSystem });
   return () => {
     if (link.part?.heard !== heard) return;
     link.part = null;
@@ -157,12 +196,17 @@ function near(frame: HTMLIFrameElement): FramePage {
     },
     tree: async () => {
       const page = doc();
-      return page ? treeOf(page) : null;
+      return page ? treeOf(page, designSystem) : null;
     },
     partOf: async (selector, components) => {
       const page = doc();
       const element = page ? partIn(page, selector) : null;
       return element ? describePart(element, [...(designSystem ?? []), ...(components ?? [])]) : null;
+    },
+    capture: async (selector) => {
+      const page = doc();
+      const element = page ? partIn(page, selector) : null;
+      return element ? captureOf(element) : null;
     },
     boxOf: async (selector) => {
       const page = doc();
@@ -226,7 +270,7 @@ function near(frame: HTMLIFrameElement): FramePage {
 /** How long a question is waited for before the page is taken not to know (it may not have the helper). */
 const ASK_MS = 1500;
 
-type Ask = { id: number; what: "tree" | "partOf" | "anchor" | "box" | "fonts" | "reveal" | "part" | "anchorOf" | "clip" | "mark" | "sourceAt" | "handoffPartBox" | "selectorBox"; x?: number; y?: number; deep?: boolean; groups?: boolean; from?: From; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; css?: Record<string, string>; find?: Find; finds?: Find[]; colour?: string | null; elements?: SourceEl[]; part?: Find; index?: number };
+type Ask = { id: number; what: "tree" | "partOf" | "capture" | "anchor" | "box" | "fonts" | "reveal" | "part" | "anchorOf" | "clip" | "mark" | "sourceAt" | "handoffPartBox" | "selectorBox"; x?: number; y?: number; deep?: boolean; groups?: boolean; from?: From; owns?: string[]; anchor?: Anchor; selector?: string; components?: string[]; css?: Record<string, string>; find?: Find; finds?: Find[]; colour?: string | null; elements?: SourceEl[]; part?: Find; index?: number };
 type Link = {
   /** The page's own address, once it has said hello; questions wait until then. */
   origin: string | null;
@@ -239,7 +283,7 @@ type Link = {
   edits: Edit[];
   /** The pictures those edits swap in, by the path they are saved at: data addresses. */
   pictures: Record<string, string>;
-  part: { selector: string; heard: (part: Part | null) => void } | null;
+  part: { selector: string; heard: (part: Part | null) => void; plain: boolean } | null;
   /** The words being typed over, hidden on the page: said again to a page that has loaded again. */
   hiding: string | null;
   /** Told when the page is scrolled down or back up. */
@@ -283,7 +327,8 @@ function listen() {
         link.sent = "";
         follow(win, link);
         if (link.edits.length) send(win, link, { type: "studio:edits:paint", edits: link.edits, pictures: link.pictures });
-        if (link.part) send(win, link, { type: "studio:edits:follow", selector: link.part.selector, components: designSystem });
+        if (link.part) send(win, link, { type: "studio:edits:follow", selector: link.part.selector, components: link.part.plain ? [] : designSystem });
+        readyListeners.forEach((listener) => listener(win));
         if (link.hiding) send(win, link, { type: "studio:edits:hide", selector: link.hiding });
         for (const { ask } of link.waiting.values()) send(win, link, { type: "studio:comments:ask", ...ask });
         return;
@@ -429,18 +474,20 @@ function askOf<T>(win: Window | null, question: Omit<Ask, "id">, wait: number, m
 }
 
 /** A page on another address (a dev server), asked by message. */
-function across(frame: HTMLIFrameElement): FramePage {
+function across(frame: HTMLIFrameElement, plain = false): FramePage {
   const win = frame.contentWindow;
+  const names = plain ? [] : designSystem ?? undefined;
   const ask = <T>(question: Omit<Ask, "id">, wait = ASK_MS, missing: T) => askOf(win, question, wait, missing);
   return {
     // The keys the studio put in the frame's address are its own, whatever the page adds (see `ownedBy`).
     anchorAt: (x, y) => ask<Anchor | null>({ what: "anchor", x, y, owns: [...new URL(frame.src, window.location.href).searchParams.keys()] }, ASK_MS, null),
-    boxAt: (x, y, reach = {}) => ask<Box | null>({ what: "box", x, y, deep: reach.deep !== false, groups: reach.groups, from: reach.from ? { selector: reach.from.selector, into: !!reach.from.into } : undefined, components: designSystem ?? undefined }, ASK_MS, null),
-    partAt: (x, y, deep = true, from) => ask<Part | null>({ what: "part", x, y, deep, from, components: designSystem ?? undefined }, ASK_MS, null).then(heardPart),
+    boxAt: (x, y, reach = {}) => ask<Box | null>({ what: "box", x, y, deep: reach.deep !== false, groups: reach.groups, from: reach.from ? { selector: reach.from.selector, into: !!reach.from.into } : undefined, components: names }, ASK_MS, null),
+    partAt: (x, y, deep = true, from) => ask<Part | null>({ what: "part", x, y, deep, from, components: names }, ASK_MS, null).then(heardPart),
     fonts: (css) => ask<Face[]>({ what: "fonts", css }, 8000, []),
-    tree: () => ask<PageTree | null>({ what: "tree" }, 5000, null),
+    tree: () => ask<PageTree | null>({ what: "tree", components: names }, 5000, null),
     boxOf: (selector) => ask<Box | null>({ what: "selectorBox", selector }, ASK_MS, null),
-    partOf: (selector, components) => ask<Part | null>({ what: "partOf", selector, components: [...(designSystem ?? []), ...(components ?? [])] }, ASK_MS, null).then(heardPart),
+    capture: (selector) => ask<Capture | null>({ what: "capture", selector }, ASK_MS * 2, null),
+    partOf: (selector, components) => ask<Part | null>({ what: "partOf", selector, components: plain ? [] : [...(designSystem ?? []), ...(components ?? [])] }, ASK_MS, null).then(heardPart),
     anchorOf: (selector) => ask<Anchor | null>({ what: "anchorOf", selector, owns: [...new URL(frame.src, window.location.href).searchParams.keys()] }, ASK_MS, null),
     scrollAt: (x, y, dx, dy) => {
       if (win) send(win, linkOf(win), { type: "studio:comments:scroll", x, y, dx, dy });

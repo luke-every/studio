@@ -6,12 +6,17 @@ import type { EditSession } from "@/components/prototype/use-edit-session";
 import { RedoIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
+import { announceWrite, type Written } from "@/components/prototype/use-written";
 import { saveEdits, saveLiveEdits } from "@/lib/registry/actions";
 
 import { useUser } from "@/lib/use-user";
 
-/** How long after an edit a live version saves by itself: none. Edits made while one is being written go in the next, as soon as it is done. */
-const AUTO_SAVE_MS = 0;
+/**
+ * How long after the last edit a live version saves by itself. Dragging a number makes an edit on every move of the pointer; each save is a write to the file and a reload of
+ * the page by the dev server, so saving on each would make the drag stutter. The picture follows the pointer at once (that is the preview); the file is written once the edit has
+ * settled, as one step to undo. Edits made while one is being written go in the next, as soon as it is done.
+ */
+const AUTO_SAVE_MS = 500;
 
 const NAME_KEY = "studio.name";
 const rememberedName = () => {
@@ -35,13 +40,14 @@ const rememberedName = () => {
  * moment after each edit, and what can't be written stays as a preview.
  */
 /** Undo and redo, as a card of their own beside the canvas's controls. */
-export function EditHistory({ session }: { session: EditSession }) {
+export function EditHistory({ session, written }: { session: EditSession; written?: Written }) {
+  // What is not yet saved is undone first; once it is written into the code, what was written is put back.
   return (
     <>
-      <IconButton variant="ghost" label="Undo (⌘Z)" tooltipSide="below" onClick={session.undo} disabled={!session.canUndo}>
+      <IconButton variant="ghost" label="Undo (⌘Z)" tooltipSide="below" onClick={session.canUndo || !written ? session.undo : written.undo} disabled={!session.canUndo && !written?.canUndo}>
         <UndoIcon />
       </IconButton>
-      <IconButton variant="ghost" label="Redo (⌘⇧Z)" tooltipSide="below" onClick={session.redo} disabled={!session.canRedo}>
+      <IconButton variant="ghost" label="Redo (⌘⇧Z)" tooltipSide="below" onClick={session.canRedo || !written ? session.redo : written.redo} disabled={!session.canRedo && !written?.canRedo}>
         <RedoIcon />
       </IconButton>
     </>
@@ -107,14 +113,24 @@ export function EditBar({
     setSaving(false);
     if (!result.ok) return notify(result.error, true);
     const { saved, where, left } = result.value;
+    if (saved.length) announceWrite(slug);
     // Only what was sent is let go of: letters typed while it was being written stay, and go in the next save.
     for (const edit of sent) {
       if (!saved.includes(edit.selector)) continue;
       if (edit.kind === "text" && edit.copy !== undefined) writtenAs.current.set(edit.copy, edit.text);
       const now = latest.current.edits.find((one) => one.selector === edit.selector && one.kind === edit.kind);
-      if (!now || edit.kind !== "text" || (now.kind === "text" && now.text === edit.text)) session.reset(edit.selector);
+      if (!now || edit.kind !== "text" || (now.kind === "text" && now.text === edit.text)) session.reset(edit.selector, edit.page ?? null);
     }
-    const wrote = saved.length ? `Saved ${saved.length} ${saved.length === 1 ? "change" : "changes"} to copy.ts (${where.join(", ")}).` : "";
+    // What is in the code must be what is drawn. A change to the code that could not be written is not left drawn as a preview: it would change how the page looks
+    // (on every reload, by where it was) without being in the code. It is put back, and the toast says why. (A part that is not in the project's files at all, such
+    // as production's, stays a preview.)
+    for (const edit of sent) {
+      if (saved.includes(edit.selector) || !edit.loc || (edit.kind !== "style" && edit.kind !== "text")) continue;
+      if (left.some((item) => item.selector === edit.selector)) session.reset(edit.selector, edit.page ?? null);
+    }
+    // All of it is in the code now: ⌘Z is for the code, and the history of what was only a preview would bring it back.
+    if (!left.length) session.settle();
+    const wrote = saved.length ? `Saved ${saved.length} ${saved.length === 1 ? "change" : "changes"} (${[...new Set(where)].join(", ")}).` : "";
     if (auto && !left.length) return;
     notify([wrote, ...left.slice(0, 2).map((item) => item.why)].filter(Boolean).join(" "), !saved.length);
   };

@@ -42,6 +42,10 @@
   --signal-stop: #ff3b30;
   /* A design-system component instance. */
   --violet-500: #9531fe;
+  /* A fork: the project's own copy of a component, free to change. */
+  --orange-500: #ff7a1a;
+  /* Dev: the canvas to look at the code of, as Figma's Dev Mode is green. */
+  --green-500: #14ae5c;
   /* What is picked or hovered on a prototype's page. */
   --blue-500: #0d99ff;
   --rose-500: #ff3d6e;
@@ -173,13 +177,17 @@
   --detail-side-width: 21.75rem;
   /* A modal that is a place to work (a handoff's review): most of a wide window, never wider than this. */
   --modal-fill-width: 90rem;
-  /* A dialog with steps keeps one height, so moving between them never makes it jump: what a step holds beyond it scrolls. */
-  --modal-steps-height: 36rem;
+  /* A dialog with steps has one height, and a step that holds more asks for the taller one; the dialog changes height between them. What a step holds beyond its height scrolls. */
+  --modal-steps-height: 18.75rem;
+  --modal-steps-height-tall: 32rem;
   /* A handoff's list of findings, beside the one open. */
   --handoff-queue-width: 16rem;
   /* What is written under a prototype: narrow enough to read. */
   --content-width: 45rem;
   --dev-panel-width: 14rem;
+  /* The canvas's properties card (top right) opens at its least and can be dragged out to its most. Mirrored for JS as PROPERTIES_MIN / PROPERTIES_MAX in flow-canvas.tsx. */
+  --properties-min-width: 275px;
+  --properties-max-width: 400px;
   /* The comments panel reads like a conversation, so it keeps the wider column the side panels used to share. */
   --comments-panel-width: 20rem;
   /* The terminal needs room for a Claude Code screen: about 80 columns at its size. */
@@ -191,6 +199,8 @@
   --r-md: 0.375rem;
   --r-lg: 0.5rem;
   --r-xl: 0.75rem;
+  /* A dialog with steps: rounder than other layers. */
+  --r-modal-steps: 2rem;
   --r-full: 999px;
   --r-tag: 0.75rem;
   /* Buttons, dropdown triggers and toggles on a prototype's page. */

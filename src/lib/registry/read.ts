@@ -102,12 +102,12 @@ async function madeHere(slug: string) {
 async function addWorkingCopies(document: RegistryDocument) {
   const team = document.teams.find((item) => !item.archived);
   if (!team) return;
-  for (const { slug, builtAt, live, port, qa } of await workingCopies()) {
+  for (const { slug, builtAt, live, port, qa, blank } of await workingCopies()) {
     // A prototype started from the studio keeps the name and team it was given there.
     const made = await madeHere(slug);
     const home = document.teams.find((item) => item.slug === made.team && !item.archived) ?? team;
     // With the content repository connected, what isn't running is read from there: the latest push, not a stale build.
-    if (!live && isContentRepoConfigured()) continue;
+    if (!live && !blank && isContentRepoConfigured()) continue;
     const id = `${slug}-${WORKING_VERSION}`;
     const at = builtAt.toISOString();
     const existing = document.prototypes.find((item) => item.slug === slug);
@@ -124,6 +124,8 @@ async function addWorkingCopies(document: RegistryDocument) {
         archived: qa !== undefined || made.archived,
         description: qa
           ? `A design QA of ${qa}.`
+          : blank
+          ? "A canvas, with no prototype in it yet."
           : live
           ? `Running from ~/Claude/prototypes/${slug}, so a change shows as soon as you save it.`
           : `Served from ~/Claude/prototypes/${slug}/out, so a rebuild is all it takes to see a change.`,
@@ -139,11 +141,13 @@ async function addWorkingCopies(document: RegistryDocument) {
         id,
         prototypeSlug: slug,
         version: WORKING_VERSION,
-        title: live ? "Live" : "Working copy",
-        changes: live ? "The dev server running in the folder, as it is now." : "What is in the folder's last build.",
+        title: blank ? "Canvas" : live ? "Live" : "Working copy",
+        changes: blank ? "Only a canvas so far." : live ? "The dev server running in the folder, as it is now." : "What is in the folder's last build.",
         author,
         createdAt: at,
-        url: `/p/${slug}/v0-0`,
+        // No address is what makes a version canvas-only: there is nothing to serve.
+        url: blank ? undefined : `/p/${slug}/v0-0`,
+        blank: blank || undefined,
         live: live || undefined,
         liveUrl: live && port ? `http://localhost:${port}` : undefined,
       }),
@@ -240,6 +244,7 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
         source: version.source,
         live: version.live,
         liveUrl: version.liveUrl,
+        blank: version.blank,
       }));
 
     const current = versions.find((version) => version.id === record.currentVersion) ?? versions[0];

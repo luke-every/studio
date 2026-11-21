@@ -11,7 +11,7 @@ import { selectorFor } from "@/lib/edit-dom";
  */
 
 export type Spot = { x: number; y: number };
-export type Box = { left: number; top: number; width: number; height: number; /** The element is a design-system component instance (edit mode on a live version). */ component?: boolean; /** The groups directly inside it, outlined dashed while it is hovered. */ children?: Box[] };
+export type Box = { left: number; top: number; width: number; height: number; /** The element is a design-system component instance (edit mode on a live version). */ component?: boolean; /** How round its corners are (top left, top right, bottom right, bottom left), in the page's own pixels, so an outline drawn round it can follow them. /** The groups directly inside it, outlined dashed while it is hovered. */ children?: Box[] };
 /** How a point picks an element: `deep` is the one at the very bottom (⌘ held), otherwise the top-level group; `groups` also boxes what is directly inside it. */
 export type Reach = { deep?: boolean; groups?: boolean; /** An element already selected, so a point beside it picks what is beside it (see `reachFrom`). */ from?: { selector: string; into?: boolean } };
 /** Whether a key in the prototype's address is the studio's (a control, a variant, the review token) rather than the prototype's own. */

@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo, useSyncExternalStore } from "react";
 
-import { ArrowIcon, CodeIcon, EllipseIcon, PolygonIcon, StarIcon, FrameIcon, LineIcon, RectangleIcon, ImageIcon, PlayIcon, PointerIcon, TextIcon } from "@/components/shell/nav-icons";
+import { ArrowIcon, CodeIcon, ComponentIcon, EllipseIcon, PolygonIcon, StarIcon, FrameIcon, LineIcon, RectangleIcon, ImageIcon, IsolateIcon, PlayIcon, PointerIcon, StopIcon, TextIcon } from "@/components/shell/nav-icons";
 import { CanvasCamera, zoomAbout } from "@/lib/canvas-camera";
 import { dataUrlOf, encodeImage } from "@/lib/image";
 import { detectLayout, flow as flowLayout, paddingOf, type Layout } from "@/lib/canvas-layout";
@@ -30,7 +30,8 @@ import { Card, CommentCard, Composer, DraftPin, NOTE_GAP, NOTE_WIDTH, NoteMark, 
 import { editable, type Part } from "@/lib/edit-part";
 
 import { TextInPlace } from "./edit-layer";
-import { BunchPanel, FramePanel, PiecePanel, type AlignMode, type TextStyle } from "./frame-panel";
+import type { EditComponent } from "./use-fork";
+import { BunchPanel, FramePanel, MultiPanel, PiecePanel, type AlignMode, type MultiPatch, type MultiTarget, type TextStyle } from "./frame-panel";
 import { LayersPanel, type LayerRow } from "./layers-panel";
 import { StickyNote } from "./sticky-note";
 import { StickyTool } from "./sticky-tool";
@@ -55,6 +56,16 @@ const COMMENT_CURSOR = drawnCursor("<svg xmlns='http://www.w3.org/2000/svg' widt
 const NOTE_CURSOR = drawnCursor("<svg xmlns='http://www.w3.org/2000/svg' width='32' height='28' viewBox='0 0 32 28'><path d='M8 14h6' stroke='#fff' stroke-width='4'/><path d='M8 14h6' stroke='#111' stroke-width='1.5' stroke-dasharray='2 2'/><rect x='14' y='6' width='15' height='16' rx='3' fill='#111' stroke='#fff' stroke-width='2'/><circle cx='5' cy='14' r='3.5' fill='#111' stroke='#fff' stroke-width='2'/></svg>", 5, 14);
 /** How big a screen is drawn on the canvas, as a share of the phone's real size. */
 const SCREEN_SCALE = 0.5;
+/** How thick the invisible strip along each edge is, in screen pixels: the width of the handle it replaces, and how far a corner's own handle reaches along it. */
+const EDGE_GRIP = 8;
+/** The properties card's width: where it opens, and the most it can be dragged to (mirrors `--properties-min-width` and `--properties-max-width` in tokens.css). Kept per browser. */
+const PROPERTIES_MIN = 275;
+const PROPERTIES_MAX = 400;
+const PROPERTIES_KEY = "canvas-properties-width";
+/** Where a duplicate with nothing to go by is put: this far (canvas units) to the right of the original. */
+const DUPLICATE_GAP = 16;
+/** The nearest whole pixel as the panel shows it (the canvas draws at half size, so that is a multiple of half a unit): what a drag lands on, as Figma does. Typing a number in the panel is not rounded. */
+const whole = (value: number) => Math.round(value / SCREEN_SCALE) * SCREEN_SCALE;
 /**
  * Using a selected screen where it stands ("Use here"), off for now: with this false the button isn't there and nothing
  * about it acts, and each screen is a plain button as it always was. Turning it on makes each screen a div instead, since a
@@ -66,13 +77,15 @@ const SNAP_PX = 4;
 /** Resizing snaps from a little further off than moving does: an edge is hard to put exactly on another's. */
 const RESIZE_SNAP_PX = 7;
 /** Where the stage prototype is served: the empty page that draws one real component of the website, given its story. */
-const STAGE = "/p/stage/v0-2";
+const STAGE = "/p/stage/v0-0";
+/** A fork's master: the project's own copy of a component, plain code that is changed like any layer. Copies of it are instances, held to what a component's instance is. */
+const isMaster = (piece?: Piece) => !!piece?.fork && !piece.instance;
 /** Whether a copy's key is a placed component's (see `pieceDevice`): it is drawn as the component alone, with no frame, name or page behind it. */
 const isPiece = (id: string) => id.startsWith("stage/");
 /** A component placed on the canvas is a screen of its own on this device, as big as the component is. */
 const pieceDevice = (piece: Piece): Device => ({ id: "stage", name: "Component", kind: "desktop", width: piece.width, height: piece.height });
 const LAYER = "/canvas-layer.html";
-const pieceScreen = (piece: Piece): FlowScreen => piece.kind ? { id: piece.id, name: piece.label, url: LAYER, params: { kind: piece.kind, ...Object.fromEntries(Object.entries(piece.props).filter(([key]) => !(piece.kind === "text" && key === "w")).map(([key, value]) => [key, String(value)])) } } : ({ id: piece.id, name: piece.label, url: STAGE, params: { id: piece.story, ...(Object.keys(piece.props).length ? { props: JSON.stringify(piece.props) } : {}) } });
+const pieceScreen = (piece: Piece, forkBase?: string): FlowScreen => piece.kind ? { id: piece.id, name: piece.label, url: LAYER, params: { kind: piece.kind, ...Object.fromEntries(Object.entries(piece.props).filter(([key]) => !(piece.kind === "text" && key === "w")).map(([key, value]) => [key, String(value)])) } } : ({ id: piece.id, name: piece.label, url: piece.fork && forkBase ? `${forkBase}/studio-stage` : STAGE, params: { id: piece.story, ...(Object.keys(piece.props).length ? { props: JSON.stringify(piece.props) } : {}), ...(piece.texts && Object.keys(piece.texts).length ? { texts: JSON.stringify(piece.texts) } : {}) } });
 /** The bar's shapes menu: what each draws. */
 const SHAPE_OPTIONS: ToolOption[] = [
   { id: "rectangle", label: "Rectangle", icon: <RectangleIcon className="size-4" />, shortcut: "R" },
@@ -128,6 +141,8 @@ const LABEL_HEIGHT = 26;
 const MIN_SIZE = 8;
 /** The clear space between one device's copy of a screen and the next device's, beside it: less than between screens, so a screen's copies read as a group. */
 const DEVICE_GAP = 48;
+/** The widths a component is shown at when it is isolated: the three the developers build for (team-conventions): mobile (the base), `md:` and `lg:`. */
+const ISOLATE_WIDTHS = [390, 768, 1024];
 /**
  * The canvas draws a screen at half its size (SCREEN_SCALE), so the zoom the person is told is that scale times a half: 100% is real size, a 390 wide phone 390
  * pixels across, as the dimensions say. These two are the canvas's own scale, so 400% at most is 8 here.
@@ -233,6 +248,9 @@ export function FlowCanvas({
   picking,
   bar,
   tools,
+  loadingFrame = false,
+  editComponent = null,
+  forkBase,
   layersOpen = false,
   onLayersOpen,
   topLeft,
@@ -245,14 +263,26 @@ export function FlowCanvas({
   onDeviceChoice,
   uiHidden = false,
   viewOnly = false,
+  dev = false,
+  viewToggle,
 }: {
   flow: Flow;
   /** Looked at, not worked in (a share link): nothing about how the screens are drawn is shown. */
   viewOnly?: boolean;
+  /** Dev: the canvas to look at the code of, as `viewOnly` is, with the layers still there to look through (they can't be changed). */
+  dev?: boolean;
+  /** Design and Dev, at the far right of the bar at the foot. */
+  viewToggle?: React.ReactNode;
   /** More for the bar at the foot of the canvas, after its tools: the zoom and the comments. */
   bar?: React.ReactNode;
   /** More tools for the bar at the foot, after text and image (the components button). */
   tools?: React.ReactNode;
+  /** A template is being put into the project: a frame stands in the middle of the view, pulsing, until the real screen is there. */
+  loadingFrame?: boolean;
+  /** Edit on a component instance: makes the project's own copy of it and opens it. */
+  editComponent?: EditComponent | null;
+  /** Where the project runs on this machine: a fork is drawn from its own copy there. */
+  forkBase?: string;
   /** Whether the layers panel is shown on the left. */
   layersOpen?: boolean;
   onLayersOpen?: (open: boolean) => void;
@@ -307,6 +337,8 @@ export function FlowCanvas({
     target: Part | null;
     onPick: (frame: HTMLIFrameElement | null, part: Part | null, scope?: Document | null) => void;
     onText: (part: Part, text: string) => void;
+    /** An element picked, taken out (Delete): hidden at once, and removed from the code where it is written. */
+    onRemove?: (part: Part) => void;
     busy: boolean;
     onPage: () => void;
   };
@@ -315,7 +347,17 @@ export function FlowCanvas({
   // whether it is selected, the pins on it) is kept under its copy's key, so each copy has its own.
   // The components placed on the canvas are screens too (one copy each, on a device the size of the component), kept as they were left (see lib/canvas-saved.ts).
   const [pieces, setPieces] = useState<Piece[]>(() => readCanvas(base).pieces);
-  const pieceCopies = pieces.map((piece, index) => ({ id: copyKey("stage", piece.id), screen: pieceScreen(piece), device: pieceDevice(piece), index: flow.screens.length + index }));
+  // Isolation: one fork on its own, at each width it is built for. The rest of the canvas is hidden, not taken down (so coming back reloads nothing), and the other widths
+  // are copies of it made for the moment: drawn from the one piece, never kept with the canvas nor in what undo goes back through.
+  const [isolated, setIsolated] = useState<{ key: string; view: { x: number; y: number; scale: number } } | null>(null);
+  const [isoHeights, setIsoHeights] = useState<Record<string, number>>({});
+  const basePiece = isolated ? pieces.find((piece) => copyKey("stage", piece.id) === isolated.key) : undefined;
+  const isoPieces: Piece[] = basePiece
+    ? ISOLATE_WIDTHS.filter((wide) => Math.abs(wide - basePiece.width) > 8).map((wide) => ({ ...basePiece, id: `${basePiece.id}~${wide}`, parent: undefined, instance: false, hidden: false, locked: false, dropped: undefined, width: wide, height: isoHeights[copyKey("stage", `${basePiece.id}~${wide}`)] ?? basePiece.height }))
+    : [];
+  /** Whether a screen or piece is drawn: all are, but while one is isolated, only it and its other widths. */
+  const inIsolation = (key: string) => !isolated || key === isolated.key || key.includes("~");
+  const pieceCopies = [...pieces, ...isoPieces].map((piece, index) => ({ id: copyKey("stage", piece.id), screen: pieceScreen(piece, forkBase), device: pieceDevice(piece), index: flow.screens.length + index }));
   const copies = [...devices.flatMap((on) => flow.screens.map((screen, index) => ({ id: copyKey(on.id, screen.id), screen, device: on, index }))), ...pieceCopies];
   const copyOf = new Map(copies.map((copy) => [copy.id, copy]));
   // Every device that has been on since the canvas opened, in the order they were switched on. A device switched off
@@ -384,8 +426,9 @@ export function FlowCanvas({
   }
   const laid = layoutFlow(flow, { width: group + GAP.x, height: 0 }, Infinity, (id) => tallest(id) + GAP.y + LABEL_HEIGHT, (id) => (noted.has(id) ? NOTE_WIDTH + NOTE_GAP : 0));
   const placed = spreadCopies(laid.placed, devices.map((on) => ({ id: on.id, width: on.width * SCREEN_SCALE })), DEVICE_GAP);
-  const flowWidth = laid.width - GAP.x;
-  const flowHeight = laid.height - GAP.y;
+  // Nothing laid out (a project with no screens) is no size at all, not the gap's worth less than nothing.
+  const flowWidth = laid.columns ? laid.width - GAP.x : 0;
+  const flowHeight = laid.columns ? laid.height - GAP.y : 0;
   // The frame of components stands after the last screen, and is fitted with them once it has said how big it is.
   const [sheetSize, setSheetSize] = useState({ width: 0, height: 0 });
   const withSheet = !!sheet?.marks.length;
@@ -447,6 +490,13 @@ export function FlowCanvas({
   const lastTap = useRef<{ id: string; at: number } | null>(null);
   // The screens sit below their names, where the layout put them or where they were dragged to.
   const at = (id: string) => {
+    const index = isoPieces.findIndex((piece) => copyKey("stage", piece.id) === id);
+    if (index >= 0 && isolated && basePiece) {
+      const start = placed.get(isolated.key) ?? { x: 0, y: 0 };
+      const home = offsets[isolated.key] ?? { x: 0, y: 0 };
+      const before = isoPieces.slice(0, index).reduce((sum, piece) => sum + piece.width * SCREEN_SCALE + DEVICE_GAP, 0);
+      return { x: start.x + home.x + basePiece.width * SCREEN_SCALE + DEVICE_GAP + before, y: start.y + LABEL_HEIGHT + home.y };
+    }
     const spot = placed.get(id) ?? { x: 0, y: 0 };
     const moved = offsets[id] ?? { x: 0, y: 0 };
     return { x: spot.x + moved.x, y: spot.y + LABEL_HEIGHT + moved.y };
@@ -505,7 +555,7 @@ export function FlowCanvas({
   const copyPages = useRef(new Map<string, FramePage>());
   const [spotted, setFound] = useState<{ key: string; id: string; copyId: string; spot: Spot }[]>([]);
   // Not those on a device that has just been switched off, until they are read again.
-  const found = spotted.filter((item) => copyOf.has(item.copyId));
+  const found = isolated ? [] : spotted.filter((item) => copyOf.has(item.copyId));
   // The copy a pin was tapped on, which is where its comment opens: the same comment may be pinned on several.
   const [pinOn, setPinOn] = useState<{ id: string; copyId: string } | null>(null);
   const [draft, setDraft] = useState<{ anchor: Anchor; copyId: string } | null>(null);
@@ -577,7 +627,7 @@ export function FlowCanvas({
   const [pickedOn, setPickedOn] = useState<{ selector: string; copyId: string } | null>(null);
   const picked = pickedOn && copyOf.has(pickedOn.copyId) && picking?.target && pickedOn.selector === picking.target.selector ? { copyId: pickedOn.copyId, part: picking.target } : null;
   // Words being typed over, on the screen they are on.
-  const [typed, setTyping] = useState<{ part: Part; copyId: string } | null>(null);
+  const [typed, setTyping] = useState<{ part: Part; copyId: string; /** For a component instance: the prop of it these words are, which is what typing changes. */ prop?: string } | null>(null);
   const typing = typed && copyOf.has(typed.copyId) ? typed : null;
   const pickingNow = useRef(picking);
   useEffect(() => {
@@ -907,6 +957,13 @@ export function FlowCanvas({
       window.removeEventListener("pointercancel", up, true);
     };
   }, []);
+  // A layer measured again (a component drawn at a new size, a text fitted to its words) changes its width and height and nothing else. That is the canvas catching up
+  // with a change, not one made: if it were a step of its own, the first undo would only undo the measuring, which measures again, which would clear the redo.
+  const onlyMeasured = (a: Snap, b: Snap) =>
+    a.offsets === b.offsets &&
+    a.shapes === b.shapes &&
+    a.pieces.length === b.pieces.length &&
+    a.pieces.every((piece, at) => piece === b.pieces[at] || JSON.stringify({ ...piece, width: 0, height: 0 }) === JSON.stringify({ ...b.pieces[at], width: 0, height: 0 }));
   useEffect(() => {
     const h = history.current;
     if (h.now.offsets === offsets && h.now.pieces === pieces && h.now.shapes === shapes) return undefined;
@@ -914,6 +971,10 @@ export function FlowCanvas({
     const commit = () => {
       if (pressed.current) {
         timer = window.setTimeout(commit, 150);
+        return;
+      }
+      if (onlyMeasured(h.now, { offsets, pieces, shapes })) {
+        h.now = { offsets, pieces, shapes };
         return;
       }
       h.past.push(h.now);
@@ -924,6 +985,7 @@ export function FlowCanvas({
     timer = window.setTimeout(commit, 300);
     return () => window.clearTimeout(timer);
   }, [offsets, pieces, shapes]);
+  const refit = useRef<(list: Piece[]) => void>(() => {});
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
@@ -940,9 +1002,12 @@ export function FlowCanvas({
       // A change not yet kept as a step is kept now, so undoing straight after it undoes it.
       const live = latest.current;
       if (live.offsets !== h.now.offsets || live.pieces !== h.now.pieces || live.shapes !== h.now.shapes) {
-        h.past.push(h.now);
-        h.now = live;
-        h.future = [];
+        if (onlyMeasured(h.now, live)) h.now = live;
+        else {
+          h.past.push(h.now);
+          h.now = live;
+          h.future = [];
+        }
       }
       const snap = redo ? h.future.pop() : h.past.pop();
       if (!snap) return;
@@ -952,6 +1017,7 @@ export function FlowCanvas({
       setOffsets(snap.offsets);
       setPieces(snap.pieces);
       setShapes(snap.shapes);
+      refit.current(snap.pieces);
       // What is selected may no longer be there.
       setSelected((now) => (now && isPiece(now) && !snap.pieces.some((piece) => copyKey("stage", piece.id) === now) ? null : now));
       setShape((now) => (now && !snap.shapes.some((one) => one.id === now) ? null : now));
@@ -964,7 +1030,7 @@ export function FlowCanvas({
   // A press on a screen or its name moves that screen (`screen`, from where it was: `origin`), and only that screen (or all that are
   // selected together, if it is one of them). One on the canvas around them draws a box that selects what it touches; with Space
   // held, a press anywhere pans instead, as in Figma.
-  const drag = useRef<{ x: number; y: number; from: View; moved: boolean; pan: boolean; /** Pressed with Space (or the middle button): only moves the view, and leaves the selection as it is. */ spaced?: boolean; lasso?: boolean; screen?: string; origin?: { x: number; y: number }; group?: GroupBase; /** Pressed with Alt: a copy is left behind once it is dragged. */ dup?: Chosen } | null>(null);
+  const drag = useRef<{ x: number; y: number; from: View; moved: boolean; pan: boolean; /** Pressed with Space (or the middle button): only moves the view, and leaves the selection as it is. */ spaced?: boolean; lasso?: boolean; screen?: string; origin?: { x: number; y: number }; group?: GroupBase; /** Pressed with Alt: a copy is left behind once it is dragged. */ dup?: Chosen; /** The copy has been left: how far this goes is what ⌘D then repeats. */ copied?: boolean; /** Pressed with Alt on an element of a screen: it is being pulled out onto the canvas. */ pull?: { copyId: string } } | null>(null);
   const space = useRef(false);
   const [panning, setPanning] = useState(false);
   useEffect(() => {
@@ -1030,9 +1096,10 @@ export function FlowCanvas({
     const right = (Math.max(area.x, area.x2) - now.x) / now.scale;
     const bottom = (Math.max(area.y, area.y2) - now.y) / now.scale;
     const hits = (x: number, y: number, width: number, height: number) => x < right && x + width > left && y < bottom && y + height > top;
-    const frames = shapes.filter((one) => hits(one.x, one.y, one.width, one.height)).map((one) => one.id);
+    const frames = isolated ? [] : shapes.filter((one) => hits(one.x, one.y, one.width, one.height)).map((one) => one.id);
     const screens = copies
       .filter((copy) => {
+        if (!inIsolation(copy.id)) return false;
         const spot = at(copy.id);
         const parent = parentOf(copy.id);
         return hits(spot.x, spot.y, widthOf(copy.id), heightOf(copy.id)) && !(parent && frames.includes(parent));
@@ -1148,6 +1215,8 @@ export function FlowCanvas({
   const parentOf = (id: string) => (isPiece(id) ? pieces.find((piece) => copyKey("stage", piece.id) === id)?.parent : undefined);
   // T: the text tool. A click puts a text where it is; it is typed in at once, and again on a double click.
   const [texting, setTexting] = useState(false);
+  // The move tool is the one in hand when no other is: not while framing, drawing a shape, writing text or placing a comment.
+  const moving = !framing && !texting && !shaping && !placing;
   const [writing, setWriting] = useState<string | null>(null);
   const textingNow = useRef(false);
   const framingNow = useRef(false);
@@ -1159,7 +1228,7 @@ export function FlowCanvas({
   });
   const removeFrameNow = useRef<(id: string) => void>(() => {});
   const deleteGroupNow = useRef<(together: { copies: string[]; frames: string[] }) => void>(() => {});
-  const movingShape = useRef<{ id: string; x: number; y: number; from: { x: number; y: number }; scale: number; group?: GroupBase; dup?: Chosen; moved?: boolean } | null>(null);
+  const movingShape = useRef<{ id: string; x: number; y: number; from: { x: number; y: number }; scale: number; group?: GroupBase; dup?: Chosen; copied?: boolean; moved?: boolean } | null>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -1193,6 +1262,16 @@ export function FlowCanvas({
         setFraming((on) => !on);
       } else if (event.key === "Backspace" || event.key === "Delete") {
         // Anything put on the canvas can go: a frame, or a placed component. The prototype's own screens stay.
+        // An element picked inside something is not the thing: Delete takes that element out, and leaves what it was in.
+        if (viewOnly) return;
+        const taken = pickingNow.current;
+        if (taken?.target) {
+          event.preventDefault();
+          taken.onRemove?.(taken.target);
+          // It is gone: it is let go of, so another press of Delete is not for the same place (which by then is something else).
+          taken.onPick(null, null);
+          return;
+        }
         const frame = shapeNow.current;
         const piece = selectedNow.current && isPiece(selectedNow.current) ? selectedNow.current : null;
         const together = bunchNow.current;
@@ -1231,24 +1310,36 @@ export function FlowCanvas({
     const now = camera.target;
     const [width, height] = [on.width * SCREEN_SCALE, on.height * SCREEN_SCALE];
     const centre = { x: (size.width / 2 - now.x) / now.scale, y: (size.height / 2 - now.y) / now.scale };
-    const frame: CanvasFrame = { id: `frame-${Math.random().toString(36).slice(2, 8)}`, name: on.name, x: centre.x - width / 2, y: centre.y - height / 2, width, height, fill: "#ffffff" };
+    const frame: CanvasFrame = { id: `frame-${Math.random().toString(36).slice(2, 8)}`, name: on.name, x: whole(centre.x - width / 2), y: whole(centre.y - height / 2), width, height, fill: "#ffffff" };
     setShapes((was) => [...was, frame]);
     setShape(frame.id);
     setSelected(null);
     setFraming(false);
   };
+  // Where the stand-in frame is, kept from the moment the loading begins: a device's size, in the middle of what was in view.
+  const standIn = useMemo(() => {
+    if (!loadingFrame || !size) return null;
+    const now = camera.target;
+    const [width, height] = [devices[0].width * SCREEN_SCALE, devices[0].height * SCREEN_SCALE];
+    const centre = { x: (size.width / 2 - now.x) / now.scale, y: (size.height / 2 - now.y) / now.scale };
+    return { x: whole(centre.x - width / 2), y: whole(centre.y - height / 2), width, height };
+    // Only when the loading starts: panning while it loads leaves it where it was put.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingFrame]);
   const addFrame = (area: { x: number; y: number; x2: number; y2: number }) => {
     const now = camera.target;
     const wide = Math.abs(area.x2 - area.x) >= 4 && Math.abs(area.y2 - area.y) >= 4;
-    const x = (Math.min(area.x, area.x2) - now.x) / now.scale;
-    const y = (Math.min(area.y, area.y2) - now.y) / now.scale;
+    const x = whole((Math.min(area.x, area.x2) - now.x) / now.scale);
+    const y = whole((Math.min(area.y, area.y2) - now.y) / now.scale);
     const frame: CanvasFrame = {
       id: `frame-${Math.random().toString(36).slice(2, 8)}`,
       name: `Frame ${shapes.length + 1}`,
+      // Drawn inside a frame, it is in it, as in Figma: the frame the drawing was begun in.
+      parent: frameAt((area.x - now.x) / now.scale, (area.y - now.y) / now.scale),
       x,
       y,
-      width: wide ? Math.abs(area.x2 - area.x) / now.scale : 100,
-      height: wide ? Math.abs(area.y2 - area.y) / now.scale : 100,
+      width: wide ? Math.max(whole(Math.abs(area.x2 - area.x) / now.scale), SCREEN_SCALE) : 100,
+      height: wide ? Math.max(whole(Math.abs(area.y2 - area.y) / now.scale), SCREEN_SCALE) : 100,
       fill: "#ffffff",
     };
     setShapes((was) => [...was, frame]);
@@ -1323,10 +1414,10 @@ export function FlowCanvas({
   const addShape = (kind: CanvasShape, area: { x: number; y: number; x2: number; y2: number }) => {
     const now = camera.target;
     const dragged = Math.abs(area.x2 - area.x) >= 4 || Math.abs(area.y2 - area.y) >= 4;
-    const x = (Math.min(area.x, area.x2) - now.x) / now.scale;
-    const y = (Math.min(area.y, area.y2) - now.y) / now.scale;
+    const x = whole((Math.min(area.x, area.x2) - now.x) / now.scale);
+    const y = whole((Math.min(area.y, area.y2) - now.y) / now.scale);
     const straight = kind === "line" || kind === "arrow";
-    const [width, height] = dragged ? [Math.abs(area.x2 - area.x) / now.scale, Math.abs(area.y2 - area.y) / now.scale] : straight ? [100, 0] : kind === "sticky" ? [STICKY_SIZE, STICKY_SIZE] : [100, 100];
+    const [width, height] = dragged ? [whole(Math.abs(area.x2 - area.x) / now.scale), whole(Math.abs(area.y2 - area.y) / now.scale)] : straight ? [100, 0] : kind === "sticky" ? [STICKY_SIZE, STICKY_SIZE] : [100, 100];
     if (kind === "sticky") {
       // A sticky note is in the colour in hand, and is typed on at once.
       // A square, as big as the drag was in its larger direction; that is its base.
@@ -1380,6 +1471,7 @@ export function FlowCanvas({
     if (move.dup && move.moved) {
       leaveCopy(move.dup);
       move.dup = undefined;
+      move.copied = true;
     }
     let dx = (event.clientX - move.x) / move.scale;
     let dy = (event.clientY - move.y) / move.scale;
@@ -1391,11 +1483,11 @@ export function FlowCanvas({
     if (move.group) {
       const { rect, skip } = groupRect(move.group, dx, dy);
       const nudge = lineUp(rect, skip, free);
-      moveGroup(move.group, dx + nudge.dx, dy + nudge.dy);
+      moveGroup(move.group, whole(dx + nudge.dx), whole(dy + nudge.dy));
     } else {
       const skip = new Set([`frame:${one.id}`, ...childrenOf(one.id), ...framesIn(one.id).map((id) => `frame:${id}`)]);
       const nudge = lineUp({ id: `frame:${one.id}`, x: move.from.x + dx, y: move.from.y + dy, width: one.width, height: one.height }, skip, free);
-      const [x, y] = [move.from.x + dx + nudge.dx, move.from.y + dy + nudge.dy];
+      const [x, y] = [whole(move.from.x + dx + nudge.dx), whole(move.from.y + dy + nudge.dy)];
       updateFrame(one.id, { x, y });
       if (move.moved) aimAt(frameTarget(one.id, x + one.width / 2, y + one.height / 2));
     }
@@ -1404,11 +1496,32 @@ export function FlowCanvas({
     const move = movingShape.current;
     movingShape.current = null;
     clearGuides();
+    // A copy left by an Alt drag: how far it went is what ⌘D repeats.
+    const dragged = move?.copied ? shapes.find((item) => item.id === move.id) : undefined;
+    if (move && dragged) noteDuplicate(dragged.x - move.from.x, dragged.y - move.from.y);
     if (holdLayout.current) {
       holdLayout.current = false;
       setSettle((now) => now + 1);
     }
     setDropInto(null);
+    // Frames let go of together: each one that was not carried in another of them is in the frame it is over now (never one of those moving with it).
+    if (move?.moved && move.group) {
+      const together = new Set(Object.keys(move.group.frames));
+      const carried = new Set([...together].flatMap((id) => framesIn(id)));
+      const changes = new Map<string, string | undefined>();
+      for (const id of together) {
+        const item = shapes.find((one) => one.id === id);
+        if (!item || (item.parent && together.has(item.parent))) continue;
+        const [cx, cy] = [item.x + item.width / 2, item.y + item.height / 2];
+        const parent = [...shapes].reverse().find((one) => !one.shape && !together.has(one.id) && !carried.has(one.id) && cx >= one.x && cx <= one.x + one.width && cy >= one.y && cy <= one.y + one.height)?.id;
+        if (parent !== item.parent) changes.set(id, parent);
+      }
+      if (changes.size) {
+        const moving = new Set([...changes.keys(), ...[...changes.keys()].flatMap((id) => framesIn(id))]);
+        setShapes((now) => [...now.filter((item) => !moving.has(item.id)), ...now.filter((item) => moving.has(item.id)).map((item) => (changes.has(item.id) ? { ...item, parent: changes.get(item.id) } : item))]);
+      }
+      return;
+    }
     // A frame let go of over another is in it from then on, and out of it when let go of elsewhere; drawn above it, with what is in it.
     const one = move?.moved && !move.group ? shapes.find((item) => item.id === move.id) : undefined;
     if (!one) return;
@@ -1469,9 +1582,15 @@ export function FlowCanvas({
     root.style.height = h ? `${h}px` : "";
     root.style.maxWidth = w ? "none" : "";
     root.style.boxSizing = w || h ? "border-box" : "";
-    const [seenW, seenH] = [Math.ceil(stage.offsetWidth), Math.ceil(stage.offsetHeight)];
+    // A side that was just given a size is that size: reading it back off the page would give the frame's old width (a header fills whatever it is in), and put it back.
+    const [seenW, seenH] = [w ? w : Math.ceil(stage.offsetWidth), h ? h : Math.ceil(stage.offsetHeight)];
     if (seenW && seenH) setPieces((all) => all.map((one) => (copyKey("stage", one.id) === id && (one.width !== seenW || one.height !== seenH) ? { ...one, width: seenW, height: seenH } : one)));
   };
+  // After an undo or a redo each component has the size it was given put on it again, or taken off: what was put on its page directly is not state, so restoring state alone leaves it.
+  refit.current = (list) =>
+    requestAnimationFrame(() => {
+      for (const piece of list) if (!piece.kind) fitComponent(copyKey("stage", piece.id), piece.fixedWidth ?? 0, piece.fixedHeight ?? 0);
+    });
   // What a placed piece was given for a size is put on it again when its page comes or loads again.
   const applyFixed = (id: string) => {
     const piece = pieceByKey(id);
@@ -1553,6 +1672,7 @@ export function FlowCanvas({
         setGuides(snapped.guides);
       }
     } else clearGuides();
+    area = { x: whole(area.x), y: whole(area.y), width: Math.max(whole(area.width), MIN_SIZE), height: Math.max(whole(area.height), MIN_SIZE) };
     if (now.image && pieceByKey(now.id) && !pieceByKey(now.id)!.kind) {
       const [width, height] = [Math.round(area.width / SCREEN_SCALE), Math.round(area.height / SCREEN_SCALE)];
       const spot = placed.get(now.id) ?? { x: 0, y: 0 };
@@ -1589,11 +1709,18 @@ export function FlowCanvas({
     // A text takes only its width (it wraps there, and is as tall as its words); an image its whole box.
     setPieces((all) => all.map((piece) => (copyKey("stage", piece.id) !== now.id ? piece : piece.kind === "text" ? { ...piece, width, props: { ...piece.props, w: width } } : { ...piece, width, height, props: { ...piece.props, w: width, h: height } })));
   };
-  const sizePiece = (id: string, width: number, height: number) => {
+  // `only`: just that side was given a size (typed in its field), so just that side becomes fixed, from hug or fill; the other keeps how it is sized.
+  const sizePiece = (id: string, width: number, height: number, only?: "width" | "height") => {
     if (pieceByKey(id)?.kind === "text") requestAnimationFrame(() => fitText(id, width));
     if (pieceByKey(id) && !pieceByKey(id)!.kind) {
-      setPieces((all) => all.map((piece) => (copyKey("stage", piece.id) === id ? { ...piece, fixedWidth: width, fixedHeight: height, sizing: undefined } : piece)));
-      requestAnimationFrame(() => fitComponent(id, width, height));
+      setPieces((all) =>
+        all.map((piece) =>
+          copyKey("stage", piece.id) === id
+            ? { ...piece, ...(only !== "height" ? { fixedWidth: width } : {}), ...(only !== "width" ? { fixedHeight: height } : {}), sizing: only ? { ...piece.sizing, [only]: undefined } : undefined }
+            : piece,
+        ),
+      );
+      requestAnimationFrame(() => fitComponent(id, only === "height" ? undefined : width, only === "width" ? undefined : height));
       return;
     }
     setPieces((all) => all.map((piece) => (copyKey("stage", piece.id) !== id ? piece : piece.kind === "text" ? { ...piece, width, sizing: { ...piece.sizing, width: undefined }, props: { ...piece.props, w: width } } : { ...piece, width, height, sizing: undefined, props: { ...piece.props, w: width, h: height } })));
@@ -1636,6 +1763,10 @@ export function FlowCanvas({
       }),
     );
   };
+  /** A prop of one component instance, and of no other. */
+  const setPieceProp = (id: string, key: string, value: string | number | boolean) => setPieces((all) => all.map((piece) => (copyKey("stage", piece.id) === id ? { ...piece, props: { ...piece.props, [key]: value } } : piece)));
+  /** Words inside one component instance, and no other. */
+  const setPieceText = (id: string, selector: string, text: string) => setPieces((all) => all.map((piece) => (copyKey("stage", piece.id) === id ? { ...piece, texts: { ...piece.texts, [selector]: text } } : piece)));
   const styleText = (id: string, patch: Partial<TextStyle>) => setPieces((all) => all.map((piece) => (copyKey("stage", piece.id) === id ? { ...piece, props: { ...piece.props, ...patch } } : piece)));
   const HANDLES: [number, number][] = [[0, 0], [0.5, 0], [1, 0], [1, 0.5], [1, 1], [0.5, 1], [0, 1], [0, 0.5]];
   const handlesFor = (id: string, image: boolean, area: Area, sides = false, fit?: (handle: [number, number]) => void, label?: string, tone = "var(--selection)", sticky = false) => {
@@ -1653,7 +1784,7 @@ export function FlowCanvas({
             {label}
           </span>
         ) : null}
-        {HANDLES.filter(([hx, hy]) => (!sides || hy === 0.5) && (!sticky || (hx === 1 && hy === 0.5) || (hx !== 0.5 && hy !== 0.5))).map(([hx, hy]) => (
+        {[...HANDLES].sort((one, other) => Number(one[0] !== 0.5 && one[1] !== 0.5) - Number(other[0] !== 0.5 && other[1] !== 0.5)).filter(([hx, hy]) => (!sides || hy === 0.5) && (!sticky || (hx === 1 && hy === 0.5) || (hx !== 0.5 && hy !== 0.5))).map(([hx, hy]) => (
           <span
             key={`${hx}-${hy}`}
             onPointerDown={(event) => startResize(event, id, image, [hx, hy], { x: area.x, y: area.y, width: area.width, height: area.height })}
@@ -1667,8 +1798,15 @@ export function FlowCanvas({
               event.stopPropagation();
               endResize();
             }}
-            style={{ left: corner.x + w * hx, top: corner.y + h * hy, cursor: hx === 0.5 ? "ns-resize" : hy === 0.5 ? "ew-resize" : hx === hy ? "nwse-resize" : "nesw-resize" }}
-            className="pointer-events-auto absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[var(--selection)] bg-[var(--selection-foreground)]"
+            style={
+              hx !== 0.5 && hy !== 0.5
+                ? { left: corner.x + w * hx, top: corner.y + h * hy, cursor: hx === hy ? "nwse-resize" : "nesw-resize" }
+                : // An edge is not drawn: pulling anywhere along it scales that side (clear of the corners, which take their own).
+                  hx === 0.5
+                  ? { left: corner.x + EDGE_GRIP, top: corner.y + h * hy - EDGE_GRIP / 2, width: Math.max(0, w - EDGE_GRIP * 2), height: EDGE_GRIP, cursor: "ns-resize" }
+                  : { left: corner.x + w * hx - EDGE_GRIP / 2, top: corner.y + EDGE_GRIP, width: EDGE_GRIP, height: Math.max(0, h - EDGE_GRIP * 2), cursor: "ew-resize" }
+            }
+            className={hx !== 0.5 && hy !== 0.5 ? "pointer-events-auto absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[var(--selection)] bg-[var(--selection-foreground)]" : "pointer-events-auto absolute"}
           />
         ))}
       </Fragment>
@@ -1788,7 +1926,11 @@ export function FlowCanvas({
     const one = id ? shapes.find((item) => item.id === id) : undefined;
     return !!one && (!!one[what] || frameState(one.parent, what));
   };
-  const pieceByKey = (key: string) => pieces.find((piece) => copyKey("stage", piece.id) === key);
+  const pieceByKey = (key: string) => pieces.find((piece) => copyKey("stage", piece.id) === key) ?? isoPieces.find((piece) => copyKey("stage", piece.id) === key);
+  // A placed component (not a text or an image): a page of its own, which the layers can open.
+  const isComponentPiece = (id: string) => !!pieceByKey(id) && !pieceByKey(id)!.kind && !isMaster(pieceByKey(id));
+  // A fork is orange and a component purple; either is what the canvas draws round it, as a frame's blue is.
+  const pieceTone = (id: string) => (pieceByKey(id)?.fork ? "var(--fork)" : isComponentPiece(id) ? "var(--component)" : "var(--selection)");
   const stateOfKey = (key: string, what: "hidden" | "locked") => {
     const piece = pieceByKey(key);
     return !!piece && (!!piece[what] || frameState(piece.parent, what));
@@ -1885,7 +2027,7 @@ export function FlowCanvas({
       const spot = { x: offset.x + dx, y: offset.y + dy };
       const inOwn = piece.parent ? frameIds.get(piece.parent) : undefined;
       const parent = inOwn ?? (rehome ? frameAt(spot.x + (piece.width * SCREEN_SCALE) / 2, spot.y + LABEL_HEIGHT + (piece.height * SCREEN_SCALE) / 2) : piece.parent);
-      return { piece: { ...piece, id: rand("piece"), props: { ...piece.props }, parent }, spot, own: !!inOwn };
+      return { piece: { ...piece, id: rand("piece"), props: { ...piece.props }, parent, ...(isMaster(piece) ? { instance: true } : {}) }, spot, own: !!inOwn };
     });
     setPieces((now) => [...now, ...made.map((one) => one.piece)]);
     setOffsets((now) => ({ ...now, ...Object.fromEntries(made.map((one) => [copyKey("stage", one.piece.id), one.spot])) }));
@@ -1913,13 +2055,8 @@ export function FlowCanvas({
     setShape(null);
     return true;
   };
-  const pasteHeld = () => {
-    const data = held.current;
-    if (!data) return false;
-    // Each paste lands a little further along, so copies don't sit unseen on each other.
-    pastes.current += 1;
-    const step = 16 * pastes.current;
-    const made = spawn(data, step, step, true);
+  /** What was just put down becomes the selection: the one thing, or the group of them. */
+  const chooseMade = (made: ReturnType<typeof spawn>) => {
     if (pickingNow.current?.target) pickingNow.current.onPick(null, null);
     letGoInspect.current();
     if (made.frames.length === 1 && !made.loose.length) {
@@ -1935,11 +2072,83 @@ export function FlowCanvas({
       setSelected(null);
       setBunch({ copies: made.loose, frames: made.frames });
     }
+  };
+  const pasteHeld = () => {
+    const data = held.current;
+    if (!data) return false;
+    // Each paste lands a little further along, so copies don't sit unseen on each other.
+    pastes.current += 1;
+    const step = 16 * pastes.current;
+    chooseMade(spawn(data, step, step, true));
     return true;
   };
-  const clipNow = useRef({ copy: copyChosen, cut: cutChosen, paste: pasteHeld });
+  // ⌘D: a copy of what is selected, put where it can be seen at once. Where an Alt drag last put a copy from its original (or the last ⌘D did), the next goes the
+  // same way, so a row of them is a press each; with none, it goes beside the original, a gap to its right. The copy is selected, so pressing again carries on from it.
+  const lastDuplicate = useRef<{ dx: number; dy: number } | null>(null);
+  const noteDuplicate = (dx: number, dy: number) => {
+    if (Math.hypot(dx, dy) >= 1) lastDuplicate.current = { dx, dy };
+  };
+  const duplicateChosen = () => {
+    const sel = selectedPieces();
+    if (!sel.keys.length && !sel.frames.length) return false;
+    const [lefts, rights] = [
+      [...sel.keys.map((key) => at(key).x), ...shapes.filter((one) => sel.frames.includes(one.id)).map((one) => one.x)],
+      [...sel.keys.map((key) => at(key).x + widthOf(key)), ...shapes.filter((one) => sel.frames.includes(one.id)).map((one) => one.x + one.width)],
+    ];
+    const beside = { dx: Math.max(...rights) - Math.min(...lefts) + DUPLICATE_GAP, dy: 0 };
+    const { dx, dy } = lastDuplicate.current ?? beside;
+    // It stays in the frame the original is in (and so in its layout, where it has one).
+    chooseMade(spawn(readHeld(sel), dx, dy, false));
+    return true;
+  };
+  // ⌘A: everything at the level in focus. That is the frame the selection is in (when all of it is in the one), or the canvas itself when nothing is selected
+  // or the selection is spread over several levels: the layers directly in it (and, on the canvas, the prototype's screens), not the hidden or locked ones.
+  const selectAllHere = () => {
+    if (viewOnly || pickingNow.current?.target) return false;
+    const inFocus = bunch.copies.length || bunch.frames.length
+      ? [...bunch.copies.map((key) => pieceByKey(key)?.parent), ...bunch.frames.map((id) => shapes.find((one) => one.id === id)?.parent)]
+      : shape
+        ? [shapes.find((one) => one.id === shape)?.parent]
+        : selected
+          ? [pieceByKey(selected)?.parent]
+          : [];
+    const parents = new Set(inFocus);
+    const level = parents.size === 1 ? [...parents][0] : undefined;
+    const frames = shapes.filter((one) => one.parent === level && !frameState(one.id, "hidden") && !frameState(one.id, "locked")).map((one) => one.id);
+    const copies = [
+      ...pieces.map((piece) => copyKey("stage", piece.id)).filter((key) => pieceByKey(key)?.parent === level && copyOf.has(key) && !stateOfKey(key, "hidden") && !stateOfKey(key, "locked")),
+      ...(level === undefined && !isolated ? kept.filter((one) => !isPiece(one.id) && copyOf.has(one.id)).map((one) => one.id) : []),
+    ];
+    if (frames.length || copies.length) chooseMade({ loose: copies, frames });
+    return true;
+  };
+  // Enter on a selected component: its words are typed over, found at the middle of it. The same as a double-click on them, by the keyboard, so it does not
+  // depend on where the pointer lands or how quickly it is pressed twice.
+  const typeIntoSelected = () => {
+    const id = selected;
+    if (viewOnly || !id || !isComponentPiece(id) || !box.current || !copyOf.has(id)) return false;
+    const rect = box.current.getBoundingClientRect();
+    const now = camera.target;
+    const spot = at(id);
+    void type(rect.left + now.x + (spot.x + widthOf(id) / 2) * now.scale, rect.top + now.y + (spot.y + heightOf(id) / 2) * now.scale);
+    return true;
+  };
+  const enterNow = useRef(typeIntoSelected);
   useEffect(() => {
-    clipNow.current = { copy: copyChosen, cut: cutChosen, paste: pasteHeld };
+    enterNow.current = typeIntoSelected;
+  });
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.key !== "Enter" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.repeat || target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target?.tagName ?? "") || box.current?.closest("[inert]")) return;
+      if (enterNow.current()) event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const clipNow = useRef({ copy: copyChosen, cut: cutChosen, paste: pasteHeld, duplicate: duplicateChosen, selectAll: selectAllHere });
+  useEffect(() => {
+    clipNow.current = { copy: copyChosen, cut: cutChosen, paste: pasteHeld, duplicate: duplicateChosen, selectAll: selectAllHere };
   });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1949,6 +2158,12 @@ export function FlowCanvas({
       if (event.code === "KeyC" && clipNow.current.copy()) event.preventDefault();
       else if (event.code === "KeyX" && clipNow.current.cut()) event.preventDefault();
       else if (event.code === "KeyV" && clipNow.current.paste()) event.preventDefault();
+      else if (event.code === "KeyA" && clipNow.current.selectAll()) event.preventDefault();
+      // Always the canvas's: the browser would bookmark the page.
+      else if (event.code === "KeyD") {
+        event.preventDefault();
+        clipNow.current.duplicate();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1991,6 +2206,43 @@ export function FlowCanvas({
     camera.set({ scale, x: size.width / 2 - centre.x * scale, y: size.height / 2 - centre.y * scale });
     return true;
   };
+  // Isolate: the one fork alone, at each width, the camera taken to them; leaving puts the camera back where it was. The rest of the canvas is only hidden.
+  const enterIsolation = (key: string) => {
+    const piece = pieceByKey(key);
+    if (!piece || !size || isolated) return;
+    const here = at(key);
+    const others = ISOLATE_WIDTHS.filter((wide) => Math.abs(wide - piece.width) > 8);
+    const across = piece.width * SCREEN_SCALE + others.reduce((sum, wide) => sum + wide * SCREEN_SCALE + DEVICE_GAP, 0);
+    const tall = Math.max(piece.height, 720) * SCREEN_SCALE + LABEL_HEIGHT;
+    const now = camera.target;
+    setIsolated({ key, view: { x: now.x, y: now.y, scale: now.scale } });
+    setBunch({ copies: [], frames: [] });
+    setShape(null);
+    setSelected(key);
+    const scale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(size.width / (across + 160), size.height / (tall + 160))));
+    touch(true);
+    camera.set({ scale, x: size.width / 2 - (here.x + across / 2) * scale, y: size.height / 2 - (here.y - LABEL_HEIGHT + tall / 2) * scale });
+  };
+  const leaveIsolation = () => {
+    if (!isolated) return;
+    const back = isolated.view;
+    setIsolated(null);
+    setIsoHeights({});
+    touch(true);
+    camera.set(back);
+  };
+  // Esc leaves it, once nothing inside is picked (that Esc is for letting go of that).
+  useEffect(() => {
+    if (!isolated) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.key !== "Escape" || target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "") || pickingNow.current?.target) return;
+      leaveIsolation();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isolated]);
   // The zoom is offered to the bar above the canvas (see lib/canvas-zoom.ts): where it is now, and the ways to change it, which are read fresh when used.
   const zoomControls = useRef({ zoomIn: () => {}, zoomOut: () => {}, reset: () => {}, fit: () => {} });
   useEffect(() => {
@@ -2040,10 +2292,58 @@ export function FlowCanvas({
     setInteract((now) => (now ? { ...now, open: false } : now));
     window.setTimeout(() => setInteract((now) => (now && !now.open ? null : now)), INTERACT_MS + 40);
   }
+  // The element a pull takes: the one selected when the press is inside it, else the one a tap there would pick (the top-level group, as hover outlines it).
+  const pullFind = useRef<Promise<{ part: Part | null; copyId: string; page?: FramePage }> | null>(null);
+  /** The size of that element, once it is known: what the ghost that follows the pointer is drawn at. */
+  const pullPicked = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+  /** Where the outline that follows the pointer is, its top left in the window: where the piece is put down. */
+  const ghostAt = useRef<{ x: number; y: number; grip: { x: number; y: number } } | null>(null);
+  const [pulling, setPulling] = useState<{ x: number; y: number; width: number; height: number; /** Where on it the pointer holds it, 0 to 1 across and down: what it grows round. */ grip: { x: number; y: number }; busy: boolean } | null>(null);
+  const findPulled = async (copyId: string, clientX: number, clientY: number) => {
+    const found = pointIn(clientX, clientY);
+    if (!found || found.copy.id !== copyId) return { part: null, copyId };
+    const inside = picked && picked.copyId === copyId ? picked.part.box : null;
+    const chosen = inside && found.x >= inside.left && found.x <= inside.left + inside.width && found.y >= inside.top && found.y <= inside.top + inside.height ? picked!.part : null;
+    return { part: chosen ?? (await found.page.partAt(found.x, found.y, false)), copyId, page: found.page };
+  };
+  /** Let go of a pull: the element is taken out (a moment, with the place it will be pulsing), and put down where the pointer is, as a fork. */
+  const finishPull = async (clientX: number, clientY: number) => {
+    const found = await pullFind.current;
+    pullFind.current = null;
+    if (!found || !editComponent) return;
+    const part = found.part;
+    // What the page has it as now: the component it is the top of, if it is, and the ones that drew it, each with what it was given.
+    const captured = part && found.page ? await found.page.capture(part.selector) : null;
+    if (!part || (!part.loc && !captured?.top)) {
+      editComponent.problem("Restart the project's server, then try again: it tags its elements as it starts. (An element of production's own code can't be taken out: fork its component instead.)");
+      return;
+    }
+    const [width, height] = [Math.max(Math.round(part.box.width), 48), Math.max(Math.round(part.box.height), 32)];
+    // It pulses where it was let go, and the piece takes that place: the element's own top left, as it was held.
+    const held = ghostAt.current;
+    const size = { width: width * SCREEN_SCALE * camera.target.scale, height: height * SCREEN_SCALE * camera.target.scale };
+    setPulling({ x: held?.x ?? clientX - size.width / 2, y: held?.y ?? clientY - size.height / 2, ...size, grip: held?.grip ?? { x: 0.5, y: 0.5 }, busy: true });
+    // The top of a component the page uses is taken as that use: the one it is, where there are several.
+    const made = await editComponent.extract({ loc: part.loc, top: captured?.top ?? undefined, owners: captured?.owners });
+    setPulling(null);
+    if (!made) return;
+    const piece: Piece = { id: newId(), story: made.id, label: made.label, component: made.label, fork: made.label, ...(made.existing || made.shared ? { instance: true } : {}), props: {}, width, height };
+    piece.dropped = { width, height };
+    putDown(piece, held ? worldAt(held.x, held.y) : worldAt(clientX, clientY), !held);
+  };
   const grab = (event: React.PointerEvent, id: string) => {
     // With Space held, a press on a screen pans like anywhere else.
     if (placing || space.current) return;
     event.stopPropagation();
+    // Alt on a screen of the prototype (a piece is copied, as it always was): the element under the pointer is pulled out, to be a component of its own on the canvas.
+    if (event.altKey && !viewOnly && !isPiece(id) && editComponent && picking) {
+      drag.current = { x: event.clientX, y: event.clientY, from: camera.target, moved: false, pan: false, pull: { copyId: id } };
+      pullPicked.current = null;
+      ghostAt.current = null;
+      pullFind.current = findPulled(id, event.clientX, event.clientY);
+      void pullFind.current.then((found) => (pullPicked.current = found.part ? { left: found.part.box.left, top: found.part.box.top, width: found.part.box.width, height: found.part.box.height } : null));
+      return;
+    }
     const alone = !bunch.copies.includes(id);
     const dup = event.altKey && !viewOnly && (alone ? isPiece(id) : true) ? (alone ? { keys: [id], frames: [] } : selectedPieces()) : undefined;
     drag.current = { x: event.clientX, y: event.clientY, from: camera.target, moved: false, pan: false, screen: id, origin: offsets[id] ?? { x: 0, y: 0 }, group: alone ? undefined : groupBase(), dup };
@@ -2095,6 +2395,25 @@ export function FlowCanvas({
     return [{ key: `${edge.from}-${edge.to}-${i}`, path, mid, label: active || room >= 80 ? edge.label : undefined, active }];
   });
 
+  // A placed component is the size it turns out to be: set from what was measured (here, by looking into its page, or told by the stage's own message).
+  const settlePiece = (id: string, width: number, height: number) =>
+    id.includes("~")
+      ? setIsoHeights((was) => (was[id] === height ? was : { ...was, [id]: height }))
+      : setPieces((was) => was.map((piece) => (copyKey("stage", piece.id) === id && (piece.width !== width || piece.height !== height) ? { ...piece, width, height } : piece)));
+  const settleNow = useRef(settlePiece);
+  useEffect(() => {
+    settleNow.current = settlePiece;
+  });
+  // The stage runs on its dev server's own address, which this page can't look into, so it says how big its component is (`studio:stage-size`, see the stage's page).
+  useEffect(() => {
+    const heard = (event: MessageEvent) => {
+      const data = event.data as { type?: string; width?: unknown; height?: unknown } | null;
+      if (data?.type !== "studio:stage-size" || typeof data.width !== "number" || typeof data.height !== "number" || !(data.width > 0) || !(data.height > 0)) return;
+      for (const [id, frame] of frames.current) if (isPiece(id) && frame.contentWindow === event.source) return void settleNow.current(id, Math.min(Math.ceil(data.width), 4000), Math.min(Math.ceil(data.height), 4000));
+    };
+    window.addEventListener("message", heard);
+    return () => window.removeEventListener("message", heard);
+  }, []);
   // A placed component takes the size it turns out to be once its page has loaded: the stage draws it at its own size (`[data-stage]`).
   const measurePiece = (id: string) => {
     const stage = frames.current.get(id)?.contentDocument?.querySelector("[data-stage]");
@@ -2108,9 +2427,7 @@ export function FlowCanvas({
     }
     const [wide, tall] = [Math.min(right - rect.left, 4000), Math.min(bottom - rect.top, 4000)];
     if (!wide || !tall) return;
-    const width = Math.ceil(wide);
-    const height = Math.ceil(tall);
-    setPieces((was) => was.map((piece) => (copyKey("stage", piece.id) === id && (piece.width !== width || piece.height !== height) ? { ...piece, width, height } : piece)));
+    settlePiece(id, Math.ceil(wide), Math.ceil(tall));
   };
   // A component dragged out of the panel is let go of on the canvas: it becomes a screen there, centred on the pointer, and is kept.
   const dropping = (event: React.DragEvent) => event.dataTransfer.types.includes(COMPONENT_DRAG_TYPE) || (!viewOnly && event.dataTransfer.types.includes("Files"));
@@ -2120,7 +2437,7 @@ export function FlowCanvas({
     // A picture from disk dropped on the canvas is put down where it lands.
     const picture = [...event.dataTransfer.files].find((one) => one.type.startsWith("image/"));
     if (picture) return void addImage(picture, { x: event.clientX, y: event.clientY });
-    let item: { id?: string; label?: string; width?: number; height?: number };
+    let item: { id?: string; label?: string; width?: number; height?: number; fork?: string };
     try {
       item = JSON.parse(event.dataTransfer.getData(COMPONENT_DRAG_TYPE));
     } catch {
@@ -2130,10 +2447,11 @@ export function FlowCanvas({
     const rect = box.current.getBoundingClientRect();
     const now = camera.target;
     const world = { x: (event.clientX - rect.left - now.x) / now.scale, y: (event.clientY - rect.top - now.y) / now.scale };
-    const piece: Piece = { id: `piece-${Math.random().toString(36).slice(2, 8)}`, parent: frameAt(world.x, world.y), story: item.id, label: item.label ?? "Component", component: item.label, props: {}, // A component with no picture has no size on record: it starts desktop-wide (a section or a header needs the room) and takes its own size once drawn.
+    const piece: Piece = { id: `piece-${Math.random().toString(36).slice(2, 8)}`, parent: frameAt(world.x, world.y), story: item.id, label: item.label ?? "Component", component: item.fork ?? item.label, ...(item.fork ? { fork: item.fork, instance: true } : {}), props: {}, // A component with no picture has no size on record: it starts desktop-wide (a section or a header needs the room) and takes its own size once drawn.
       width: item.width ? Math.max(Math.round(item.width), 80) : 1024, height: item.height ? Math.max(Math.round(item.height), 48) : 200 };
+    piece.dropped = { width: piece.width, height: piece.height };
     const id = copyKey("stage", piece.id);
-    setOffsets((was) => ({ ...was, [id]: { x: world.x - (piece.width * SCREEN_SCALE) / 2, y: world.y - (piece.height * SCREEN_SCALE) / 2 - LABEL_HEIGHT } }));
+    setOffsets((was) => ({ ...was, [id]: { x: whole(world.x - (piece.width * SCREEN_SCALE) / 2), y: whole(world.y - (piece.height * SCREEN_SCALE) / 2 - LABEL_HEIGHT) } }));
     setPieces((was) => [...was, piece]);
     setSelected(id);
   };
@@ -2178,9 +2496,87 @@ export function FlowCanvas({
     setShape(id);
     setMenu(null);
   };
+  // Add auto layout (⇧A), as in Figma: a frame selected on its own is the thing that gets the layout (read from how what is in it already sits, or a column when it is
+  // empty); anything else (several things, or one that is not a frame) is put in a new frame that has it.
+  const autoLayout = () => {
+    if (viewOnly) return;
+    const { keys, frames: held } = layersSelected();
+    const one = !keys.length && held.length === 1 ? shapes.find((item) => item.id === held[0]) : undefined;
+    if (!one || one.shape) return wrap(true);
+    if (one.layout) return setMenu(null);
+    const inside = [
+      ...pieces.filter((piece) => piece.parent === one.id && copyOf.has(copyKey("stage", piece.id))).map((piece) => ({ id: piece.id, x: at(copyKey("stage", piece.id)).x, y: at(copyKey("stage", piece.id)).y, width: widthOf(copyKey("stage", piece.id)), height: heightOf(copyKey("stage", piece.id)) })),
+      ...shapes.filter((item) => item.parent === one.id).map((item) => ({ id: `frame:${item.id}`, x: item.x, y: item.y, width: item.width, height: item.height })),
+    ].map((box) => ({ ...box, x: box.x / SCREEN_SCALE, y: box.y / SCREEN_SCALE, width: box.width / SCREEN_SCALE, height: box.height / SCREEN_SCALE }));
+    const layout: Layout = inside.length ? detectLayout(inside) : { direction: "column", gap: 0, align: "start", padding: 0 };
+    setShapes((was) => was.map((item) => (item.id === one.id ? { ...item, layout } : item)));
+    setSettle((now) => now + 1);
+    setMenu(null);
+  };
+  // Ungroup (⇧⌘G): the selected groups and frames go, and what was in them is where they were in, as it was drawn: it does not move. What is freed is selected.
+  const ungroupable = () => {
+    const now = bunchNow.current;
+    const many = now.copies.length || now.frames.length;
+    return (many ? now.frames : shapeNow.current ? [shapeNow.current] : []).filter((id) => {
+      const found = shapes.find((one) => one.id === id);
+      return !!found && !found.shape;
+    });
+  };
+  const unwrap = () => {
+    const chosen = ungroupable();
+    if (!chosen.length || viewOnly) return;
+    const gone = new Set(chosen);
+    const homeOf = new Map(shapes.filter((one) => gone.has(one.id)).map((one) => [one.id, one.parent]));
+    // The frame it is in now, past any that are going too.
+    const lift = (parent: string | undefined) => {
+      let at = parent;
+      while (at && gone.has(at)) at = homeOf.get(at);
+      return at;
+    };
+    const keys = pieces.filter((piece) => piece.parent && gone.has(piece.parent)).map((piece) => copyKey("stage", piece.id));
+    const frames = shapes.filter((one) => !gone.has(one.id) && one.parent && gone.has(one.parent)).map((one) => one.id);
+    setPieces((was) => was.map((piece) => (piece.parent && gone.has(piece.parent) ? { ...piece, parent: lift(piece.parent) } : piece)));
+    setShapes((was) => was.filter((one) => !gone.has(one.id)).map((one) => (one.parent && gone.has(one.parent) ? { ...one, parent: lift(one.parent) } : one)));
+    setMenu(null);
+    if (keys.length || frames.length) chooseMade({ loose: keys, frames });
+    else {
+      setBunch({ copies: [], frames: [] });
+      setShape(null);
+      setSelected(null);
+    }
+  };
+  // Reset instance: a component put back as it was dropped: its props, the words typed over in it, its size, how it looks. Where it is stays.
+  const instances = () => (bunchNow.current.copies.length ? bunchNow.current.copies : selectedNow.current ? [selectedNow.current] : []).filter((key) => isComponentPiece(key) && copyOf.has(key));
+  const changedInstance = (piece: Piece) =>
+    Object.keys(piece.props).length > 0 || !!piece.texts || !!piece.fixedWidth || !!piece.fixedHeight || !!piece.sizing || piece.radius !== undefined || piece.opacity !== undefined || !!piece.fill || !!piece.stroke || (!!piece.dropped && (piece.dropped.width !== piece.width || piece.dropped.height !== piece.height));
+  // Fork: this instance becomes the project's own copy of the component, an ordinary layer there is nothing to hold back from changing.
+  // The others of the same component stay as they were.
+  const forkPiece = (piece: Piece) => {
+    if (!editComponent || editComponent.busy) return;
+    const from = piece.component ?? piece.label;
+    void editComponent.fork(piece.story).then((made) => {
+      if (made) setPieces((all) => all.map((one) => (one.id === piece.id ? { ...one, fork: from, label: `${from} fork` } : one)));
+    });
+  };
+  const resetInstances = () => {
+    const keys = instances();
+    if (!keys.length || viewOnly) return;
+    setPieces((was) =>
+      was.map((piece) =>
+        keys.includes(copyKey("stage", piece.id))
+          ? { ...piece, props: {}, texts: undefined, fixedWidth: undefined, fixedHeight: undefined, sizing: undefined, radius: undefined, opacity: undefined, fill: undefined, stroke: undefined, strokeWidth: undefined, ...(piece.dropped ?? {}) }
+          : piece,
+      ),
+    );
+    setMenu(null);
+  };
   const wrapNow = useRef(wrap);
+  const unwrapNow = useRef(unwrap);
+  const autoLayoutNow = useRef(autoLayout);
   useEffect(() => {
     wrapNow.current = wrap;
+    unwrapNow.current = unwrap;
+    autoLayoutNow.current = autoLayout;
   });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2189,8 +2585,12 @@ export function FlowCanvas({
       if (event.code === "KeyG" && event.altKey && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         wrapNow.current(false);
+      } else if (event.code === "KeyG" && event.shiftKey && !event.altKey && (event.metaKey || event.ctrlKey)) {
+        // Always the canvas's: the browser would take it for "find previous".
+        event.preventDefault();
+        unwrapNow.current();
       } else if (event.code === "KeyA" && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        wrapNow.current(true);
+        autoLayoutNow.current();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -2260,6 +2660,8 @@ export function FlowCanvas({
       let patch: Partial<Area> = {};
       if (frame.layout) {
         const layout = frame.layout;
+        // A grid has no one direction, so nothing fills in it: each box keeps its own size and the grid is as big as they make it.
+        const grid = layout.direction === "grid";
         const row = layout.direction === "row";
         const pad = paddingOf(layout);
         const [mainHug, crossHug] = row ? [hugW, hugH] : [hugH, hugW];
@@ -2276,13 +2678,13 @@ export function FlowCanvas({
         const innerMain = (row ? frame.width : frame.height) / SCREEN_SCALE - padMain * 2;
         const innerCross = (row ? frame.height : frame.width) / SCREEN_SCALE - padCross * 2;
         // What fills takes what the rest leaves (shared evenly along the layout, all of it across it); where the frame hugs that side there is nothing to fill.
-        const fillsMain = items.filter((item) => !mainHug && item.fill[along] && (item.sizable === "both" || (item.sizable === "width" && along === "width")));
+        const fillsMain = items.filter((item) => !grid && !mainHug && item.fill[along] && (item.sizable === "both" || (item.sizable === "width" && along === "width")));
         const taken = items.filter((item) => !fillsMain.includes(item)).reduce((sum, item) => sum + item.box[along], 0) + layout.gap * (items.length - 1);
         const share = fillsMain.length ? Math.max(8, (innerMain - taken) / fillsMain.length) : 0;
         for (const item of items) {
           const want: { width?: number; height?: number } = {};
           if (fillsMain.includes(item)) want[along] = share;
-          if (!crossHug && item.fill[across] && (item.sizable === "both" || (item.sizable === "width" && across === "width"))) want[across] = Math.max(8, innerCross);
+          if (!grid && !crossHug && item.fill[across] && (item.sizable === "both" || (item.sizable === "width" && across === "width"))) want[across] = Math.max(8, innerCross);
           for (const side of ["width", "height"] as const) {
             const next = want[side];
             if (next === undefined || Math.abs(next - item.box[side]) <= 0.5) continue;
@@ -2419,10 +2821,41 @@ export function FlowCanvas({
   const layerRows = (): LayerRow[] => {
     const rows: LayerRow[] = [];
     const frameIds = new Set(shapes.map((one) => one.id));
-    const pieceRow = (piece: Piece, depth: number): LayerRow => {
+    // The elements of a page, from where its real content starts (`start`: -1 for the whole page), each folded until opened.
+    const nodeRows = (id: string, tree: PageTree, start: number, depth: number, pickedIx: number) => {
+      const add = (ix: number, level: number) => {
+        const kids = childrenIn(tree, ix);
+        const here = unfolded.has(`node:${id}:${tree.selector[ix]}`);
+        rows.push({ id: `${id}:${ix}`, kind: "node", name: tree.name[ix], depth: level, expandable: kids.length > 0, open: here, selected: ix === pickedIx, copy: id, ix, ...(tree.component?.[ix] ? { component: true } : {}) });
+        if (here) for (const kid of kids.slice(0, 200)) add(kid, level + 1);
+      };
+      for (const root of childrenIn(tree, start)) add(root, depth);
+    };
+    // A component's page is the stage with the component in it: the layers start inside whatever wrappers hold nothing else (as picking does), so the stage is never seen.
+    const contentStart = (tree: PageTree) => {
+      let at = -1;
+      for (let kids = childrenIn(tree, at); kids.length === 1; kids = childrenIn(tree, at)) at = kids[0];
+      return at;
+    };
+    const pieceRows = (piece: Piece, depth: number) => {
       const id = copyKey("stage", piece.id);
       const text = String(piece.props.text ?? "").replace(/\s+/g, " ").trim();
-      return { id, kind: piece.kind ?? "component", name: piece.kind === "text" ? text || "Text" : piece.label, depth, own: true, hovered: hoverLayer === id, hidden: piece.hidden, locked: piece.locked, selected: selected === id || bunch.copies.includes(id) };
+      const row: LayerRow = { id, kind: piece.kind ?? "component", name: piece.kind === "text" ? text || "Text" : piece.label, depth, own: true, hovered: hoverLayer === id, hidden: piece.hidden, locked: piece.locked, selected: selected === id || bunch.copies.includes(id), ...(piece.fork ? { fork: true } : {}), ...(isMaster(piece) ? { master: true } : {}) };
+      if (piece.kind) return void rows.push(row);
+      const tree = trees[id];
+      const pickedHere = picked?.copyId === id ? picked.part.selector : null;
+      const pickedIx = tree && pickedHere ? tree.selector.indexOf(pickedHere) : -1;
+      const open = unfolded.has(`screen:${id}`);
+      // A fork is code, and all of it is its own: its layers begin at its top element (the `<section>` of a section), not inside the wrappers that hold one thing.
+      const start = tree ? (isMaster(piece) && tree.stage !== undefined ? tree.stage : contentStart(tree)) : -1;
+      // What is picked below the component's root is what is selected, not the component; the root itself (or a wrapper above it) is the component.
+      let below = false;
+      if (tree && pickedIx >= 0) {
+        below = true;
+        for (let at = start; at >= 0; at = tree.parent[at]) if (at === pickedIx) below = false;
+      }
+      rows.push({ ...row, selected: row.selected && !below, expandable: !tree || childrenIn(tree, start).length > 0, open });
+      if (open && tree) nodeRows(id, tree, start, depth + 1, pickedIx);
     };
     // Frames, with the frames and pieces in them beneath, however deep.
     const frameRows = (frame: CanvasFrame, depth: number) => {
@@ -2432,32 +2865,30 @@ export function FlowCanvas({
       rows.push({ id: frame.id, kind: "frame", shape: frame.shape, name: frame.name, depth, own: true, hovered: hoverShape === frame.id, hidden: frame.hidden, locked: frame.locked, expandable: kids.length + inner.length > 0, open, selected: shape === frame.id || bunch.frames.includes(frame.id) });
       if (!open) return;
       for (const one of inner) frameRows(one, depth + 1);
-      for (const piece of kids) rows.push(pieceRow(piece, depth + 1));
+      for (const piece of kids) pieceRows(piece, depth + 1);
     };
-    for (const frame of [...shapes].reverse()) if (!frame.parent || !frameIds.has(frame.parent)) frameRows(frame, 0);
-    for (const piece of [...pieces].reverse()) if ((!piece.parent || !frameIds.has(piece.parent)) && copyOf.has(copyKey("stage", piece.id))) rows.push(pieceRow(piece, 0));
+    if (!isolated) for (const frame of [...shapes].reverse()) if (!frame.parent || !frameIds.has(frame.parent)) frameRows(frame, 0);
+    for (const piece of isolated ? [basePiece, ...isoPieces].filter((one): one is Piece => !!one) : [...pieces].reverse()) if ((isolated || !piece.parent || !frameIds.has(piece.parent)) && copyOf.has(copyKey("stage", piece.id))) pieceRows(piece, 0);
     for (const one of kept) {
-      if (isPiece(one.id) || !copyOf.has(one.id)) continue;
+      if (isPiece(one.id) || !copyOf.has(one.id) || isolated) continue;
       const tree = trees[one.id];
       const pickedHere = picked?.copyId === one.id ? picked.part.selector : null;
       const pickedIx = tree && pickedHere ? tree.selector.indexOf(pickedHere) : -1;
       const open = unfolded.has(`screen:${one.id}`);
       rows.push({ id: one.id, kind: "screen", name: devices.length > 1 ? `${one.screen.name} · ${one.device.name}` : one.screen.name, depth: 0, expandable: true, open, selected: (selected === one.id || bunch.copies.includes(one.id)) && pickedIx < 0, device: one.device.id });
-      const add = (ix: number, depth: number) => {
-        if (!tree) return;
-        const kids = childrenIn(tree, ix);
-        const key = `${one.id}:${ix}`;
-        const here = unfolded.has(`node:${one.id}:${tree.selector[ix]}`);
-        rows.push({ id: key, kind: "node", name: tree.name[ix], depth, expandable: kids.length > 0, open: here, selected: ix === pickedIx, copy: one.id, ix });
-        if (here) for (const kid of kids.slice(0, 200)) add(kid, depth + 1);
-      };
-      if (open && tree) for (const root of childrenIn(tree, -1)) add(root, 1);
+      if (open && tree) nodeRows(one.id, tree, -1, 1, pickedIx);
     }
     // What is inside a selected layer is tinted too, more lightly, as part of the selection.
     let inside = -1;
     for (const row of rows) {
       if (inside >= 0 && row.depth > inside) row.within = true;
       else inside = row.selected ? row.depth : -1;
+    }
+    // Everything under a component (its root row, or a component dropped on the canvas) is the component's, so it is tinted as one.
+    let held = -1;
+    for (const row of rows) {
+      if (held >= 0 && row.depth > held) row.inside = true;
+      else held = (row.kind === "component" && !row.master) || row.component ? row.depth : -1;
     }
     return rows;
   };
@@ -2467,7 +2898,7 @@ export function FlowCanvas({
   };
   // A selected component's own props (what it was drawn with, read from the page), so they can be changed from its panel.
   const [rootProps, setRootProps] = useState<{ id: string; name: string; values: Record<string, string | number | boolean> } | null>(null);
-  const propsComponent = selected && isPiece(selected) && !picked && pieceByKey(selected) && !pieceByKey(selected)!.kind ? selected : null;
+  const propsComponent = selected && isPiece(selected) && !picked && pieceByKey(selected) && !pieceByKey(selected)!.kind && !isMaster(pieceByKey(selected)) ? selected : null;
   const propsKey = JSON.stringify(pieceByKey(propsComponent ?? "")?.props ?? null);
   useEffect(() => {
     if (!propsComponent) return undefined;
@@ -2492,7 +2923,7 @@ export function FlowCanvas({
   }, [propsComponent, propsKey, pagesSeen]);
   // The layers' trees, read from each screen that is open (and again when a page loads or comes), one page at a time.
   const [trees, setTrees] = useState<Record<string, PageTree>>({});
-  const openScreens = kept.filter((one) => !isPiece(one.id) && (unfolded.has(`screen:${one.id}`) || picked?.copyId === one.id)).map((one) => one.id).join(" ");
+  const openScreens = kept.filter((one) => !pieceByKey(one.id)?.kind && (unfolded.has(`screen:${one.id}`) || picked?.copyId === one.id)).map((one) => one.id).join(" ");
   useEffect(() => {
     let stale = false;
     const timers: number[] = [];
@@ -2537,9 +2968,19 @@ export function FlowCanvas({
     const selector = row?.kind === "node" && row.copy !== undefined && row.ix !== undefined ? trees[row.copy]?.selector[row.ix] : undefined;
     const page = row?.copy ? pageFor(row.copy) : null;
     if (!row?.copy || !selector || !page) return setRowBox(null);
-    void page.boxOf(selector).then((box) => ask === rowAsk.current && setRowBox(box ? { copyId: row.copy!, box } : null));
+    void page.boxOf(selector).then((box) => ask === rowAsk.current && setRowBox(box ? { copyId: row.copy!, box: row.component || row.inside ? { ...box, component: true } : box } : null));
   };
   const selectLayer = async (row: LayerRow, shift: boolean) => {
+    if (row.kind === "node" && row.copy !== undefined && row.ix !== undefined && isComponentPiece(row.copy)) {
+      // An element inside a component instance is shown in the layers, but what is selected is the instance: its elements are not edited as a page (that would change every instance).
+      setBunch({ copies: [], frames: [] });
+      setShape(null);
+      setPickedOn(null);
+      if (pickingNow.current?.target) pickingNow.current.onPick(null, null);
+      letGoInspect.current();
+      setSelected(row.copy);
+      return;
+    }
     if (row.kind === "node" && row.copy !== undefined && row.ix !== undefined) {
       // An element of a screen: picked as a tap on it would, for the edit panel.
       const page = pageFor(row.copy);
@@ -2721,6 +3162,7 @@ export function FlowCanvas({
     const now = camera.target;
     const world = { x: (clientX - rect.left - now.x) / now.scale, y: (clientY - rect.top - now.y) / now.scale };
     const copy = copies.find((item) => {
+      if (!inIsolation(item.id)) return false;
       const spot = at(item.id);
       return world.x >= spot.x && world.x <= spot.x + widthOf(item.id) && world.y >= spot.y && world.y <= spot.y + heightOf(item.id);
     });
@@ -2743,6 +3185,8 @@ export function FlowCanvas({
   };
   // A tap on a screen selects the element under it too; one on a page's bare background lets go of what was.
   // A second tap goes a level into what is selected (`into`), or types over its words when there is no level left.
+  // A tap on a fork finds the element under it a moment later: until then the fork as a whole is neither outlined nor shown in the panel, as it would flash.
+  const [tapping, setTapping] = useState<string | null>(null);
   const pick = async (clientX: number, clientY: number, deep: boolean, into = false) => {
     const found = picking && pointIn(clientX, clientY);
     if (!picking || !found) return;
@@ -2758,6 +3202,14 @@ export function FlowCanvas({
     if (into && (picked?.part.text != null || picked?.part.segments) && (await type(clientX, clientY, picked.part.selector))) return;
     const part = await found.page.partAt(found.x, found.y, deep || !!inspect, from);
     if (into && !part) return void type(clientX, clientY);
+    // A component instance on the canvas is the instance, whatever is pointed at in it: its props are its own (the card). An edit of the page it is drawn in would be
+    // made to every instance of the component, since they are pages of the same shape.
+    if (isComponentPiece(found.copy.id)) {
+      setPickedOn(null);
+      setEchoes([]);
+      if (picking.target) picking.onPick(null, null);
+      return;
+    }
     setPickedOn(part ? { selector: part.selector, copyId: found.copy.id } : null);
     setEchoes([]);
     if (part) void echo(found.copy, part.selector, (frame) => selectorBox(frame, part.selector));
@@ -2766,10 +3218,20 @@ export function FlowCanvas({
   // A second tap on words types over them, where they are.
   // With `only`, just the words with that selector; returns whether it began typing. Where other elements are among the words, the piece of text under the point.
   const type = async (clientX: number, clientY: number, only?: string) => {
+    // Already typing: a second start (the browser's double-click comes after the two taps that already began it) must not read the words again, which by now
+    // are drawn clear while they are typed over, and give the box their colour.
+    if (typed) return true;
     const found = picking && pointIn(clientX, clientY);
     if (!found) return false;
     const part = editable(await found.page.partAt(found.x, found.y), found.x, found.y);
     if (!part || (only && part.selector !== only)) return false;
+    if (isComponentPiece(found.copy.id)) {
+      // The words of an instance are one of its props (a button's label); only those can be typed over, and it is that instance's prop that changes.
+      const prop = Object.entries(part.component?.props ?? {}).find(([, value]) => typeof value === "string" && value.trim() === (part.text ?? "").trim())?.[0];
+      // Any other words in it are kept on the instance by where they are (see `Piece.texts`); either way the change is that instance's alone.
+      setTyping({ part, copyId: found.copy.id, ...(prop ? { prop } : {}) });
+      return true;
+    }
     setTyping({ part, copyId: found.copy.id });
     return true;
   };
@@ -2779,7 +3241,7 @@ export function FlowCanvas({
     const scale = SCREEN_SCALE * view.scale;
     return (
       <Fragment key={key}>
-        <PinTarget left={corner.x} top={corner.y} width={box.width * scale} height={box.height * scale} component={component} />
+        <PinTarget left={corner.x} top={corner.y} width={box.width * scale} height={box.height * scale} component={component} fork={!!pieceByKey(copyId)?.fork} />
         {box.children?.map((child, index) => {
           const inside = onCanvas(copyId, { x: child.left, y: child.top });
           return <PinTarget key={index} dashed left={inside.x} top={inside.y} width={child.width * scale} height={child.height * scale} />;
@@ -2809,15 +3271,33 @@ export function FlowCanvas({
     }
     return undefined;
   });
-  const isComponentPiece = (id: string) => !!pieceByKey(id) && !pieceByKey(id)!.kind;
   const pieceComponent = (id: string) => {
     const piece = pieceByKey(id);
-    return piece && !piece.kind ? [piece.component ?? piece.label] : undefined;
+    return piece && !piece.kind && !isMaster(piece) ? [piece.component ?? piece.label] : undefined;
   };
-  // With ⌘ held (`deep`) a component isn't one thing: pointing at it or tapping it reaches the element under the pointer, as in Figma, without entering it first.
+  // A text, an image or a component put on the canvas is one thing: an instance, selected whole (its width and height handles, its props, its place in the layers),
+  // and moved, resized and changed on its own, whatever else of the same component is on the canvas. Its inside is reached by entering it (a double tap) or with ⌘ held (`deep`).
+  // A fork is the same: a tap selects it whole, and a double tap goes in one layer (to its top element); then a double tap goes in again, as with groups.
   const isLayer = (id: string, deep = false) => {
     const piece = pieceByKey(id);
     return !!piece && (!!piece.kind || (enteredNow.current !== id && !deep));
+  };
+  // Goes into a fork one layer: its top element (what its own layers begin with) is picked, and what is pressed inside it is picked from here on.
+  const enterFork = async (id: string) => {
+    const page = pageFor(id);
+    const part = await page?.partOf("[data-stage] > :first-child");
+    if (!page || !part) return;
+    const frame = frames.current.get(id) ?? null;
+    enteredNow.current = id;
+    setEntered(id);
+    setPickedOn({ selector: part.selector, copyId: id });
+    pickingNow.current?.onPick(frame, part, frame ? null : page.scope);
+  };
+  const pickHolding = async (id: string, picking: Promise<void>) => {
+    // Nothing is found under a tap on a fork that is selected whole: there is nothing to hold the panel back for.
+    if (!isMaster(pieceByKey(id)) || isLayer(id)) return picking;
+    setTapping(id);
+    await picking.finally(() => setTapping(null));
   };
   const point = (at: { x: number; y: number } | null, deep = false) => {
     pointer.current = at;
@@ -2841,7 +3321,8 @@ export function FlowCanvas({
       void Promise.all([found.page.boxAt(found.x, found.y, { deep, groups: !placing, from: picked && !deep && picked.copyId === found.copy.id ? { selector: picked.part.selector } : undefined }), wholes.length && found.frame ? handoffSourceAt(found.frame, found.x, found.y, wholes) : null]).then(([box, whole]) => {
         // Gone from the canvas meanwhile. Otherwise it is shown even if the pointer has moved on (a page on another address answers a moment later, and dropping every late answer would leave the outline behind until the pointer stopped), and asked again.
         if (!pointer.current) return;
-        const shown = whole ? { ...whole.box, component: true } : box;
+        const master = pieceByKey(found.copy.id);
+        const shown = whole ? { ...whole.box, component: true } : box && isComponentPiece(found.copy.id) ? { ...box, component: true } : box ?? (isMaster(master) ? { left: 0, top: 0, width: master!.width, height: master!.height } : null);
         setTarget(shown ? { copyId: found.copy.id, box: shown } : null);
         if (pointer.current !== now) repoint.current(pointer.current, reaching.current);
       });
@@ -2929,10 +3410,111 @@ export function FlowCanvas({
   const asCopies = copiesChosen && !needsLive;
   // What the card at the top right has properties for: a text, image or component that is selected (and nothing of it picked), a group, or a frame.
   // Worked out here rather than left to `:has(:empty)` in CSS, which Safari and Chrome don't always look at again when a panel arrives a level down.
-  const selectedPiece = selected && isPiece(selected) && !picking?.target && !framing && !interact ? pieces.find((one) => copyKey("stage", one.id) === selected) : undefined;
+  const selectedPiece = selected && isPiece(selected) && !viewOnly && tapping !== selected && !picking?.target && !framing && !interact ? pieces.find((one) => copyKey("stage", one.id) === selected) : undefined;
   const grouped = !viewOnly && !framing && bunch.copies.length + bunch.frames.length > 1;
+  // Several frames and layers selected: each says what it has, in the pixels the single panels show, and how a change is made to it; the panel combines them. Frames keep
+  // their values in canvas units and layers in pixels, a layer's place is from its frame's corner, and a text is filled with the colour it is drawn in. A selection that has
+  // a prototype's screen in it is only aligned, as before.
+  const multi = (() => {
+    if (!grouped || bunch.copies.some((key) => !isPiece(key))) return null;
+    const toPx = 1 / SCREEN_SCALE;
+    type Target = MultiTarget & { apply: (patch: MultiPatch) => void };
+    const ofFrames = bunch.frames.flatMap((id): Target[] => {
+      const found = shapes.find((one) => one.id === id);
+      if (!found) return [];
+      const layers = fillsOf(found);
+      const rounds = !found.shape || found.shape === "rectangle";
+      return [
+        {
+          x: found.x * toPx,
+          y: found.y * toPx,
+          width: found.width * toPx,
+          height: found.height * toPx,
+          radius: rounds ? (found.radius ?? 0) * toPx : undefined,
+          opacity: found.opacity ?? 1,
+          fill: !layers.length ? undefined : layers.length === 1 && layers[0].kind === "solid" && !layers[0].hidden ? layers[0].color : null,
+          stroke: found.stroke,
+          strokeWidth: (found.strokeWidth ?? SCREEN_SCALE) * toPx,
+          apply: (patch) => {
+            const change: Partial<CanvasFrame> = {};
+            if (patch.x !== undefined) change.x = patch.x / toPx;
+            if (patch.y !== undefined) change.y = patch.y / toPx;
+            if (patch.width !== undefined) {
+              change.width = patch.width / toPx;
+              change.sizing = { ...found.sizing, width: "fixed" };
+            }
+            if (patch.height !== undefined) {
+              change.height = patch.height / toPx;
+              change.sizing = { ...(change.sizing ?? found.sizing), height: "fixed" };
+            }
+            if (patch.radius !== undefined && rounds) change.radius = Math.max(0, patch.radius) / toPx;
+            if (patch.opacity !== undefined) change.opacity = Math.min(1, Math.max(0, patch.opacity));
+            if (patch.fill !== undefined) change.fills = patch.fill === null ? [] : [{ kind: "solid", color: patch.fill }];
+            if (patch.stroke) {
+              change.stroke = patch.stroke.color;
+              change.strokeWidth = patch.stroke.width === undefined ? undefined : patch.stroke.width / toPx;
+            }
+            if (Object.keys(change).length) updateFrame(found.id, change);
+          },
+        },
+      ];
+    });
+    const ofPieces = bunch.copies.flatMap((key): Target[] => {
+      const piece = pieceByKey(key);
+      if (!piece || !copyOf.has(key)) return [];
+      const home = shapes.find((one) => one.id === piece.parent) ?? { x: 0, y: 0 };
+      const spot = at(key);
+      return [
+        {
+          x: (spot.x - home.x) * toPx,
+          y: (spot.y - home.y) * toPx,
+          width: piece.width,
+          height: piece.height,
+          radius: (piece.radius ?? 0) * toPx,
+          opacity: piece.opacity ?? 1,
+          fill: piece.kind === "text" ? String(piece.props.color ?? "#111111") : piece.fill,
+          stroke: piece.stroke,
+          strokeWidth: (piece.strokeWidth ?? SCREEN_SCALE) * toPx,
+          apply: (patch) => {
+            if (patch.x !== undefined || patch.y !== undefined) {
+              const [nx, ny] = [patch.x === undefined ? spot.x : home.x + patch.x / toPx, patch.y === undefined ? spot.y : home.y + patch.y / toPx];
+              setOffsets((now) => ({ ...now, [key]: { x: (now[key]?.x ?? 0) + nx - spot.x, y: (now[key]?.y ?? 0) + ny - spot.y } }));
+            }
+            if (patch.width !== undefined || patch.height !== undefined) {
+              // A text is as tall as its words: only its width is given.
+              const only = patch.height === undefined || piece.kind === "text" ? "width" : patch.width === undefined ? "height" : undefined;
+              sizePiece(key, patch.width ?? piece.width, piece.kind === "text" ? piece.height : (patch.height ?? piece.height), only);
+            }
+            const look: Partial<Piece> = {};
+            if (patch.radius !== undefined) look.radius = Math.max(0, patch.radius) / toPx;
+            if (patch.opacity !== undefined) look.opacity = Math.min(1, Math.max(0, patch.opacity));
+            if (patch.fill !== undefined && piece.kind !== "text") look.fill = patch.fill === null ? undefined : patch.fill;
+            if (patch.stroke) {
+              look.stroke = patch.stroke.color;
+              look.strokeWidth = patch.stroke.width === undefined ? undefined : patch.stroke.width / toPx;
+            }
+            if (Object.keys(look).length) setPieces((all) => all.map((one) => (copyKey("stage", one.id) === key ? { ...one, ...look } : one)));
+            if (patch.fill !== undefined && piece.kind === "text") styleText(key, { color: patch.fill ?? "#111111" });
+          },
+        },
+      ];
+    });
+    return [...ofFrames, ...ofPieces];
+  })();
   const frameSelected = !framing && shapes.some((one) => one.id === shape);
   const hasProperties = !!selectedPiece || grouped || frameSelected;
+  // The card at the top right is as wide as the person has dragged it (its left edge), between its least and most.
+  const [cardWidth, setCardWidth] = useState(PROPERTIES_MIN);
+  useEffect(() => {
+    try {
+      const kept = Number(window.localStorage.getItem(PROPERTIES_KEY));
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the width kept in this browser can only be read once the page is there
+      if (kept) setCardWidth(Math.min(PROPERTIES_MAX, Math.max(PROPERTIES_MIN, kept)));
+    } catch {
+      // Nothing kept: it opens at its least.
+    }
+  }, []);
+  const resizeCard = useRef<{ x: number; width: number } | null>(null);
 
   return (
     <div
@@ -2987,9 +3569,27 @@ export function FlowCanvas({
         const dy = event.clientY - start.y;
         if (!start.moved && Math.hypot(dx, dy) < 4) return;
         start.moved = true;
+        if (start.pull) {
+          // The outline is the element, held where it was pressed: the pointer keeps the same place on it as it moves.
+          const picked = pullPicked.current;
+          const rect = box.current?.getBoundingClientRect();
+          if (picked && rect && start.pull) {
+            const origin = onCanvas(start.pull.copyId, { x: picked.left, y: picked.top });
+            const [wide, tall] = [picked.width * SCREEN_SCALE * camera.target.scale, picked.height * SCREEN_SCALE * camera.target.scale];
+            const held = { x: start.x - (rect.left + origin.x), y: start.y - (rect.top + origin.y) };
+            const next = { x: event.clientX - held.x, y: event.clientY - held.y, grip: { x: Math.min(1, Math.max(0, held.x / wide)), y: Math.min(1, Math.max(0, held.y / tall)) } };
+            ghostAt.current = next;
+            setPulling({ ...next, width: wide, height: tall, busy: false });
+          } else {
+            ghostAt.current = null;
+            setPulling({ x: event.clientX - 60, y: event.clientY - 36, width: 120, height: 72, grip: { x: 0.5, y: 0.5 }, busy: false });
+          }
+          return;
+        }
         if (start.dup) {
           leaveCopy(start.dup);
           start.dup = undefined;
+          start.copied = true;
         }
         const { screen, origin } = start;
         if (screen && origin) {
@@ -3004,14 +3604,14 @@ export function FlowCanvas({
           if (start.group) {
             const { rect, skip } = groupRect(start.group, x, y);
             const nudge = lineUp(rect, skip, free);
-            moveGroup(start.group, x + nudge.dx, y + nudge.dy);
+            moveGroup(start.group, whole(x + nudge.dx), whole(y + nudge.dy));
           } else {
             const rest = placed.get(screen) ?? { x: 0, y: 0 };
             const nudge = lineUp({ id: screen, x: rest.x + origin.x + x, y: rest.y + LABEL_HEIGHT + origin.y + y, width: widthOf(screen), height: heightOf(screen) }, new Set([screen]), free);
             setSelected(screen);
             if (isPiece(screen)) aimAt(frameAt(rest.x + origin.x + x + nudge.dx + widthOf(screen) / 2, rest.y + LABEL_HEIGHT + origin.y + y + nudge.dy + heightOf(screen) / 2));
             holdLayout.current = true;
-            setOffsets((now) => ({ ...now, [screen]: { x: origin.x + x + nudge.dx, y: origin.y + y + nudge.dy } }));
+            setOffsets((now) => ({ ...now, [screen]: { x: whole(rest.x + origin.x + x + nudge.dx) - rest.x, y: whole(rest.y + LABEL_HEIGHT + origin.y + y + nudge.dy) - rest.y - LABEL_HEIGHT } }));
           }
           return;
         }
@@ -3033,6 +3633,13 @@ export function FlowCanvas({
       onPointerUp={(event) => {
         const done = drag.current;
         clearGuides();
+        if (done?.pull) {
+          window.setTimeout(() => (drag.current = null), 0);
+          if (done.moved) void finishPull(event.clientX, event.clientY);
+          else setPulling(null);
+          return;
+        }
+        if (done?.copied && done.screen && done.origin) noteDuplicate((offsets[done.screen]?.x ?? 0) - done.origin.x, (offsets[done.screen]?.y ?? 0) - done.origin.y);
         // Let go of a pan made with Space: not a tap, so nothing is selected or let go of.
         if (done?.spaced) {
           window.setTimeout(() => (drag.current = null), 0);
@@ -3108,7 +3715,7 @@ export function FlowCanvas({
       className={`absolute inset-0 touch-none overflow-hidden ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : placing ? "[&_*]:!cursor-[inherit]" : ""}`}
     >
       <div ref={worldEl} className="absolute left-0 top-0 origin-top-left" style={{ visibility: size ? undefined : "hidden" }}>
-        {shapes.filter((one) => one.shape !== "sticky").map((one) => (
+        {(isolated ? [] : shapes.filter((one) => one.shape !== "sticky")).map((one) => (
           <div
             key={one.id}
             onPointerDown={(event) => frameDown(event, one)}
@@ -3117,7 +3724,7 @@ export function FlowCanvas({
             onPointerUp={frameUp}
             onPointerEnter={() => setHoverShape(one.id)}
             onPointerLeave={() => setHoverShape((now) => (now === one.id ? null : now))}
-            style={{ left: one.x, top: one.y, width: one.width, height: one.height, clipPath: clipFor(one.parent, one), background: drawnAsLines(one.shape) ? "transparent" : backgroundOf(one), borderRadius: one.shape === "ellipse" ? "50%" : one.radius, display: frameState(one.id, "hidden") ? "none" : undefined, pointerEvents: frameState(one.id, "locked") ? "none" : undefined, boxShadow: one.shape === "sticky" ? "var(--elev-floating)" : one.stroke ? `inset 0 0 0 ${one.strokeWidth ?? 1}px ${one.stroke}` : undefined, outline: dropInto === one.id ? `${3 / view.scale}px solid var(--selection)` : shape === one.id || bunch.frames.includes(one.id) ? `${2 / view.scale}px solid var(--selection)` : hoverShape === one.id ? `${1 / view.scale}px solid var(--selection)` : undefined, outlineOffset: 0, transition: popping === one.id ? "width var(--dur-fast) var(--curve-spatial)" : undefined }}
+            style={{ left: one.x, top: one.y, width: one.width, height: one.height, opacity: one.opacity, clipPath: clipFor(one.parent, one), background: drawnAsLines(one.shape) ? "transparent" : backgroundOf(one), borderRadius: one.shape === "ellipse" ? "50%" : one.radius, display: frameState(one.id, "hidden") ? "none" : undefined, pointerEvents: frameState(one.id, "locked") ? "none" : undefined, boxShadow: one.shape === "sticky" ? "var(--elev-floating)" : one.stroke ? `inset 0 0 0 ${one.strokeWidth ?? 1}px ${one.stroke}` : undefined, outline: dropInto === one.id ? `${3 / view.scale}px solid var(--selection)` : shape === one.id || bunch.frames.includes(one.id) ? `${2 / view.scale}px solid var(--selection)` : hoverShape === one.id ? `${1 / view.scale}px solid var(--selection)` : undefined, outlineOffset: 0, transition: popping === one.id ? "width var(--dur-fast) var(--curve-spatial)" : undefined }}
             className="absolute cursor-default"
           >
             {drawnAsLines(one.shape) ? (
@@ -3138,9 +3745,16 @@ export function FlowCanvas({
             ) : null}
           </div>
         ))}
+        {standIn ? (
+          <div aria-hidden className="pointer-events-none absolute grid place-items-center rounded-[var(--r-device)] border border-border bg-surface-inset pulse-soft" style={{ left: standIn.x, top: standIn.y, width: standIn.width, height: standIn.height }}>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" className="spin size-6 text-foreground-subtle" style={{ scale: 1 / view.scale }}>
+              <path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5" />
+            </svg>
+          </div>
+        ) : null}
         {size ? kept.map(({ id, screen, device: on, index }) => {
           // Its device is on; otherwise it is only being kept.
-          const shown = copyOf.has(id);
+          const shown = copyOf.has(id) && inIsolation(id);
           const spot = shown ? at(id) : { x: 0, y: 0 };
           return (
             <Screen
@@ -3177,21 +3791,22 @@ export function FlowCanvas({
                 const now = performance.now();
                 if (lastTap.current?.id === id && now - lastTap.current.at < DOUBLE_TAP_MS) {
                   lastTap.current = null;
-                  if (pieceByKey(id) && !pieceByKey(id)!.kind && enteredNow.current !== id) {
-                    // Entered: the element under the pointer, at the bottom, is what it picks.
-                    enteredNow.current = id;
-                    setEntered(id);
-                    void pick(event.clientX, event.clientY, true);
-                  } else void pick(event.clientX, event.clientY, event.metaKey || event.ctrlKey, true);
+                  if (isComponentPiece(id)) void type(event.clientX, event.clientY);
+                  else if (isMaster(pieceByKey(id)) && enteredNow.current !== id) void enterFork(id);
+                  else void pickHolding(id, pick(event.clientX, event.clientY, event.metaKey || event.ctrlKey, true));
                 } else {
                   lastTap.current = { id, at: now };
-                  void pick(event.clientX, event.clientY, event.metaKey || event.ctrlKey);
+                  void pickHolding(id, pick(event.clientX, event.clientY, event.metaKey || event.ctrlKey));
                   void inspectAt(event.clientX, event.clientY);
                 }
               }}
               aria-label={devices.length > 1 ? `${screen.name}, ${on.name}` : screen.name}
               aria-pressed={selected === id}
-              onDoubleClick={() => pieces.find((piece) => copyKey("stage", piece.id) === id)?.kind === "text" && !viewOnly && setWriting(id)}
+              onDoubleClick={(event: React.MouseEvent) => {
+                if (pieces.find((piece) => copyKey("stage", piece.id) === id)?.kind === "text" && !viewOnly) setWriting(id);
+                // A component's words are typed over on the browser's own double-click, which keeps to the speed set in the system; the quicker two taps above are for touch.
+                else if (isComponentPiece(id) && !viewOnly) void type(event.clientX, event.clientY);
+              }}
               style={{
                 display: shown ? undefined : "none",
                 left: spot.x,
@@ -3199,17 +3814,19 @@ export function FlowCanvas({
                 width: widthOf(id),
                 height: heightOf(id),
                 // The frame's outline stays two pixels wide however far in or out you are, and is only for the frame itself: an element picked on it is outlined instead.
-                outline: (selected === id || bunch.copies.includes(id)) && picked?.copyId !== id ? `${2 / view.scale}px solid ${isComponentPiece(id) ? "var(--component)" : "var(--selection)"}` : hoverLayer === id ? `${1 / view.scale}px solid ${isComponentPiece(id) ? "var(--component)" : "var(--selection)"}` : undefined,
+                outline: (selected === id || bunch.copies.includes(id)) && picked?.copyId !== id && tapping !== id ? `${2 / view.scale}px solid ${pieceTone(id)}` : hoverLayer === id && pieceByKey(id)?.kind !== "text" ? `${1 / view.scale}px solid ${pieceTone(id)}` : undefined,
                 outlineOffset: isPiece(id) ? 0 : 3 / view.scale,
                 "--i": Math.min(index, 8),
                 // Out of sight until the whole canvas arrives (a device switched on later shows its placeholder straight away); and while it is opened, since that is it.
-                opacity: revealed ? undefined : 0,
+                opacity: revealed ? pieceByKey(id)?.opacity : 0,
+                // How the layer looks: a colour behind it, corners (which cut it off, so what is in it follows them), drawn on its own box.
+                ...(pieceByKey(id) ? { background: pieceByKey(id)!.fill, borderRadius: pieceByKey(id)!.radius || undefined, overflow: pieceByKey(id)!.radius ? "hidden" : undefined } : {}),
                 // The text being typed is the field over it: the drawn one is out of sight meanwhile, or both would show.
                 visibility: (interact?.id === id && loadedId === screen.id) || writing === id || stateOfKey(id, "hidden") ? "hidden" : undefined,
                 pointerEvents: stateOfKey(id, "hidden") || stateOfKey(id, "locked") ? "none" : undefined,
                 clipPath: clipOf(id, spot),
               } as React.CSSProperties}
-              className={`absolute block text-left ${isPiece(id) ? "[&>span[aria-hidden]]:border-0 [&>span[aria-hidden]]:bg-transparent" : "overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface"} ${opening.has(id) ? "stagger-in" : ""} ${arrived(id) ? "" : "pointer-events-none"}`}
+              className={`absolute block text-left outline-none ${isPiece(id) ? "[&>span[aria-hidden]]:border-0 [&>span[aria-hidden]]:bg-transparent" : "overflow-hidden rounded-[calc(var(--r-device)*0.5)] bg-surface"} ${opening.has(id) ? "stagger-in" : ""} ${arrived(id) ? "" : "pointer-events-none"}`}
             >
               <ScreenSurface
                 components={pieceComponent(id)}
@@ -3234,6 +3851,8 @@ export function FlowCanvas({
                   if (isPiece(id)) {
                     applyFixed(id);
                     measurePiece(id);
+                    // A page on another address says its size when asked.
+                    frames.current.get(id)?.contentWindow?.postMessage({ type: "studio:stage-size:ask" }, "*");
                   }
                   // Edits made before this page was there (its device switched on since) show on it too.
                   if (pickingNow.current?.busy) pickingNow.current.onPage();
@@ -3252,6 +3871,12 @@ export function FlowCanvas({
               />
               {fold && pageHeight(id) > on.height ? (
                 <span aria-hidden style={{ top: on.height * SCREEN_SCALE }} className="pointer-events-none absolute inset-x-0 bottom-0 bg-surface opacity-50" />
+              ) : null}
+              {/* The line round a layer, over it and never in its way. A div: a placed layer's wrapper makes its direct spans clear. */}
+              {pieceByKey(id)?.stroke ? <div aria-hidden className="pointer-events-none absolute inset-0" style={{ border: `${pieceByKey(id)!.strokeWidth ?? SCREEN_SCALE}px solid ${pieceByKey(id)!.stroke}`, borderRadius: pieceByKey(id)!.radius || undefined }} /> : null}
+              {/* A text pointed at (and not selected) is marked by a line under it, at the baseline of its last line, not a box: the box is for when it is selected. A div, not a span: a placed layer's wrapper makes its direct spans clear. */}
+              {hoverLayer === id && pieceByKey(id)?.kind === "text" && selected !== id && !bunch.copies.includes(id) ? (
+                <div aria-hidden className="pointer-events-none absolute inset-x-0 bg-[var(--selection)]" style={{ top: heightOf(id) - (Number(pieceByKey(id)?.props.size) || 24) * 0.2 * SCREEN_SCALE, height: 1 / view.scale }} />
               ) : null}
               {/* A layer of the canvas's own over the page, so a swipe lands on the canvas and never on something that scrolls inside the screen, whatever address the page is on. */}
               {/* Not over the screen that is being used: that one takes the pointer itself. */}
@@ -3279,11 +3904,11 @@ export function FlowCanvas({
               }
             }}
             onPointerDown={(event) => event.stopPropagation()}
-            style={{ left: at(writing).x, top: at(writing).y, fontSize: Number(pieceByKey(writing)?.props.size) || 24, fontWeight: Number(pieceByKey(writing)?.props.weight) || 400, color: String(pieceByKey(writing)?.props.color ?? "#111111"), textAlign: (pieceByKey(writing)?.props.align as React.CSSProperties["textAlign"]) ?? "left", lineHeight: 1.3, transform: `scale(${SCREEN_SCALE})`, transformOrigin: "top left", outline: `${2 / view.scale / SCREEN_SCALE}px solid var(--selection)`, borderRadius: 0 } as React.CSSProperties}
+            style={{ left: at(writing).x, top: at(writing).y, fontSize: Number(pieceByKey(writing)?.props.size) || 24, fontWeight: Number(pieceByKey(writing)?.props.weight) || 400, color: String(pieceByKey(writing)?.props.color ?? "#111111"), textAlign: (pieceByKey(writing)?.props.align as React.CSSProperties["textAlign"]) ?? "left", fontFamily: pieceByKey(writing)?.props.family === "diatype" ? "var(--font-diatype), \"ABC Diatype\", system-ui, sans-serif" : undefined, lineHeight: (Number(pieceByKey(writing)?.props.lineHeight) || 130) / 100, letterSpacing: Number(pieceByKey(writing)?.props.letterSpacing) ? `${Number(pieceByKey(writing)?.props.letterSpacing) / 100}em` : undefined, transform: `scale(${SCREEN_SCALE})`, transformOrigin: "top left", outline: `${2 / view.scale / SCREEN_SCALE}px solid var(--selection)`, borderRadius: 0 } as React.CSSProperties}
             className="absolute m-0 box-content block resize-none overflow-hidden whitespace-pre border-0 bg-transparent p-0 font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] font-normal tracking-normal text-[#111]"
           />
         ) : null}
-        {size && sheet && withSheet ? <ComponentsFrame marks={sheet.marks} pages={Object.fromEntries(flow.screens.map((screen) => [screen.id, `${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`]))} devices={devices} scale={SCREEN_SCALE} onSize={setSheetSize} left={flowWidth + GAP.x} /> : null}
+        {size && sheet && withSheet && !isolated ? <ComponentsFrame marks={sheet.marks} pages={Object.fromEntries(flow.screens.map((screen) => [screen.id, `${withParams(base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`]))} devices={devices} scale={SCREEN_SCALE} onSize={setSheetSize} left={flowWidth + GAP.x} /> : null}
       </div>
 
       {/*
@@ -3325,6 +3950,28 @@ export function FlowCanvas({
         </div>
       ) : null}
 
+      {/* Isolated: says so, and is the way out. */}
+      {isolated ? (
+        <button
+          type="button"
+          onClick={leaveIsolation}
+          className="pointer-events-auto fixed left-1/2 top-16 z-[var(--z-raised)] flex -translate-x-1/2 items-center gap-2 rounded-[var(--r-full)] border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground shadow-floating transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover"
+        >
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-[var(--fork)]" />
+          {basePiece?.label ?? "Fork"} on its own
+          <span className="text-foreground-muted">Esc</span>
+        </button>
+      ) : null}
+      {/* An element being pulled out: its outline follows the pointer, and once it is let go it pulses where it will be while it is taken out. */}
+      {pulling ? (
+        <span aria-hidden style={{ left: pulling.x, top: pulling.y, width: pulling.width, height: pulling.height }} className={`pointer-events-none fixed z-[var(--z-raised)] ${pulling.busy ? "pulse-soft" : ""}`}>
+          {/* Lifted it grows round where it is held; let go of, it is put down, and the piece takes its place once it is made. */}
+          <span
+            style={{ transformOrigin: `${pulling.grip.x * 100}% ${pulling.grip.y * 100}%` }}
+            className={`absolute inset-0 rounded-[var(--r-xs)] border-2 border-dashed border-[var(--fork)] bg-[var(--fork-muted)] shadow-floating ${pulling.busy ? "pull-drop" : "pull-lift"}`}
+          />
+        </span>
+      ) : null}
       {/* While the pages load: a quiet loader in the middle, which gives way as they arrive. */}
       <div
         aria-live="polite"
@@ -3359,7 +4006,7 @@ export function FlowCanvas({
                 <path d="M1 1.5 9 5 1 8.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </marker>
             </defs>
-            {arrows.map((arrow) => (
+            {(isolated ? [] : arrows).map((arrow) => (
               <path
                 key={arrow.key}
                 d={arrow.path}
@@ -3372,7 +4019,7 @@ export function FlowCanvas({
             ))}
           </svg>
 
-          {arrows.map((arrow) =>
+          {(isolated ? [] : arrows).map((arrow) =>
             arrow.label ? (
               <span
                 key={`${arrow.key}-label`}
@@ -3422,7 +4069,7 @@ export function FlowCanvas({
               </Fragment>
             );
           })}
-          {shapes.map((one) => {
+          {(isolated ? [] : shapes).map((one) => {
             // Only a top-level frame is named on the canvas; what is in one is named in the layers.
             // A sticky note isn't named: it says what it says, and who by.
             if (frameState(one.id, "hidden") || one.parent || one.shape === "sticky") return null;
@@ -3460,6 +4107,9 @@ export function FlowCanvas({
                 onPointerDown={(event) => frameDown(event, one)}
                 onPointerMove={(event) => frameMove(event, one)}
                 onPointerUp={frameUp}
+                // Pointing at the name is pointing at the frame: it is outlined as it is when its own body is pointed at.
+                onPointerEnter={() => setHoverShape(one.id)}
+                onPointerLeave={() => setHoverShape((now) => (now === one.id ? null : now))}
                 onDoubleClick={() => !viewOnly && !one.locked && setRenaming(one.id)}
                 style={{ left: spot.x, top: spot.y - 22, maxWidth: Math.max(60, one.width * view.scale) }}
                 className={`absolute select-none truncate text-xs font-medium ${placing || framing || one.locked ? "pointer-events-none" : "pointer-events-auto cursor-default"} ${shape === one.id || bunch.frames.includes(one.id) ? "text-foreground" : "text-foreground-muted"}`}
@@ -3485,12 +4135,79 @@ export function FlowCanvas({
                     : sized.kind
                       ? [filling("width") ? "fill" : "fixed", filling("height") ? "fill" : "fixed"]
                       : [filling("width") ? "fill" : sized.fixedWidth ? "fixed" : "hug", filling("height") ? "fill" : sized.fixedHeight ? "fixed" : "hug"];
-                return handlesFor(selected!, true, area, sized.kind === "text", sized.kind === "text" ? () => fitWords(selected!) : !sized.kind ? (handle) => hugComponent(selected!, handle) : undefined, sizeLabel(area, modes), sized.kind ? "var(--selection)" : "var(--component)");
+                return handlesFor(selected!, true, area, sized.kind === "text", sized.kind === "text" ? () => fitWords(selected!) : !sized.kind ? (handle) => hugComponent(selected!, handle) : undefined, sizeLabel(area, modes), sized.kind ? "var(--selection)" : sized.fork ? "var(--fork)" : "var(--component)");
               })()
             : null}
+          {/* A component, or the master of a fork, wears a mark where a frame has its name: filled, in violet or orange. Its instances don't, which is how the main is told. */}
+          {copies.map(({ id }) => {
+            const piece = pieceByKey(id);
+            if (!revealed || !piece || piece.kind || piece.hidden || !inIsolation(id)) return null;
+            const main = !piece.instance;
+            const temporary = id.includes("~");
+            const spot = toScreen(at(id).x, at(id).y);
+            // Sixteen at most, so zooming in never makes it bigger; it follows the zoom out to ten, where it can still be read. The glyph is half of it.
+            const size = Math.min(16, Math.max(10, 16 * view.scale));
+            return (
+              <Fragment key={`${id}-mark`}>
+                {main ? (
+                  <span
+                    role="img"
+                    aria-label={piece.fork ? "Fork" : "Component"}
+                    style={{ left: spot.x, top: spot.y - 6 - size, width: size, height: size }}
+                    className={`pointer-events-none absolute grid place-items-center rounded-[var(--r-xs)] text-[var(--mark-foreground)] ${piece.fork ? "bg-[var(--fork)]" : "bg-[var(--component)]"}`}
+                  >
+                    <span style={{ width: Math.round(size / 2), height: Math.round(size / 2) }} className="grid [&>svg]:size-full">
+                      <ComponentIcon />
+                    </span>
+                  </span>
+                ) : null}
+                {/* Isolated, each width says which it is. */}
+                {isolated ? (
+                  <span style={{ left: spot.x + (main ? size + 4 : 0) + (piece.fork && !temporary ? 2 * (size + 4) : 0), top: spot.y - 6 - size, height: size }} className="pointer-events-none absolute flex items-center text-xs tabular-nums text-foreground-muted">
+                    {piece.width}
+                  </span>
+                ) : null}
+                {/* A fork runs: this lets it be used, to open an accordion or press a tab, and then let go of to edit what that shows. Its own, so nothing else on the canvas stops being editable. */}
+                {piece.fork && !temporary ? (
+                  <button
+                    type="button"
+                    aria-label={usingId === id ? "Stop interacting" : "Interact"}
+                    aria-pressed={usingId === id}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => {
+                      setSelected(id);
+                      setUsing(usingId === id ? null : id);
+                    }}
+                    style={{ left: spot.x + (main ? size + 4 : 0), top: spot.y - 6 - size, width: size, height: size }}
+                    className={`pointer-events-auto absolute grid place-items-center rounded-[var(--r-xs)] border border-[var(--fork)] transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${usingId === id ? "bg-[var(--fork)] text-[var(--mark-foreground)]" : "text-[var(--fork)] hover:bg-[var(--fork-muted)]"}`}
+                  >
+                    <span style={{ width: Math.round(size / 2), height: Math.round(size / 2) }} className="grid [&>svg]:size-full">
+                      {usingId === id ? <StopIcon /> : <PlayIcon />}
+                    </span>
+                  </button>
+                ) : null}
+                {/* Isolate: this one on its own, at every width it is built for. */}
+                {piece.fork && !temporary ? (
+                  <button
+                    type="button"
+                    aria-label={isolated ? "Leave isolation" : "Isolate"}
+                    aria-pressed={!!isolated}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => (isolated ? leaveIsolation() : enterIsolation(id))}
+                    style={{ left: spot.x + (main ? size + 4 : 0) + size + 4, top: spot.y - 6 - size, width: size, height: size }}
+                    className={`pointer-events-auto absolute grid place-items-center rounded-[var(--r-xs)] border border-[var(--fork)] transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${isolated ? "bg-[var(--fork)] text-[var(--mark-foreground)]" : "text-[var(--fork)] hover:bg-[var(--fork-muted)]"}`}
+                  >
+                    <span style={{ width: Math.round(size / 2), height: Math.round(size / 2) }} className="grid [&>svg]:size-full">
+                      <IsolateIcon />
+                    </span>
+                  </button>
+                ) : null}
+              </Fragment>
+            );
+          })}
           {copies.map(({ id, screen, device: on }) => {
             // A placeholder has its name too.
-            if (!revealed || isPiece(id)) return null;
+            if (!revealed || isPiece(id) || isolated) return null;
             const spot = toScreen(at(id).x, at(id).y);
             // The name is a handle too: pressed, it selects its screen and moves it.
             return (
@@ -3498,6 +4215,9 @@ export function FlowCanvas({
                 key={`${id}-name`}
                 data-screen-name
                 onPointerDown={(event) => grab(event, id)}
+                // Pointing at the name is pointing at the screen: it is outlined as it is when its row in the layers is pointed at.
+                onPointerEnter={(event) => !event.buttons && setHoverLayer(id)}
+                onPointerLeave={() => setHoverLayer((now) => (now === id ? null : now))}
                 style={{ left: spot.x, top: spot.y - 22, maxWidth: Math.max(60, widthOf(id) * view.scale) }}
                 className={`absolute flex select-none items-center gap-1.5 text-xs font-medium ${placing ? "pointer-events-none" : "pointer-events-auto cursor-grab"} ${selected === id ? "text-foreground" : "text-foreground-muted"}`}
               >
@@ -3607,8 +4327,8 @@ export function FlowCanvas({
       {/* Where the version can be edited: the element under the pointer, and the one selected, marked the same way. */}
       {size && selecting ? (
         <div className="absolute inset-0">
-          {picked && !writing ? outline("picked", picked.copyId, picked.part.box, !!(picked.part.component || picked.part.inside)) : null}
-          {picked ? echoes.filter((item) => item.key === picked.part.selector && copyOf.has(item.copyId)).map((item) => outline(`echo-${item.copyId}`, item.copyId, item.box, !!(picked.part.component || picked.part.inside))) : null}
+          {picked && !writing ? outline("picked", picked.copyId, picked.part.box, !!(picked.part.component || picked.part.inside || isComponentPiece(picked.copyId))) : null}
+          {picked ? echoes.filter((item) => item.key === picked.part.selector && copyOf.has(item.copyId)).map((item) => outline(`echo-${item.copyId}`, item.copyId, item.box, !!(picked.part.component || picked.part.inside || isComponentPiece(picked.copyId)))) : null}
           {rowBox && !writing ? outline("row", rowBox.copyId, rowBox.box, rowBox.box.component) : null}
           {target && !writing ? outline("target", target.copyId, target.box, target.box.component) : null}
           {typing
@@ -3627,10 +4347,15 @@ export function FlowCanvas({
                     width={box.width * scale}
                     height={box.height * scale}
                     scale={scale}
-                    onLive={(text) => picking?.onText(typing.part, text)}
+                    // An instance's prop changes when the words are let go of, not at each letter: it draws the page again, and that would take the box being typed in with it.
+                    onLive={(text) => (typing.prop || isComponentPiece(typing.copyId) ? undefined : picking?.onText(typing.part, text))}
                     onDone={(text) => {
                       setTyping(null);
-                      if (text !== null) picking?.onText(typing.part, text);
+                      if (text !== null) {
+                        if (typing.prop) setPieceProp(typing.copyId, typing.prop, text);
+                        else if (isComponentPiece(typing.copyId)) setPieceText(typing.copyId, typing.part.selector, text);
+                        else picking?.onText(typing.part, text);
+                      }
                     }}
                   />
                 );
@@ -3700,12 +4425,43 @@ export function FlowCanvas({
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onWheel={(event) => event.stopPropagation()}
-          className={`pointer-events-auto flex max-h-full flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${sidePanel && sideFull ? "h-full" : ""} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
+          data-properties={sidePanel || hasProperties ? "" : undefined}
+          style={sidePanel || hasProperties ? { width: `clamp(var(--properties-min-width), ${cardWidth}px, var(--properties-max-width))` } : undefined}
+          className={`pointer-events-auto relative flex max-h-full flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${sidePanel && sideFull ? "h-full" : ""} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
         >
+          {sidePanel || hasProperties ? (
+            // Its left edge is the handle: drag it left for a wider card, right for a narrower one.
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize the properties"
+              aria-valuemin={PROPERTIES_MIN}
+              aria-valuemax={PROPERTIES_MAX}
+              aria-valuenow={cardWidth}
+              className="absolute inset-y-2 -left-1 z-[var(--z-raised)] w-2 cursor-ew-resize touch-none"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                resizeCard.current = { x: event.clientX, width: cardWidth };
+              }}
+              onPointerMove={(event) => {
+                const start = resizeCard.current;
+                if (start) setCardWidth(Math.min(PROPERTIES_MAX, Math.max(PROPERTIES_MIN, Math.round(start.width + start.x - event.clientX))));
+              }}
+              onPointerUp={() => {
+                resizeCard.current = null;
+                try {
+                  window.localStorage.setItem(PROPERTIES_KEY, String(cardWidth));
+                } catch {
+                  // Not kept: it is the width for now.
+                }
+              }}
+            />
+          ) : null}
           {topRight ? <div className="flex shrink-0 items-center justify-end gap-1 p-1.5">{topRight}</div> : null}
-          <div data-scroll="" className={`min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-divider [scrollbar-width:thin] ${sidePanel || hasProperties ? "" : "hidden"}`}>
+          <div data-scroll="" className={`flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain border-t border-divider [scrollbar-width:thin] ${sidePanel || hasProperties ? "" : "hidden"}`}>
             {sidePanel}
-            <div className={`w-[var(--dev-panel-width)] min-w-full ${hasProperties ? "" : "hidden"}`}>
+            <div className={`w-full ${hasProperties ? "" : "hidden"}`}>
       {/* A selected frame's properties, beside the canvas. */}
       {(() => {
         // A text, image or component that is selected: where it is, from its frame's corner when it is in one.
@@ -3721,7 +4477,7 @@ export function FlowCanvas({
               width={piece.width}
               height={piece.height}
               resize={piece.kind === "text" ? "width" : "both"}
-              onSize={(width, height) => sizePiece(selected, width, height)}
+              onSize={(width, height, only) => sizePiece(selected, width, height, only)}
               sizing={(() => {
                 const filling = !!frame?.layout;
                 const fill = (side: "width" | "height") => piece.sizing?.[side] === "fill";
@@ -3733,9 +4489,13 @@ export function FlowCanvas({
               onSizing={(side, mode) => modePiece(selected, side, mode)}
               onAlign={frame ? alignSelected : undefined}
               pin={frame && !frame.layout ? { x: piece.pin?.x ?? "none", y: piece.pin?.y ?? "none", onChange: (axis, value) => pinLayer(selected, axis, value) } : undefined}
-              component={!piece.kind ? { props: rootProps?.id === selected ? Object.entries(rootProps.values).map(([key, value]) => ({ key, value, changed: key in piece.props })) : [], onProp: (key, value) => setPieces((all) => all.map((one) => (copyKey("stage", one.id) === selected ? { ...one, props: { ...one.props, [key]: value } } : one))), variants: variants.map((one) => ({ id: one.id, label: variantLabel(one.name) })), current: piece.story, changed: Object.keys(piece.props).length > 0, onVariant: (story) => showVariant(selected, story), onReset: () => showVariant(selected, piece.story) } : undefined}
+              look={{ radius: piece.radius, opacity: piece.opacity, fill: piece.fill, stroke: piece.stroke, strokeWidth: piece.strokeWidth }}
+              onLook={(patch) => setPieces((all) => all.map((one) => (copyKey("stage", one.id) === selected ? { ...one, ...patch } : one)))}
+              fork={piece.fork}
+              instance={!!piece.instance}
+              component={!piece.kind && !isMaster(piece) ? { onFork: editComponent && !piece.fork ? () => forkPiece(piece) : undefined, forking: editComponent?.busy, props: rootProps?.id === selected ? Object.entries(rootProps.values).map(([key, value]) => ({ key, value, changed: key in piece.props })) : [], onProp: (key, value) => setPieces((all) => all.map((one) => (copyKey("stage", one.id) === selected ? { ...one, props: { ...one.props, [key]: value } } : one))), variants: variants.map((one) => ({ id: one.id, label: variantLabel(one.name) })), current: piece.story, changed: Object.keys(piece.props).length > 0, onVariant: (story) => showVariant(selected, story), onReset: () => showVariant(selected, piece.story) } : undefined}
               image={piece.kind === "image" ? { fit: piece.props.fit === "fit" || piece.props.fit === "stretch" ? piece.props.fit : "fill", onFit: (fit) => setPieces((all) => all.map((one) => (copyKey("stage", one.id) === selected ? { ...one, props: { ...one.props, fit } } : one))), onReplace: (file) => replaceImage(selected, file) } : undefined}
-              text={piece.kind === "text" ? { size: Number(piece.props.size) || 24, weight: Number(piece.props.weight) || 400, color: String(piece.props.color ?? "#111111"), align: (piece.props.align as TextStyle["align"]) ?? "left" } : undefined}
+              text={piece.kind === "text" ? { size: Number(piece.props.size) || 24, weight: Number(piece.props.weight) || 400, color: String(piece.props.color ?? "#111111"), align: (piece.props.align as TextStyle["align"]) ?? "left", family: piece.props.family ? String(piece.props.family) : undefined, lineHeight: Number(piece.props.lineHeight) || undefined, letterSpacing: Number(piece.props.letterSpacing) || undefined } : undefined}
               onText={(patch) => styleText(selected, patch)}
               x={spot.x - origin.x}
               y={spot.y - origin.y}
@@ -3748,7 +4508,11 @@ export function FlowCanvas({
       })()}
       {grouped ? (
         <div>
-          <BunchPanel count={bunch.copies.length + bunch.frames.length} onAlign={alignSelected} />
+          {multi ? (
+            <MultiPanel targets={multi} onAlign={alignSelected} onChange={(patch) => multi.forEach((one) => one.apply(patch))} />
+          ) : (
+            <BunchPanel count={bunch.copies.length + bunch.frames.length} onAlign={alignSelected} />
+          )}
         </div>
       ) : null}
       {frameSelected ? (
@@ -3758,7 +4522,7 @@ export function FlowCanvas({
                 if (patch.sizing?.width === "fill" && current?.sizing?.width !== "fill") roomToFill(current?.parent, "width");
                 if (patch.sizing?.height === "fill" && current?.sizing?.height !== "fill") roomToFill(current?.parent, "height");
                 updateFrame(shape!, patch);
-              }} onAutoLayout={() => { const boxes = [...pieces.filter((piece) => piece.parent === shape && copyOf.has(copyKey("stage", piece.id))).map((piece) => realBox(copyKey("stage", piece.id))), ...shapes.filter((one) => one.parent === shape).map((one) => ({ id: one.id, x: one.x / SCREEN_SCALE, y: one.y / SCREEN_SCALE, width: one.width / SCREEN_SCALE, height: one.height / SCREEN_SCALE }))]; updateFrame(shape!, { layout: detectLayout(boxes) }); }} />
+              }} onAutoLayout={(direction) => { const boxes = [...pieces.filter((piece) => piece.parent === shape && copyOf.has(copyKey("stage", piece.id))).map((piece) => realBox(copyKey("stage", piece.id))), ...shapes.filter((one) => one.parent === shape).map((one) => ({ id: one.id, x: one.x / SCREEN_SCALE, y: one.y / SCREEN_SCALE, width: one.width / SCREEN_SCALE, height: one.height / SCREEN_SCALE }))]; updateFrame(shape!, { layout: { ...detectLayout(boxes), ...(direction ? { direction } : {}) } }); }} />
         </div>
       ) : null}
             </div>
@@ -4013,29 +4777,30 @@ export function FlowCanvas({
               </span>
             </div>
           ) : null}
-          {layersOpen && !viewOnly ? (
+          {layersOpen && (!viewOnly || dev) ? (
             <div className="min-h-0 flex-1 overflow-hidden border-t border-divider">
           <LayersPanel
             rows={layerRows()}
             onSelect={selectLayer}
-            onRename={(row, name) => renameLayer(row.id, name)}
-            onToggle={toggleLayer}
-            onMove={moveLayer}
+            onRename={(row, name) => !viewOnly && renameLayer(row.id, name)}
+            onToggle={(...asked) => !viewOnly && toggleLayer(...asked)}
+            onMove={(...asked) => !viewOnly && moveLayer(...asked)}
             onHover={hoverRow}
             onFold={(row, all) => {
               const toggle = (now: ReadonlySet<string>, key: string) => (now.has(key) ? new Set([...now].filter((id) => id !== key)) : new Set(now).add(key));
               if (row.kind === "frame") return setFolded((now) => toggle(now, row.id));
-              const copy = row.kind === "screen" ? row.id : row.copy;
+              const whole = row.kind === "screen" || row.kind === "component";
+              const copy = whole ? row.id : row.copy;
               const tree = copy ? trees[copy] : undefined;
               const keyOf = (ix: number) => `node:${copy}:${tree?.selector[ix]}`;
-              if (!all || !copy || !tree) return setUnfolded((now) => toggle(now, row.kind === "screen" ? `screen:${row.id}` : keyOf(row.ix!)));
+              if (!all || !copy || !tree) return setUnfolded((now) => toggle(now, whole ? `screen:${row.id}` : keyOf(row.ix!)));
               // With alt, everything inside goes the way this one does: all open, or all closed.
-              const keys: string[] = row.kind === "screen" ? [`screen:${copy}`] : [];
+              const keys: string[] = whole ? [`screen:${copy}`] : [];
               const gather = (ix: number) => {
                 keys.push(keyOf(ix));
                 for (const kid of childrenIn(tree, ix)) gather(kid);
               };
-              for (const top of row.kind === "screen" ? childrenIn(tree, -1) : [row.ix!]) gather(top);
+              for (const top of whole ? childrenIn(tree, -1) : [row.ix!]) gather(top);
               setUnfolded((now) => {
                 const next = new Set(now);
                 for (const key of keys) {
@@ -4059,14 +4824,30 @@ export function FlowCanvas({
           className="absolute flex w-56 flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating"
         >
           {[
-            { label: "Group", keys: "⌥⌘G", run: () => wrap(false) },
-            { label: "Add auto layout", keys: "⇧A", run: () => wrap(true) },
+            { label: "Group", keys: "⌥⌘G", run: () => wrap(false), off: !layersSelected().keys.length && !layersSelected().frames.length },
+            { label: "Ungroup", keys: "⇧⌘G", run: unwrap, off: !ungroupable().length },
+            { label: "Add auto layout", keys: "⇧A", run: autoLayout, off: !layersSelected().keys.length && !layersSelected().frames.length },
+            // The piece is taken now, as the menu is drawn: by the time the item is pressed the selection may have moved on.
+            ...(() => {
+              const key = selectedNow.current;
+              const piece = key ? pieceByKey(key) : undefined;
+              return editComponent && key && piece && isComponentPiece(key) && !piece.fork ? [{ label: "Fork", keys: "", run: () => forkPiece(piece), off: editComponent.busy }] : [];
+            })(),
+            // A component a fork uses and doesn't own (drawn purple inside it): to change it, it is forked too, or the change would be the shared original's.
+            ...(() => {
+              const key = selectedNow.current;
+              const piece = key ? pieceByKey(key) : undefined;
+              const part = picked && picked.copyId === key ? picked.part : null;
+              const nested = part ? (part.component?.name ?? part.inside) : null;
+              return editComponent && piece && isMaster(piece) && nested && part?.loc && !part.loc.startsWith("src/components/forks/") ? [{ label: `Fork ${nested} too`, keys: "", run: () => void editComponent.forkNested(piece.story, nested), off: editComponent.busy }] : [];
+            })(),
+            ...(instances().length ? [{ label: "Reset instance", keys: "", run: resetInstances, off: !instances().some((key) => changedInstance(pieceByKey(key)!)) }] : []),
           ].map((item) => (
             <button
               key={item.label}
               type="button"
               role="menuitem"
-              disabled={!layersSelected().keys.length && !layersSelected().frames.length}
+              disabled={item.off}
               onClick={item.run}
               className="flex h-8 items-center justify-between rounded-[var(--r-control)] px-2 text-xs text-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] enabled:hover:bg-surface-inset disabled:text-foreground-subtle"
             >
@@ -4109,14 +4890,16 @@ export function FlowCanvas({
             );
           })}
         </div>
-        <div role="toolbar" aria-label="Canvas tools" className="pointer-events-auto flex items-center gap-0 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating">
+        <div role="toolbar" aria-label="Canvas tools" className="pointer-events-auto flex items-center gap-1 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating">
           <IconButton
             tooltipSide="above"
             label="Move (V)"
             variant="ghost"
-            aria-pressed={!framing}
-            className={!framing ? controlOn : ""}
+            aria-pressed={moving}
+            className={moving ? controlOn : ""}
             onClick={() => {
+              // Moving is what is left when nothing else is in hand, comments included.
+              if (placing) comments?.onLeave();
               setSketch(null);
               setFraming(false);
               setTexting(false);
@@ -4126,23 +4909,25 @@ export function FlowCanvas({
           >
             <PointerIcon className="size-[1.125rem]" />
           </IconButton>
-          <IconButton
-            tooltipSide="above"
-            label="Frame (F)"
-            variant="ghost"
-            aria-pressed={framing}
-            className={framing ? controlOn : ""}
-            onClick={() => {
-              setShape(null);
-              setSketch(null);
-              setTexting(false);
-              setShaping(null);
-              setPenned([]);
-              setFraming((on) => !on);
-            }}
-          >
-            <FrameIcon className="size-[1.125rem]" />
-          </IconButton>
+          {viewOnly ? null : (
+            <IconButton
+              tooltipSide="above"
+              label="Frame (F)"
+              variant="ghost"
+              aria-pressed={framing}
+              className={framing ? controlOn : ""}
+              onClick={() => {
+                setShape(null);
+                setSketch(null);
+                setTexting(false);
+                setShaping(null);
+                setPenned([]);
+                setFraming((on) => !on);
+              }}
+            >
+              <FrameIcon className="size-[1.125rem]" />
+            </IconButton>
+          )}
           {viewOnly ? null : (
             <>
               <ToolGroup
@@ -4187,6 +4972,12 @@ export function FlowCanvas({
             <>
               <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
               {bar}
+            </>
+          ) : null}
+          {viewToggle ? (
+            <>
+              <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
+              {viewToggle}
             </>
           ) : null}
         </div>

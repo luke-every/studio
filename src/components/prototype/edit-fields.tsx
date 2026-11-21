@@ -21,6 +21,27 @@ const well = "bg-surface-inset rounded-[var(--r-md)]";
  * A titled group, full width with a hairline under it. `action` sits at the end of the title row. A section that
  * isn't applied (`applied` false) is only its title and a plus; the plus applies it (`onAdd`) and it opens.
  */
+/**
+ * The one place a properties panel says what is selected: its name alone (Frame, Text, Image, a component's name), larger than the section headings under it, with nothing
+ * to rename here (a layer is renamed in the layers). A component's props sit in this same container, directly under its name: pass them as `children`. `note` is plain
+ * context after the name (what a part is inside), never a control.
+ */
+export function PanelTitle({ name, note, component = false, fork = false, action, children }: { name: string; note?: string; component?: boolean; fork?: boolean; /** At the far end of the title: the one thing to do with what is selected (a component's Edit). */ action?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-divider p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex min-w-0 items-center gap-2 text-md font-medium tracking-[var(--tracking-tight)] text-foreground">
+          {component || fork ? <span aria-hidden className={`size-2 shrink-0 rounded-full ${fork ? "bg-[var(--fork)]" : "bg-[var(--component)]"}`} /> : null}
+          <span className="min-w-0 truncate">{name}</span>
+          {note ? <span className="shrink-0 text-xs font-normal tracking-normal text-foreground-muted">{note}</span> : null}
+        </h2>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function Section({ title, action, children, applied = true, onAdd }: { title: string; action?: ReactNode; children?: ReactNode; applied?: boolean; onAdd?: () => void }) {
   if (!applied) {
     return (
@@ -66,7 +87,7 @@ export function AlignGrid({ column, justify, align, onChange }: { column: boolea
             onClick={() => onChange(ends[j], ends[a])}
             className="group grid place-items-center"
           >
-            <span className={`rounded-full transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${on ? "size-2 bg-accent" : "size-1 bg-foreground-subtle group-hover:bg-foreground-muted"}`} />
+            <span className={`rounded-full transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${on ? "size-2 bg-[var(--selection)]" : "size-1 bg-foreground-subtle group-hover:bg-foreground-muted"}`} />
           </button>
         );
       })}
@@ -105,7 +126,7 @@ export function Check({ label, checked, onChange }: { label: string; checked: bo
   return (
     <label className="flex items-center gap-2 text-xs text-foreground">
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="peer sr-only" />
-      <span className="grid size-4 place-items-center rounded-[var(--r-sm)] bg-surface-inset text-transparent transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] peer-checked:bg-accent peer-checked:text-accent-foreground peer-focus-visible:ring-1 peer-focus-visible:ring-[var(--focus-ring)]">
+      <span className="grid size-4 place-items-center rounded-[var(--r-sm)] bg-surface-inset text-transparent transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] peer-checked:bg-[var(--selection)] peer-checked:text-[var(--selection-foreground)] peer-focus-visible:ring-1 peer-focus-visible:ring-[var(--selection)]">
         <CheckIcon className="size-3" />
       </span>
       {label}
@@ -126,11 +147,19 @@ export function Glyph({ children }: { children: ReactNode }) {
   );
 }
 
+/** How a frame or an element flows what is in it, as one switch for every properties panel: nothing (freeform), a column, a row or a grid. Auto layout, whatever CSS it ends up as. */
+export const FLOW_OPTIONS = [
+  { value: "freeform", title: "Freeform", icon: <Glyph><rect x="2" y="2" width="5" height="5" rx="1.25" /><rect x="9" y="8" width="5" height="5" rx="1.25" /></Glyph> },
+  { value: "column", title: "Vertical", icon: <Glyph><rect x="2" y="2" width="6" height="4" rx="1" /><rect x="2" y="10" width="6" height="4" rx="1" /><path d="M12 3v10M10 11l2 2 2-2" /></Glyph> },
+  { value: "row", title: "Horizontal", icon: <Glyph><rect x="2" y="2" width="4" height="6" rx="1" /><rect x="9" y="2" width="4" height="6" rx="1" /><path d="M3 12h10M11 10l2 2-2 2" /></Glyph> },
+  { value: "grid", title: "Grid", icon: <Glyph><rect x="2" y="2" width="5" height="5" rx="1" /><rect x="9" y="2" width="5" height="5" rx="1" /><rect x="2" y="9" width="5" height="5" rx="1" /><rect x="9" y="9" width="5" height="5" rx="1" /></Glyph> },
+];
+
 const pixels = (value: string) => (/^-?[\d.]+px$/.test(value) ? String(Math.round(parseFloat(value) * 100) / 100) : value);
 
 /**
  * A number with a glyph in front. Type it, nudge it with the arrow keys (shift
- * for ten), or drag the glyph sideways. `value` is what the page has now, as
+ * to the next multiple of 8), or drag the glyph sideways (shift, eight at a time). `value` is what the page has now, as
  * CSS; `onCommit` is given what to set, as CSS.
  */
 export function NumberField({
@@ -141,6 +170,7 @@ export function NumberField({
   unit = "px",
   caption,
   trailing,
+  mixed = false,
 }: {
   glyph: ReactNode;
   label: string;
@@ -151,10 +181,14 @@ export function NumberField({
   caption?: string;
   /** At the end of the field, inside it. */
   trailing?: ReactNode;
+  /** The things selected have different values: it says "Mixed" until a value is typed, which is then set on all of them. */
+  mixed?: boolean;
 }) {
-  const shown = unit === "opacity" ? String(Math.round(parseFloat(value || "1") * 100)) : unit === "number" ? value : pixels(value);
+  const shown = mixed ? "Mixed" : unit === "opacity" ? String(Math.round(parseFloat(value || "1") * 100)) : unit === "number" ? value : pixels(value);
   const [draft, setDraft] = useState<string | null>(null);
   const scrub = useRef<{ x: number; from: number } | null>(null);
+  // Whether the press now under way is the one that put the cursor in the field.
+  const fresh = useRef(false);
 
   const css = (n: number) => (unit === "opacity" ? String(Math.min(100, Math.max(0, n)) / 100) : unit === "number" ? String(n) : `${n}px`);
   const commit = (text: string) => {
@@ -168,7 +202,7 @@ export function NumberField({
 
   return (
     <Field caption={caption}>
-    <label className={`${well} flex h-7 items-center gap-1 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
+    <label className={`${well} flex h-7 items-center gap-1 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--selection)]`}>
       <span
         title={`${label} — drag to change`}
         onPointerDown={(event) => {
@@ -177,7 +211,7 @@ export function NumberField({
         }}
         onPointerMove={(event) => {
           if (!scrub.current) return;
-          const step = event.shiftKey ? 10 : 1;
+          const step = event.shiftKey ? 8 : 1;
           onCommit(css(Math.round(scrub.current.from + ((event.clientX - scrub.current.x) / 2) * step)));
         }}
         onPointerUp={() => {
@@ -191,6 +225,13 @@ export function NumberField({
         type="text"
         aria-label={label}
         value={draft ?? shown}
+        // Clicking in selects the whole number, so typing replaces it; the browser would undo that as the button comes up, so the first click's release is held back.
+        onPointerDown={(event) => (fresh.current = document.activeElement !== event.currentTarget)}
+        onFocus={(event) => event.target.select()}
+        onMouseUp={(event) => {
+          if (fresh.current) event.preventDefault();
+          fresh.current = false;
+        }}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={(event) => commit(event.target.value)}
         onKeyDown={(event) => {
@@ -198,11 +239,14 @@ export function NumberField({
           if (event.key === "Escape") setDraft(null);
           if (event.key === "ArrowUp" || event.key === "ArrowDown") {
             event.preventDefault();
-            onCommit(css(current() + (event.key === "ArrowUp" ? 1 : -1) * (event.shiftKey ? 10 : 1)));
+            const up = event.key === "ArrowUp";
+            const now = current();
+            // With Shift it goes to the next multiple of 8 (0 to 8, 8 to 16, 5 to 8 and down to 0), so a value stays on the grid.
+            onCommit(css(event.shiftKey ? (up ? Math.floor(now / 8 + 1e-9) + 1 : Math.ceil(now / 8 - 1e-9) - 1) * 8 : now + (up ? 1 : -1)));
             setDraft(null);
           }
         }}
-        className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none"
+        className={`h-full min-w-0 flex-1 bg-transparent outline-none ${mixed && draft === null ? "text-foreground-muted" : "text-foreground"}`}
       />
       {trailing}
     </label>
@@ -211,8 +255,8 @@ export function NumberField({
 }
 
 /**
- * How big something is along one axis, as one field: the size when it is fixed, "Fill" or "Hug" when it follows its
- * surroundings or its content. The chevron at the end changes which; the size is only typed when it is fixed.
+ * How big something is along one axis, as one field: its size, with "Fill" or "Hug" beside it when it follows its surroundings or its
+ * content. The chevron at the end changes which; the size can be typed whichever it is, and typing one makes it fixed.
  */
 export function SizeField({
   glyph,
@@ -221,6 +265,7 @@ export function SizeField({
   value,
   onCommit,
   onMode,
+  modes = ["fixed", "fill", "hug"],
 }: {
   glyph: ReactNode;
   label: string;
@@ -228,8 +273,10 @@ export function SizeField({
   value: string;
   onCommit: (css: string) => void;
   onMode: (mode: "fixed" | "fill" | "hug") => void;
+  /** The ways it can be sized; with only one there is nothing to choose, so no menu. */
+  modes?: ("fixed" | "fill" | "hug")[];
 }) {
-  const menu = (
+  const menu = modes.length < 2 ? null : (
     <span className="relative grid size-5 shrink-0 place-items-center text-foreground-subtle">
       <ChevronDownIcon className="size-3.5" />
       <select
@@ -238,19 +285,51 @@ export function SizeField({
         onChange={(event) => onMode(event.target.value as "fixed" | "fill" | "hug")}
         className="absolute inset-0 size-full cursor-pointer opacity-0"
       >
-        <option value="fixed">Fixed</option>
-        <option value="fill">Fill</option>
-        <option value="hug">Hug</option>
+        {modes.map((one) => (
+          <option key={one} value={one}>
+            {one === "fixed" ? "Fixed" : one === "fill" ? "Fill" : "Hug"}
+          </option>
+        ))}
       </select>
     </span>
   );
-  if (mode === "fixed") return <NumberField glyph={glyph} label={label} value={value} onCommit={onCommit} trailing={menu} />;
+  // The number is typed in whatever the mode: in hug or fill it shows what the size comes to now, and entering one makes the size fixed (`onCommit` is what sets it),
+  // with the mode named beside it until then.
   return (
-    <div className={`${well} relative flex h-7 items-center gap-1 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
-      <span className="flex w-5 shrink-0 items-center justify-center text-foreground-subtle">{glyph}</span>
-      <span className="min-w-0 flex-1 text-foreground">{mode === "fill" ? "Fill" : "Hug"}</span>
-      {menu}
-    </div>
+    <NumberField
+      glyph={glyph}
+      label={label}
+      value={value}
+      onCommit={onCommit}
+      trailing={
+        <>
+          {mode === "fixed" ? null : <span className="shrink-0 text-foreground">{mode === "fill" ? "Fill" : "Hug"}</span>}
+          {menu}
+        </>
+      }
+    />
+  );
+}
+
+/** The small chevron at the end of a number field that offers common values to pick: the field itself is still typed in. */
+export function PresetMenu({ label, options, onPick }: { label: string; options: number[]; onPick: (value: number) => void }) {
+  return (
+    <span className="relative grid size-5 shrink-0 place-items-center text-foreground-subtle">
+      <ChevronDownIcon className="size-3.5" />
+      <select
+        aria-label={label}
+        value=""
+        onChange={(event) => event.target.value && onPick(Number(event.target.value))}
+        className="absolute inset-0 size-full cursor-pointer opacity-0"
+      >
+        <option value="" hidden />
+        {options.map((one) => (
+          <option key={one} value={one}>
+            {one}
+          </option>
+        ))}
+      </select>
+    </span>
   );
 }
 
@@ -274,7 +353,7 @@ export function SelectField({
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={`${well} h-7 w-full px-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-[var(--focus-ring)]`}
+        className={`${well} h-7 w-full px-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-[var(--selection)]`}
       >
         {options.some((option) => option.value === value) ? null : (
           <option value={value} hidden>
@@ -318,7 +397,7 @@ export function Choice({
           title={option.title}
           onClick={() => onChange(option.value)}
           className={`grid h-7 flex-1 place-items-center bg-surface-inset transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] first:rounded-l-[var(--r-md)] last:rounded-r-[var(--r-md)] ${
-            value === option.value ? "!bg-accent text-accent-foreground" : "text-foreground-muted hover:text-foreground"
+            value === option.value ? "!bg-[var(--selection)] text-[var(--selection-foreground)]" : "text-foreground-muted hover:text-foreground"
           }`}
         >
           {option.icon}
@@ -345,7 +424,7 @@ export function ColorField({ label, value, onCommit, caption, trailing, onChip }
 
   return (
     <Field caption={caption}>
-    <label className={`${well} flex h-7 items-center gap-2 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
+    <label className={`${well} flex h-7 items-center gap-2 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--selection)]`}>
       <span
         // The swatch shows the colour the page really has, so it is set from the page's own value.
         style={none ? undefined : { backgroundColor: value }}
@@ -440,7 +519,7 @@ export function TokenField({
   }
   const chosen = options.find((option) => option.key === selected);
   return (
-    <div className={`${well} relative flex h-7 items-center gap-1 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--focus-ring)]`}>
+    <div className={`${well} relative flex h-7 items-center gap-1 pl-1.5 pr-1 text-xs focus-within:ring-1 focus-within:ring-[var(--selection)]`}>
       <span className="flex w-5 shrink-0 items-center justify-center text-foreground-subtle">
         {chosen?.hex ? <span style={{ backgroundColor: chosen.hex }} className="size-4 rounded-[var(--r-sm)] border border-border" /> : glyph}
       </span>
@@ -562,7 +641,7 @@ export function ColourField({
           }
         />
       ) : (
-        <button type="button" aria-label={`${label}, colours`} aria-expanded={open} onClick={show} className={`${well} flex h-7 w-full items-center gap-2 pl-1.5 pr-1 text-xs focus-visible:ring-1 focus-visible:ring-[var(--focus-ring)] focus-visible:outline-none`}>
+        <button type="button" aria-label={`${label}, colours`} aria-expanded={open} onClick={show} className={`${well} flex h-7 w-full items-center gap-2 pl-1.5 pr-1 text-xs focus-visible:ring-1 focus-visible:ring-[var(--selection)] focus-visible:outline-none`}>
           <span style={chosen?.hex ? { backgroundColor: chosen.hex } : undefined} className="relative size-4 shrink-0 overflow-hidden rounded-[var(--r-sm)] border border-border">
             {chosen?.hex ? null : <span aria-hidden className="absolute inset-x-0 top-1/2 h-px -rotate-45 bg-foreground-subtle" />}
           </span>

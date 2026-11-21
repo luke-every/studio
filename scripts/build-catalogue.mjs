@@ -37,6 +37,8 @@ const walk = (folder) => (existsSync(folder) ? readdirSync(folder, { withFileTyp
 const sha = execFileSync("git", ["-C", library, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const storiesHash = createHash("sha1");
 for (const file of walk(join(conventions, "src")).sort()) storiesHash.update(file).update(readFileSync(file));
+// The files the stories show from the templates' stubs count too: a change to the header or footer makes new pictures.
+for (const { from } of JSON.parse(readFileSync(join(conventions, "stubs.json"), "utf8"))) storiesHash.update(from).update(readFileSync(join(conventions, "..", from)));
 const key = `${sha.slice(0, 7)}-${storiesHash.digest("hex").slice(0, 6)}`;
 const folder = join(root, key);
 if (!force && existsSync(join(folder, "manifest.json"))) {
@@ -56,6 +58,8 @@ const up = async (port) => {
 // Its own Storybook, on its own port: whatever is on the usual one may be showing something else.
 const port = 6007;
 let started = null;
+// The stage page reads the stories from the clone, so they are left there if they were there when this began.
+const hadStories = existsSync(join(library, ".git", "studio-stories.json"));
 if (!(await up(port))) {
   execFileSync("node", [join(conventions, "sync.mjs"), "--add"], { stdio: "inherit" });
   started = spawn(join(library, "node_modules", ".bin", "storybook"), ["dev", "-c", ".storybook-studio", "-p", String(port), "--no-open"], { cwd: library, stdio: "ignore", detached: true });
@@ -158,7 +162,7 @@ if (started?.pid) {
   try {
     process.kill(-started.pid);
   } catch {}
-  execFileSync("node", [join(conventions, "sync.mjs"), "--remove"], { stdio: "ignore" });
+  if (!hadStories) execFileSync("node", [join(conventions, "sync.mjs"), "--remove"], { stdio: "ignore" });
 }
 
 results.sort((a, b) => a.title.localeCompare(b.title));

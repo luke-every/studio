@@ -27,6 +27,7 @@ import {
   LockIcon,
   UnlockIcon,
   TextIcon,
+  InstanceIcon,
 } from "@/components/shell/nav-icons";
 
 export type LayerRow = {
@@ -43,6 +44,14 @@ export type LayerRow = {
   within?: boolean;
   /** The pointer is over what it stands for, on the canvas. */
   hovered?: boolean;
+  /** A component's row that is a fork: the project's own copy, drawn in orange, whose insides are its own layers. */
+  fork?: boolean;
+  /** The fork's own row, the master: its insides are layers like any, not a component's. */
+  master?: boolean;
+  /** An element of a page that is the root of a component: drawn as one, under the component's name. */
+  component?: boolean;
+  /** Anywhere under a component's row: the component's, so drawn in its colour. */
+  inside?: boolean;
   /** A frame drawn with a shape tool: it has that shape's icon. */
   shape?: "rectangle" | "ellipse" | "line" | "arrow" | "polygon" | "star" | "path" | "sticky";
   /** For a screen: the device it is drawn on, which gives its icon. */
@@ -89,19 +98,26 @@ const byTag: Record<string, typeof BoxIcon> = {
 
 /** Each kind of layer has its own icon; an element of a page has the one for its tag, a plain box when it is only a container. */
 const iconOf = (row: LayerRow) => {
+  // A placed component, or a fork, is a mark (filled, in its colour) the way it is on the canvas; an instance of a fork is the same diamond, only outlined.
+  if (row.kind === "component") {
+    if (row.fork && !row.master) return <InstanceIcon className="size-4 shrink-0 text-[var(--fork)]" />;
+    return (
+      <span className={`grid size-4 shrink-0 place-items-center rounded-[var(--r-xs)] text-[var(--mark-foreground)] ${row.fork ? "bg-[var(--fork)]" : "bg-[var(--component)]"}`}>
+        <ComponentIcon className="size-3" />
+      </span>
+    );
+  }
   const Icon =
     row.kind === "node"
-      ? (byTag[row.name.split(/\s/)[0]] ?? BoxIcon)
+      ? (row.component ? ComponentIcon : (byTag[row.name.split(/\s/)[0]] ?? BoxIcon))
       : row.kind === "frame"
         ? row.shape === "rectangle" ? RectangleIcon : row.shape === "ellipse" ? EllipseIcon : row.shape === "line" ? LineIcon : row.shape === "arrow" ? ArrowIcon : row.shape === "polygon" ? PolygonIcon : row.shape === "star" ? StarIcon : row.shape === "path" ? PenIcon : row.shape === "sticky" ? StickyIcon : FrameIcon
         : row.kind === "text"
           ? TextIcon
           : row.kind === "image"
             ? ImageIcon
-            : row.kind === "component"
-              ? ComponentIcon
-              : (row.device && deviceIcons[row.device]) || FrameIcon;
-  return <Icon className={`size-4 shrink-0 ${row.kind === "component" ? "text-[var(--component)]" : "text-foreground-muted"}`} />;
+            : (row.device && deviceIcons[row.device]) || FrameIcon;
+  return <Icon className={`size-4 shrink-0 ${row.component || row.inside ? "text-[var(--component)]" : "text-foreground-muted"}`} />;
 };
 
 /** What is on the canvas as a tree, as in Figma: frames with what is in them beneath, then what is on its own, then the prototype's screens. */
@@ -183,7 +199,7 @@ export function LayersPanel({
                   dragging.current = null;
                   setOver(null);
                 }}
-                className={`group relative flex h-7 items-center gap-1 pr-2 text-xs transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${row.hidden ? "opacity-50" : ""} ${row.selected ? (row.kind === "component" ? "bg-[var(--component-muted)]" : "bg-[var(--selection-muted)]") + " text-foreground" : row.within ? "bg-[color-mix(in_srgb,var(--selection-muted)_45%,transparent)] text-foreground hover:bg-[color-mix(in_srgb,var(--selection-muted)_75%,transparent)]" : row.hovered ? "bg-surface-inset text-foreground" : "text-foreground-muted hover:bg-surface-inset hover:text-foreground"} ${over?.key === keyOf(row) ? (over.where === "into" ? "outline outline-1 -outline-offset-1 outline-[var(--selection)]" : over.where === "before" ? "shadow-[inset_0_1px_0_var(--selection)]" : "shadow-[inset_0_-1px_0_var(--selection)]") : ""}`}
+                className={`group relative flex h-7 items-center gap-1 pr-2 text-xs transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${row.hidden ? "opacity-50" : ""} ${row.selected ? (row.fork ? "bg-[var(--fork-muted)]" : row.kind === "component" ? "bg-[var(--component-muted)]" : "bg-[var(--selection-muted)]") + " text-foreground" : row.within ? "bg-[color-mix(in_srgb,var(--selection-muted)_45%,transparent)] text-foreground hover:bg-[color-mix(in_srgb,var(--selection-muted)_75%,transparent)]" : row.hovered ? "bg-surface-inset text-foreground" : "text-foreground-muted hover:bg-surface-inset hover:text-foreground"} ${over?.key === keyOf(row) ? (over.where === "into" ? "outline outline-1 -outline-offset-1 outline-[var(--selection)]" : over.where === "before" ? "shadow-[inset_0_1px_0_var(--selection)]" : "shadow-[inset_0_-1px_0_var(--selection)]") : ""}`}
               >
                 <button
                   type="button"

@@ -1,10 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import type { DistortionWaveHandle } from "distortion-waves";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { ModalStep, MotionStepModal } from "@/components/motion";
-import { CheckIcon, CloseIcon } from "@/components/shell/nav-icons";
+import { CheckIcon, CloseIcon, FlowIcon, LargePhoneIcon } from "@/components/shell/nav-icons";
 import { Button } from "@/components/ui/button";
 import { fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
@@ -13,29 +14,67 @@ import { openTerminalOnArrival, TERMINAL_HOST, type Starts } from "@/lib/termina
 /** What the helper goes through, in order. The last is this page: it opens the new prototype once the helper is done. */
 const STEPS = ["Updating conventions", "Copying the template", "Installing", "Starting the preview", "Opening"];
 
+/** If the wave never reports in (no WebGL, a failed picture), the new prototype opens after this anyway. */
+const WAVE_GIVE_UP_MS = 6000;
+/** The size of the spot the wave opens from, at the middle of the dialog. */
+const WAVE_SPOT = 48;
+
 /**
- * Starts a prototype in ~/Claude/prototypes, in three steps: what to start from (choosing one moves on), its name and the
- * team it belongs to, then the making of it. The local helper (`scripts/terminal-server.mjs`) runs the /newprototype
+ * Starts a project or a prototype in ~/Claude/prototypes. Step 0 asks which. A project is a name and a team and is made at
+ * once: a folder with a canvas, opened on it. A prototype goes on to what to start from (choosing one moves on), its name
+ * and the team it belongs to, then the making of it. The local helper (`scripts/terminal-server.mjs`) runs the /newprototype
  * script and tells this which step it is on, which the third step lists: a spinner on the one in hand, a check on those
- * done. When it is done the page for the new prototype opens with Claude already running in its folder.
+ * done. When it is done a wave opens from the middle of the dialog and carries it away, and then the page for the new
+ * prototype opens with Claude already running in its folder.
  */
 export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClose: () => void }) {
   const { teams } = useStudio();
   const pathname = usePathname();
   const onTeam = /^\/teams\/([a-z0-9-]+)/.exec(pathname)?.[1];
-  // The step showing (0 the templates, 1 the name and team, 2 the making of it), and what was chosen: going back keeps it.
+  // The step showing (0 project or prototype, 1 the templates, 2 the name and team, 3 the making of it), and what was chosen: going back keeps it.
   const [step, setStep] = useState(0);
+  const [project, setProject] = useState(false);
   const [template, setTemplate] = useState(starts.default);
   const [name, setName] = useState("");
   const [team, setTeam] = useState(teams.some((item) => item.slug === onTeam) ? (onTeam ?? "") : (teams[0]?.slug ?? ""));
   const [progress, setProgress] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // The slug of the new prototype, once the helper is done and the wave is on its way.
+  const [done, setDone] = useState<string | null>(null);
+  const wave = useRef<DistortionWaveHandle>(null);
+  const left = useRef(false);
 
-  // Settles only with a problem: on success the page is replaced, and the dialog stays as it is until then.
+  const leave = (slug: string) => {
+    if (left.current) return;
+    left.current = true;
+    window.location.assign(`/prototypes/${slug}`);
+  };
+
+  // Coming back to this page (the back button restores it as it was left) must not bring the dialog with it.
+  useEffect(() => {
+    const restored = (event: PageTransitionEvent) => {
+      if (event.persisted) onClose();
+    };
+    window.addEventListener("pageshow", restored);
+    return () => window.removeEventListener("pageshow", restored);
+  }, [onClose]);
+
+  // The list shows every step done first, then the wave leaves from the middle of the dialog.
+  useEffect(() => {
+    if (!done) return;
+    const element = wave.current?.element;
+    if (element) {
+      const { width, height } = element.getBoundingClientRect();
+      wave.current?.play({ source: { x: (width - WAVE_SPOT) / 2, y: (height - WAVE_SPOT) / 2, w: WAVE_SPOT, h: WAVE_SPOT } });
+    }
+    window.setTimeout(() => leave(done), WAVE_GIVE_UP_MS);
+  }, [done]);
+
+  // Settles only with a problem: on success the wave plays and the page is replaced.
   const create = (chosen: string) =>
     new Promise<string>((resolve) => {
-      const socket = new WebSocket(`ws://${TERMINAL_HOST}/new?${new URLSearchParams({ name: name.trim(), template: chosen, team })}`);
+      const socket = new WebSocket(`ws://${TERMINAL_HOST}/new?${new URLSearchParams({ name: name.trim(), template: chosen, team, ...(project ? { kind: "project" } : {}) })}`);
       let settled = false;
       const fail = (reason: string) => {
         settled = true;
@@ -48,9 +87,10 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
         if (message.error) fail(message.error);
         if (message.done) {
           settled = true;
-          setProgress("Opening");
+          // A project has nothing to wave away: its canvas opens at once.
+          if (project) return leave(message.done.slug);
           openTerminalOnArrival(message.done.slug);
-          window.location.assign(`/prototypes/${message.done.slug}`);
+          setDone(message.done.slug);
         }
       };
       socket.onclose = () => {
@@ -61,11 +101,15 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
   const nameField = useRef<HTMLInputElement>(null);
   // The name is where to type once its step has arrived; without scrolling, since the step is still moving in.
   useEffect(() => {
-    if (step === 1) nameField.current?.focus({ preventScroll: true });
+    if (step === 2) nameField.current?.focus({ preventScroll: true });
   }, [step]);
   const choose = (name: string) => {
     setTemplate(name);
-    setStep(1);
+    setStep(2);
+  };
+  const kind = (isProject: boolean) => {
+    setProject(isProject);
+    setStep(isProject ? 2 : 1);
   };
 
   const submit = async (event: FormEvent) => {
@@ -74,13 +118,39 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
     setBusy(true);
     setProblem(null);
     setProgress("");
-    setStep(2);
+    if (!project) setStep(3);
     setProblem(await create(template));
     setBusy(false);
   };
 
+  const kinds = (
+    <ModalStep title="What are you making?" footer={<Button onClick={onClose}>Cancel</Button>}>
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { label: "Project", about: "A canvas to explore on", icon: <FlowIcon className="size-6" />, project: true },
+          { label: "Prototype", about: "Start from a template", icon: <LargePhoneIcon className="size-6" />, project: false },
+        ].map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={() => kind(item.project)}
+            className={`flex flex-col items-center gap-3 rounded-[var(--r-md)] border px-3 py-6 text-center transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-[var(--control-hover)] focus-visible:border-border-strong focus-visible:outline-none ${
+              item.project === project ? "border-border-strong" : "border-border"
+            }`}
+          >
+            {item.icon}
+            <span className="flex flex-col gap-0.5">
+              <span className="text-base">{item.label}</span>
+              <span className="text-sm text-foreground-muted">{item.about}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </ModalStep>
+  );
+
   const first = (
-    <ModalStep title="Start from" footer={<Button onClick={onClose}>Cancel</Button>}>
+    <ModalStep title="Start from" footer={<Button onClick={() => setStep(0)}>Back</Button>}>
       <div className="flex flex-col gap-1.5">
         {starts.templates.map((item) => (
           <button
@@ -101,13 +171,14 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
 
   const second = (
     <ModalStep
-      title="New prototype"
-      subtitle={template}
+      title={project ? "Name your project" : "Name your prototype"}
+      subtitle={project ? undefined : template}
+      problem={project ? problem : null}
       onSubmit={submit}
       footer={
         <>
-          <Button onClick={() => setStep(0)}>Back</Button>
-          <Button type="submit" variant="primary" disabled={!name.trim()}>
+          <Button onClick={() => setStep(project ? 0 : 1)}>Back</Button>
+          <Button type="submit" variant="primary" disabled={!name.trim()} loading={busy}>
             Create
           </Button>
         </>
@@ -134,9 +205,9 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
   );
 
   // The step in hand; those before it are done. Until the helper says anything, the first is in hand.
-  const at = Math.max(0, STEPS.indexOf(progress));
+  const at = done ? STEPS.length : Math.max(0, STEPS.indexOf(progress));
   const third = (
-    <ModalStep title={name.trim()} subtitle={template} problem={problem} footer={problem ? <Button onClick={() => setStep(1)}>Back</Button> : null}>
+    <ModalStep title={name.trim()} subtitle={template} problem={problem} footer={problem ? <Button onClick={() => setStep(2)}>Back</Button> : null}>
       <ol aria-live="polite" className="flex flex-col gap-3">
         {STEPS.map((label, index) => {
           const state = index < at ? "done" : index > at ? "waiting" : problem ? "failed" : "active";
@@ -164,8 +235,8 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
   );
 
   return (
-    <MotionStepModal open onClose={onClose} label="New prototype" step={step}>
-      {[first, second, third]}
+    <MotionStepModal open onClose={onClose} label="New" step={step} tallSteps={[1]} waveRef={wave} onWaveFinish={() => done && leave(done)}>
+      {[kinds, first, second, third]}
     </MotionStepModal>
   );
 }

@@ -271,12 +271,12 @@ export function DraftPin({ left, top }: { left: number; top: number }) {
  * The element a comment would be pinned to, marked while somebody chooses where to leave one: a thin edge with
  * rounded corners and no fill, so what is under it stays readable. A group inside the hovered one is dashed. It never takes a click.
  */
-export function PinTarget({ left, top, width, height, component, dashed, strong, pulse }: { left: number; top: number; width: number; height: number; /** A design-system component instance: drawn in its own colour. */ component?: boolean; /** A group inside the one hovered: dashed and quieter. */ dashed?: boolean; /** What is chosen, not only under the pointer: a heavier line. */ strong?: boolean; /** Claude is working on it: the line breathes. */ pulse?: boolean }) {
+export function PinTarget({ left, top, width, height, component, fork, dashed, strong, pulse }: { left: number; top: number; width: number; height: number; /** Inside a fork (the project's own copy of a component): orange. */ fork?: boolean; /** A design-system component instance: drawn in its own colour. */ component?: boolean; /** A group inside the one hovered: dashed and quieter. */ dashed?: boolean; /** What is chosen, not only under the pointer: a heavier line. */ strong?: boolean; /** Claude is working on it: the line breathes. */ pulse?: boolean }) {
   return (
     <span
       aria-hidden
       style={{ left, top, width, height }}
-      className={`pointer-events-none absolute ${strong ? "border-2" : "border"} ${pulse ? "pulse-soft" : ""} ${dashed ? "rounded-[var(--r-sm)] border-dashed opacity-60" : "rounded-[var(--r-lg)]"} ${component ? "border-[var(--component)]" : "border-[var(--pin-target-edge)]"}`}
+      className={`pointer-events-none absolute ${strong ? "border-2" : "border"} ${pulse ? "pulse-soft" : ""} ${dashed ? "border-dashed opacity-60" : ""} rounded-[var(--r-xs)] ${fork ? "border-[var(--fork)]" : component ? "border-[var(--component)]" : "border-[var(--pin-target-edge)]"}`}
     />
   );
 }

@@ -85,6 +85,12 @@
   /* Words highlighted in a text box over a prototype: strong enough to read on the page's own colours. */
   --selection-highlight: color-mix(in oklab, var(--blue-500) 30%, transparent);
   --pin-target-edge: var(--selection);
+  /* Dev (the canvas to look at the code of): green where Design is blue, the same in every theme. */
+  --dev: var(--green-500);
+  --dev-muted: color-mix(in oklab, var(--green-500) 8%, transparent);
+  --dev-foreground: var(--paper-50);
+  --dev-hover: color-mix(in oklab, var(--green-500) 88%, var(--ink-900));
+  --dev-highlight: color-mix(in oklab, var(--green-500) 30%, transparent);
   /* Alignment guides and measured distances over the canvas: a signal colour apart from the selection's blue, the same in every theme. */
   --guide: var(--rose-500);
   --guide-foreground: var(--paper-50);
@@ -100,6 +106,10 @@
   --inapp-light: var(--paper-50);
   --inapp-light-foreground: var(--ink-800);
   --component: var(--violet-500);
+  --fork: var(--orange-500);
+  /** The glyph on a component's or a fork's filled mark (violet or orange in every theme). */
+  --mark-foreground: var(--paper-50);
+  --fork-muted: color-mix(in oklab, var(--orange-500) 14%, transparent);
   /* The frame of new and extended components beside the flow: dark, so each component is the light thing on it. */
   --sheet: var(--ink-850);
   --sheet-foreground: var(--paper-50);
@@ -274,4 +284,14 @@
   --elev-device-lifted: 0 2px 4px rgb(0 0 0 / 0.5), 0 12px 28px -8px rgb(0 0 0 / 0.65),
     0 32px 64px -24px rgb(0 0 0 / 0.75);
   color-scheme: dark;
+}
+
+/* In Dev everything the canvas draws as selected, picked or pointed at is green: the one colour that says which view this is. */
+[data-view="dev"] {
+  --selection: var(--dev);
+  --selection-muted: var(--dev-muted);
+  --selection-foreground: var(--dev-foreground);
+  --selection-hover: var(--dev-hover);
+  --selection-highlight: var(--dev-highlight);
+  --pin-target-edge: var(--dev);
 }

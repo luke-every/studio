@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { SetupDialog } from "@/components/onboarding/setup-dialog";
-import { Button, IconButton } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { useStarts } from "@/lib/terminal";
 import type { ActivityFeed } from "@/lib/use-activity";
 
@@ -63,9 +63,10 @@ export function TopNav({ feed, onSwitchUser }: { feed: ActivityFeed; onSwitchUse
 
         <nav aria-label="Studio" className="flex items-center gap-1 max-sm:hidden">
           {starts && !onPrototype ? (
-            <Button icon={<PlusIcon className="size-4" />} onClick={() => setNewOpen(true)}>
-              New prototype
-            </Button>
+            <IconButton onClick={() => setNewOpen(true)}>
+              <PlusIcon className="size-4" />
+              New
+            </IconButton>
           ) : null}
           <IconButton label="Search" variant="ghost" tooltipAlign="end" onClick={() => setSearchOpen(true)}>
             <SearchIcon className="size-[1.125rem]" />

@@ -55,6 +55,8 @@ type Props = {
   figmaUrl?: string;
   githubUrl?: string;
   notionUrl?: string;
+  /** On the canvas it is drawn as the buttons beside it are: ghost, with its label below. */
+  variant?: "ghost";
 };
 
 /** Only where documents can be made (on this machine, in development): there it is always in the bar, from the first paint; elsewhere it isn't built in. */
@@ -67,7 +69,7 @@ export function CopyDocsMenu(props: Props) {
  * The prototype's copy documents, beside the canvas button: a Claude doc and a Notion copy, each made, linked (one made already, somewhere),
  * opened and taken away on its own, and the links the prototype has (its design, its source, its write-up).
  */
-function Menu({ slug, name, figmaUrl, githubUrl, notionUrl }: Props) {
+function Menu({ slug, name, figmaUrl, githubUrl, notionUrl, variant }: Props) {
   const [docs, setDocs] = useState<CopyDocs | null>(null);
   const [here, setHere] = useState(true);
   const [open, setOpen] = useState(false);
@@ -463,7 +465,10 @@ function Menu({ slug, name, figmaUrl, githubUrl, notionUrl }: Props) {
         trigger={
           <IconButton
             label="Docs"
-            tooltip={false}
+            variant={variant}
+            tooltip={variant ? undefined : false}
+            tooltipSide={variant ? "below" : undefined}
+            tooltipAlign={variant ? "start" : undefined}
             loading={busy}
             aria-haspopup="menu"
             aria-expanded={open}

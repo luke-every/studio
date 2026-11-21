@@ -5,7 +5,10 @@ import { extname, join } from "node:path";
 
 import type { Edit } from "@/lib/edits";
 
+import { designTokens } from "./design-system";
 import { workingFolder } from "./local-prototypes";
+import { writeSourceEdits } from "./source-edits";
+import { recordWrite, stepWrite } from "./written-history";
 
 /**
  * Writes the edits made on a live version into its own source, on this machine, so the running app has them and the
@@ -86,21 +89,39 @@ async function store(folder: string, upload: Upload) {
   return `/img/uploads/${name}`;
 }
 
-export async function saveLiveEdits(slug: string, edits: Edit[], uploads: Map<string, Upload> = new Map()): Promise<LiveSave> {
+export async function saveLiveEdits(slug: string, all: Edit[], uploads: Map<string, Upload> = new Map()): Promise<LiveSave> {
   const folder = workingFolder(slug);
   const file = join(folder, "src", "lib", "copy.ts");
   const result: LiveSave = { saved: [], where: [], left: [] };
+  // Everything written in this save, as it was and as it became, kept as one step to undo.
+  const touched: { path: string; before: string; after: string }[] = [];
+  const finish = async () => {
+    await recordWrite(folder, touched);
+    return result;
+  };
   const skip = (selector: string, why: string) => result.left.push({ selector, why });
+
+  // What can be placed in one of the project's own files (an element tagged with where it is written) is written there, element by element: a style as classes,
+  // words as words. Words that are a line of copy.ts, and pictures, are written there, below.
+  const inFiles = all.filter((edit) => edit.loc && (edit.kind === "style" || (edit.kind === "text" && edit.copy === undefined)));
+  if (inFiles.length) {
+    const written = await writeSourceEdits(folder, inFiles, await designTokens(slug));
+    result.saved.push(...written.saved);
+    result.where.push(...written.where);
+    result.left.push(...written.left);
+    touched.push(...written.touched);
+  }
+  const edits = all.filter((edit) => !inFiles.includes(edit));
 
   const texts = edits.filter((edit): edit is Extract<Edit, { kind: "text" }> => edit.kind === "text");
   const pictures = edits.filter((edit): edit is Extract<Edit, { kind: "image" }> => edit.kind === "image");
-  for (const edit of edits) if (edit.kind !== "text" && edit.kind !== "image") skip(edit.selector, "Only copy and pictures are written to the code so far.");
-  if (!texts.length && !pictures.length) return result;
+  for (const edit of edits) if (edit.kind !== "text" && edit.kind !== "image") skip(edit.selector, edit.kind === "style" ? "This element isn't in one of this project's own files: it comes from production's code, which the studio leaves alone. Fork the component to change a copy. (Or the project's server needs restarting, so it can tag its elements.)" : "Only copy, pictures and style are written to the code so far.");
+  if (!texts.length && !pictures.length) return finish();
 
   const code = await readFile(file, "utf8").catch(() => null);
   if (code === null) {
     for (const edit of [...texts, ...pictures]) skip(edit.selector, "This prototype has no src/lib/copy.ts to write its words and pictures to.");
-    return result;
+    return finish();
   }
   const leaves = await leavesOf(code);
 
@@ -146,11 +167,17 @@ export async function saveLiveEdits(slug: string, edits: Edit[], uploads: Map<st
       result.where.push(leaf.path);
     }
   }
-  if (!changes.length) return result;
+  if (!changes.length) return finish();
 
   let out = code;
   for (const { leaf, text } of changes.sort((a, b) => b.leaf.start - a.leaf.start)) out = out.slice(0, leaf.start) + asString(text) + out.slice(leaf.end);
   await writeFile(`${file}.tmp`, out);
   await rename(`${file}.tmp`, file);
-  return result;
+  touched.push({ path: join("src", "lib", "copy.ts"), before: code, after: out });
+  return finish();
+}
+
+/** Puts back the last thing written into this project's files (`undo`), or writes it again (`redo`). */
+export async function stepLiveWrite(slug: string, direction: "undo" | "redo") {
+  return stepWrite(workingFolder(slug), direction);
 }

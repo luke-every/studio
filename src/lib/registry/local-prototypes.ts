@@ -1,6 +1,7 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { existsSync, openSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -107,6 +108,49 @@ export async function stopDevServer(slug: string) {
   return true;
 }
 
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Waits (up to `seconds`) for a prototype's dev server to be there, or to be gone. */
+async function waitFor(slug: string, running: boolean, seconds: number) {
+  for (let tries = 0; tries < seconds * 2; tries++) {
+    seen = null;
+    if ((await lookup()).has(slug) === running) return true;
+    await pause(500);
+  }
+  return false;
+}
+
+/**
+ * Starts the dev server of a prototype in ~/Claude/prototypes, as `pnpm dev` run in its folder and left running on its own (its output is kept in
+ * `.studio/dev.log` there). Next takes the first free port. Where one is running already, that is the answer.
+ */
+export async function startDevServer(slug: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!/^[a-z0-9-]+$/.test(slug) || slug.startsWith(QA_PREFIX)) return { ok: false, error: "That prototype can't be started from here." };
+  const folder = join(ROOT, slug);
+  if (!existsSync(join(folder, "package.json"))) return { ok: false, error: "This prototype has no app in its folder to start." };
+  if ((await lookup()).has(slug)) return { ok: true };
+  await mkdir(join(folder, ".studio"), { recursive: true });
+  const log = openSync(join(folder, ".studio", "dev.log"), "a");
+  const failed = await new Promise<string | null>((resolve) => {
+    // Not the studio's own environment as it is: it carries the studio's port (`PORT`), which the prototype would try to take, and Next's private settings.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "PORT" && !key.startsWith("__NEXT") && !key.startsWith("NEXT_PRIVATE"))) as NodeJS.ProcessEnv;
+    const child: ChildProcess = spawn("pnpm", ["dev"], { cwd: folder, detached: true, stdio: ["ignore", log, log], env });
+    child.once("error", () => resolve("pnpm isn't available to the studio. Start it in a terminal in the prototype's folder: pnpm dev"));
+    child.once("spawn", () => {
+      child.unref();
+      resolve(null);
+    });
+  });
+  if (failed) return { ok: false, error: failed };
+  return (await waitFor(slug, true, 40)) ? { ok: true } : { ok: false, error: "It didn't come up in time. Its output is in .studio/dev.log in the prototype's folder." };
+}
+
+/** Stops the dev server and starts it again: the way to have it read its config, or to get it out of a state. */
+export async function restartDevServer(slug: string) {
+  if (await stopDevServer(slug)) await waitFor(slug, false, 10);
+  return startDevServer(slug);
+}
+
 /** The terminal helper keeps a Claude session running in a prototype's folder; this ends it, so nothing is left running in a folder that is going. Best effort: the helper may not be running. */
 export async function endTerminal(slug: string) {
   await fetch(`http://127.0.0.1:4748/end?slug=${slug}`, { method: "POST", headers: { Origin: "http://localhost:4747" }, signal: AbortSignal.timeout(2000) }).catch(() => {});
@@ -136,7 +180,10 @@ export async function workingCopies() {
       .map(async (entry) => {
         const built = await stat(join(ROOT, entry.name, "out", "index.html")).catch(() => null);
         const live = running.has(entry.name);
-        return built || live ? { slug: entry.name, builtAt: built?.mtime ?? new Date(), live, port: running.get(entry.name) } : null;
+        // A project made in the studio has nothing built or running: just its canvas, until a template is dropped on it.
+        const note = built || live ? null : await readFile(join(ROOT, entry.name, ".studio", "new.json"), "utf8").catch(() => null);
+        const blank = !!note && /"blank":\s*true/.test(note);
+        return built || live || blank ? { slug: entry.name, builtAt: built?.mtime ?? new Date(), live, port: running.get(entry.name), blank } : null;
       }),
   );
   // Every design QA is a prototype whether or not its server is up (it is always live, on the port it was given), so one started after the
@@ -149,7 +196,7 @@ export async function workingCopies() {
         .map(async (name) => {
           const meta = JSON.parse((await readFile(join(QA_ROOT, ".meta", name), "utf8").catch(() => "{}")) || "{}") as { id?: string; branch?: string; port?: number; archived?: boolean };
           if (!meta.id || !meta.port || meta.archived || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(meta.id)) return null;
-          return { slug: QA_PREFIX + meta.id, builtAt: new Date(), live: true, port: meta.port + QA_FRAME_OFFSET, qa: meta.branch ?? meta.id };
+          return { slug: QA_PREFIX + meta.id, builtAt: new Date(), live: true, port: meta.port + QA_FRAME_OFFSET, qa: meta.branch ?? meta.id, blank: false };
         }),
     )
   ).flatMap((copy) => (copy ? [copy] : []));

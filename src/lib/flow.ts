@@ -102,6 +102,8 @@ export function layoutFlow(flow: Flow, cell: { width: number; height: number }, 
   for (const [id, { step, above }] of slot) {
     placed.set(id, { x: columnX(step), y: offsets[Math.floor(step / perRow)] + above });
   }
+  // A flow with no screens is nothing: without this its width would be the largest of no numbers, minus infinity.
+  if (!stacked.size) return { placed, width: 0, height: 0, columns: 0 };
   const last = Math.max(...stacked.keys());
   const bandWidths = new Map<number, number>();
   for (let step = 0; step <= last; step++) bandWidths.set(Math.floor(step / perRow), (bandWidths.get(Math.floor(step / perRow)) ?? 0) + cell.width + (extra.get(step) ?? 0));

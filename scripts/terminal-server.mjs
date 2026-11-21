@@ -9,17 +9,21 @@
  *
  *   node scripts/terminal-server.mjs        (scripts/com.luke.prototype-studio-terminal.plist runs it on login)
  */
-import { spawn as run } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn as run } from "node:child_process";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 import { spawn } from "node-pty";
 import { WebSocketServer } from "ws";
+
+import { extractSection } from "./extract-section.mjs";
+import { forkNested } from "./fork-nested.mjs";
+import { ensureTagging } from "./tag-source.mjs";
 
 const PORT = Number(process.env.TERMINAL_PORT ?? 4748);
 const STUDIO_PORT = Number(process.env.STUDIO_PORT ?? 4747);
@@ -31,6 +35,8 @@ const QA_ROOT = join(homedir(), "Claude", "design-qa");
 const QA_PREFIX = "qa-";
 const CONVENTIONS = join(homedir(), "Claude", "team-conventions");
 const SCAFFOLD = join(homedir(), ".claude", "skills", "newprototype", "scaffold.sh");
+const PRODUCTION = process.env.EVERY_WEBSITE_DIR ?? join(homedir(), "Claude", "every-website-main");
+const KITS = join(CONVENTIONS, "starter", "optional-stubs");
 /** How much of the screen a reconnecting panel gets back. */
 const KEEP = 200_000;
 
@@ -149,9 +155,24 @@ function checkNew(params) {
   const template = params.get("template") ?? "";
   const team = params.get("team") ?? "";
   const base = slugify(name);
+  // A project is a folder with nothing in it yet but a canvas: no template, no install.
+  const project = params.get("kind") === "project";
+  // A template added to a project that has none: the folder is already there, holding only the studio's note.
+  if (params.get("kind") === "template") {
+    const slug = params.get("slug") ?? "";
+    const note = SLUG.test(slug) ? join(ROOT, slug, ".studio", "new.json") : "";
+    let made;
+    try {
+      made = note ? JSON.parse(readFileSync(note, "utf8")) : null;
+    } catch {
+      made = null;
+    }
+    if (!made?.blank || !templates().templates.some((item) => item.name === template)) return null;
+    return { name: made.name ?? slug, template, team: made.team ?? "", base: slug, existing: slug };
+  }
   if (!name || name.length > 80 || /[\u0000-\u001f]/.test(name) || !base || base.startsWith(QA_PREFIX)) return null;
-  if (!templates().templates.some((item) => item.name === template) || (team && !SLUG.test(team))) return null;
-  return { name, template, team, base };
+  if ((!project && !templates().templates.some((item) => item.name === template)) || (team && !SLUG.test(team))) return null;
+  return { name, template, team, base, project };
 }
 
 // The script wants the licensed fonts in the starter. If this machine's copy has lost some, take them from a prototype that has them.
@@ -176,17 +197,35 @@ function restoreFonts() {
  * what is on disk, not guessed) and, at the end, the folder's name. The studio's name and team for it are kept in
  * `.studio/new.json`. Closing the dialog doesn't stop it: the prototype just turns up.
  */
-async function createPrototype(ws, { name, template, team, base }) {
+async function createPrototype(ws, { name, template, team, base, project, existing }) {
   const say = (message) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
   };
   let slug = base;
-  for (let n = 2; existsSync(join(ROOT, slug)); n++) slug = `${base}-${n}`;
+  if (!existing) for (let n = 2; existsSync(join(ROOT, slug)); n++) slug = `${base}-${n}`;
   const dir = join(ROOT, slug);
+  if (project) {
+    // Instant: the folder and the studio's note about it. Dropping a template on its canvas fills it in later.
+    try {
+      mkdirSync(join(dir, ".studio"), { recursive: true });
+      writeFileSync(join(dir, ".studio", "new.json"), JSON.stringify({ name, team: team || undefined, blank: true }, null, 2));
+    } catch {
+      return say({ error: "Couldn't make the folder in ~/Claude/prototypes." });
+    }
+    return say({ done: { slug } });
+  }
   const log = join(process.env.TMPDIR || "/tmp", `${slug}-dev.log`);
   try {
     restoreFonts();
   } catch {}
+
+  // The script wants an empty folder: the studio's note is set aside while it runs, and put back whatever happens.
+  const aside = existing ? join(process.env.TMPDIR || "/tmp", `${slug}-studio-aside`) : "";
+  if (existing) {
+    rmSync(aside, { recursive: true, force: true });
+    cpSync(join(dir, ".studio"), aside, { recursive: true });
+    rmSync(join(dir, ".studio"), { recursive: true, force: true });
+  }
 
   // Interactive and login, like the terminal, so pnpm, gh and nvm are on the PATH.
   const child = run(process.env.SHELL || "/bin/zsh", ["-ilc", 'exec bash "$SCAFFOLD" "$TEMPLATE" --dir "$TARGET"'], {
@@ -210,6 +249,11 @@ async function createPrototype(ws, { name, template, team, base }) {
 
   child.on("close", (code) => {
     clearInterval(watch);
+    if (existing) {
+      mkdirSync(join(dir, ".studio"), { recursive: true });
+      cpSync(aside, join(dir, ".studio"), { recursive: true });
+      rmSync(aside, { recursive: true, force: true });
+    }
     const lines = output.split("\n").map((line) => line.trim());
     const found = (prefix) => lines.find((line) => line.startsWith(prefix))?.slice(prefix.length).trim();
     const fonts = found("FONTS MISSING");
@@ -221,10 +265,295 @@ async function createPrototype(ws, { name, template, team, base }) {
     }
     try {
       mkdirSync(join(dir, ".studio"), { recursive: true });
+      // It is a prototype now: no longer only a canvas.
       writeFileSync(join(dir, ".studio", "new.json"), JSON.stringify({ name, team: team || undefined }, null, 2));
     } catch {}
     say({ done: { slug } });
   });
+}
+
+/** Where a component's own file is, from what the stage's list says: the website's clone (`production:<path>`) or one of the templates' kits (`kit:<kit>:<path>`). Null outside them. */
+function sourceFile(spec) {
+  const [where, ...rest] = String(spec).split(":");
+  const [root, path] = where === "production" ? [PRODUCTION, rest.join(":")] : where === "kit" ? [join(KITS, rest[0] ?? ""), rest.slice(1).join(":")] : [null, ""];
+  if (!root || !path) return null;
+  const file = normalize(join(root, path));
+  return file.startsWith(root + sep) && existsSync(file) ? file : null;
+}
+
+const commitOf = (repo) => {
+  try {
+    return execFileSync("git", ["-C", repo, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+  } catch {
+    return "";
+  }
+};
+
+/** The preview a copy is drawn by: `/studio-stage?id=<component>&props=<json>`, the component alone, as wide as the frame it is in. */
+const STAGE_PAGE = `"use client";
+
+import { Component as ReactComponent, Fragment, Suspense, createElement, useEffect, useRef, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+
+import { elementTypes, forks } from "@/lib/studio-forks";
+
+// What a copy is drawn with was captured as plain data (the studio's capture-props.ts): a function is {"$fn":true}, a date {"$date"}, and markup (children)
+// a description, {"$el", props, children}, which is built again here from the components named in elementTypes.
+function revive(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(revive);
+  if (value && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    if (object.$fn === true) return () => {};
+    if (typeof object.$date === "string") return new Date(object.$date);
+    if (typeof object.$el === "string") {
+      const named = object.$el;
+      const type = named === "Fragment" ? Fragment : (elementTypes[named] ?? (/^[a-z]/.test(named) ? named : null));
+      if (!type) return null;
+      const inside = object.children === undefined ? [] : ([] as unknown[]).concat(revive(object.children));
+      return createElement(type as never, revive(object.props) as never, ...(inside as ReactNode[]));
+    }
+    return Object.fromEntries(Object.entries(object).map(([key, one]) => [key, revive(one)]));
+  }
+  return value;
+}
+
+// A copy that can't be drawn alone (it needs something its parent gave it, such as a context) says so, and does not take the page down with it.
+class Boundary extends ReactComponent<{ children: ReactNode }, { problem: string | null }> {
+  state = { problem: null as string | null };
+  static getDerivedStateFromError(error: unknown) {
+    return { problem: error instanceof Error ? error.message : "It stopped." };
+  }
+  render() {
+    return this.state.problem ? <p style={{ padding: 24, font: "14px system-ui" }}>This copy can't be drawn on its own: {this.state.problem}</p> : this.props.children;
+  }
+}
+
+// Written by the studio (Fork on a component): the copies this project has made, drawn alone. It says how big the copy is (the canvas asks, and
+// is told again when it changes), so the layer on the canvas is as big as the copy.
+function useReportSize(box: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const node = box.current;
+    if (!node) return undefined;
+    let last = "";
+    const report = () => {
+      const rect = node.getBoundingClientRect();
+      let right = rect.right;
+      let bottom = rect.bottom;
+      for (const inner of Array.from(node.querySelectorAll("*"))) {
+        const inside = inner.getBoundingClientRect();
+        if (inside.width && inside.height) {
+          right = Math.max(right, inside.right);
+          bottom = Math.max(bottom, inside.bottom);
+        }
+      }
+      const width = Math.min(Math.ceil(right - rect.left), 4000);
+      const height = Math.min(Math.ceil(bottom - rect.top), 4000);
+      if (!width || !height || width + "x" + height === last) return;
+      last = width + "x" + height;
+      window.parent.postMessage({ type: "studio:stage-size", width, height }, "*");
+    };
+    const ask = (event: MessageEvent) => {
+      if ((event.data as { type?: string } | null)?.type !== "studio:stage-size:ask") return;
+      last = "";
+      report();
+    };
+    report();
+    window.addEventListener("message", ask);
+    const watch = new ResizeObserver(report);
+    watch.observe(node);
+    return () => {
+      window.removeEventListener("message", ask);
+      watch.disconnect();
+    };
+  }, [box]);
+}
+
+function Stage() {
+  const box = useRef<HTMLDivElement>(null);
+  useReportSize(box);
+  // Words typed over inside an instance of a copy (the texts parameter): put on the elements that hold them once it has drawn.
+  const typed = useSearchParams().get("texts") ?? "";
+  useEffect(() => {
+    if (!typed) return;
+    try {
+      for (const [selector, words] of Object.entries(JSON.parse(typed) as Record<string, string>)) {
+        const element = document.querySelector(selector);
+        if (element && typeof words === "string") element.textContent = words;
+      }
+    } catch {
+      // Words that don't parse, or a selector that finds nothing, change nothing.
+    }
+  }, [typed]);
+  const params = useSearchParams();
+  const id = params.get("id") ?? "";
+  const entry = forks[id];
+  let over: Record<string, unknown> = {};
+  try {
+    over = JSON.parse(params.get("props") ?? "{}") as Record<string, unknown>;
+  } catch {
+    // Props that don't parse change nothing.
+  }
+  if (!entry) return <p style={{ padding: 24 }}>{id ? \`No copy of \${id} in this project.\` : "Choose a component."}</p>;
+  const Component = entry.component;
+  return (
+    <>
+      <style>{"html,body{background:transparent!important;margin:0}"}</style>
+      <div data-stage ref={box} style={{ display: "block" }}>
+        <Boundary>
+          <Component {...(revive(entry.props) as Record<string, unknown>)} {...over} />
+        </Boundary>
+      </div>
+    </>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense>
+      <Stage />
+    </Suspense>
+  );
+}
+`;
+
+/** The registry and the preview a project draws its copies by, written from `.studio/forks.json`'s records. */
+function writeRegistry(dir, records) {
+  mkdirSync(join(dir, "src", "lib"), { recursive: true });
+  mkdirSync(join(dir, "src", "app", "studio-stage"), { recursive: true });
+  const all = Object.entries(records);
+  writeFileSync(
+    join(dir, "src", "lib", "studio-forks.ts"),
+    `// Written by the studio from .studio/forks.json: the copies of components this project has made, and the props each starts with.\nimport type { ComponentType } from "react";\n\n${[...new Set(all.flatMap(([, one]) => one.imports))].join("\n")}\n${all.map(([key, one]) => `import { ${one.exportName} as F_${key.replace(/[^A-Za-z0-9]/g, "_")} } from "@/components/forks/${one.folder}/${one.file}";`).join("\n")}\n\nexport const elementTypes: Record<string, ComponentType<Record<string, unknown>>> = {${[...new Set(all.flatMap(([, one]) => one.elementTypes ?? []))].map((type) => `\n  ${JSON.stringify(type)}: T_${type} as unknown as ComponentType<Record<string, unknown>>,`).join("")}\n};\n\nexport const forks: Record<string, { component: ComponentType<Record<string, unknown>>; props: Record<string, unknown> }> = {\n${all.map(([key, one]) => `  ${JSON.stringify(key)}: { component: F_${key.replace(/[^A-Za-z0-9]/g, "_")} as unknown as ComponentType<Record<string, unknown>>, props: ${one.baseline} },`).join("\n")}\n};\n`,
+  );
+  writeFileSync(join(dir, "src", "app", "studio-stage", "page.tsx"), STAGE_PAGE);
+}
+
+/**
+ * Makes a copy of a component in a project, as Fork on an instance does: its file (and the files it imports from beside itself) into
+ * `src/components/forks/<Name>/`, with a line at the top saying what it is a copy of; a record of it in `.studio/forks.json`, which is what
+ * says "based on" to whoever reads the work; and the preview the studio draws it by. The original is never touched.
+ */
+async function forkComponent(ws, { slug, id }) {
+  const say = (message) => {
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+  };
+  const dir = join(ROOT, slug);
+  if (!existsSync(join(dir, "package.json"))) return say({ error: "Set the project up first: it has no app yet." });
+  let entry;
+  try {
+    entry = JSON.parse(readFileSync(join(ROOT, "stage", "out", "components.json"), "utf8")).find((one) => one.id === id);
+  } catch {
+    return say({ error: "The components stage isn't built. Run npm run studio in ~/Claude/prototypes/stage." });
+  }
+  const from = entry?.fork ? sourceFile(entry.fork.source) : null;
+  if (!entry?.fork || !from) return say({ error: "That component can't be copied." });
+  try {
+    say({ step: "Copying" });
+    const folder = entry.label.split(/[^A-Za-z0-9]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join("") || "Component";
+    const target = join(dir, "src", "components", "forks", folder);
+    mkdirSync(target, { recursive: true });
+    const source = entry.fork.source;
+    const commit = commitOf(source.startsWith("kit:") ? CONVENTIONS : PRODUCTION);
+    const done = new Set();
+    // The file, and what it imports as `./name` from beside itself, so it still runs where it is put.
+    const bring = (file, first) => {
+      if (done.has(file)) return;
+      done.add(file);
+      let text = readFileSync(file, "utf8");
+      if (first) text = `// A copy of ${entry.label} (${source}${commit ? `, at ${commit}` : ""}) for this project. The original is not touched: what is changed here is what is proposed.\n${text}`;
+      writeFileSync(join(target, basename(file)), text);
+      for (const [, name] of text.matchAll(/from\s+["']\.\/([\w.-]+)["']/g)) {
+        const beside = [".tsx", ".ts", ""].map((end) => join(dirname(file), name + end)).find((one) => existsSync(one) && !one.endsWith(sep));
+        if (beside && /\.(tsx?|css)$/.test(beside)) bring(beside, false);
+      }
+    };
+    bring(from, true);
+    // Other files it needs (what its starting props are made from), put where they are asked for, and never over something already there.
+    for (const spec of entry.fork.extra ?? []) {
+      const [origin, destination] = String(spec).split(">");
+      const file = sourceFile(origin);
+      const to = normalize(join(dir, destination ?? ""));
+      if (file && destination && to.startsWith(dir + sep) && !existsSync(to)) {
+        mkdirSync(dirname(to), { recursive: true });
+        copyFileSync(file, to);
+      }
+    }
+    // The record: what each copy is, what it is a copy of and when, and the starting props its preview is drawn with.
+    const recordFile = join(dir, ".studio", "forks.json");
+    mkdirSync(dirname(recordFile), { recursive: true });
+    let records = {};
+    try {
+      records = JSON.parse(readFileSync(recordFile, "utf8"));
+    } catch {
+      records = {};
+    }
+    records[id] = { label: entry.label, folder, file: basename(from).replace(/\.tsx?$/, ""), exportName: entry.fork.exportName, baseline: entry.fork.baseline, imports: entry.fork.imports ?? [], from: { source, commit }, at: new Date().toISOString() };
+    writeFileSync(recordFile, JSON.stringify(records, null, 2));
+    writeRegistry(dir, records);
+    // Each element of the copy is tagged with where it is written, so a change on the canvas is written to it. A project's server reads its config once: restart it after this.
+    ensureTagging(dir);
+    say({ done: { slug, id, label: entry.label } });
+  } catch (error) {
+    say({ error: `The copy couldn't be made: ${error instanceof Error ? error.message : "it stopped."}` });
+  }
+}
+
+/**
+ * Takes an element of a project's own code out into a component of its own (see `extract-section.mjs`), records it like any copy, and has the project draw it.
+ * An element that needs what only the code around it has is not taken: it is said what it needs, which is for Claude.
+ */
+async function extractElement(ws, { slug, loc, name, exact, top, owners }) {
+  const say = (message) => {
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+  };
+  const dir = join(ROOT, slug);
+  if (!existsSync(join(dir, "package.json"))) return say({ error: "Set the project up first: it has no app yet." });
+  try {
+    say({ step: "Taking it out" });
+    const recordFile = join(dir, ".studio", "forks.json");
+    let records = {};
+    try {
+      records = JSON.parse(readFileSync(recordFile, "utf8"));
+    } catch {
+      records = {};
+    }
+    const made = extractSection({ dir, loc, name, records, followed: exact, top, owners, commits: { project: commitOf(CONVENTIONS), production: commitOf(PRODUCTION) } });
+    if (made.error) return say({ error: made.error });
+    if (made.level === "C") return say({ error: `${made.reason} Ask Claude to make it stand on its own first.` });
+    records[made.id] = made.record;
+    mkdirSync(dirname(recordFile), { recursive: true });
+    writeFileSync(recordFile, JSON.stringify(records, null, 2));
+    writeRegistry(dir, records);
+    ensureTagging(dir);
+    say({ done: { slug, id: made.id, label: records[made.id].label } });
+  } catch (error) {
+    say({ error: `It couldn't be taken out: ${error instanceof Error ? error.message : "it stopped."}` });
+  }
+}
+
+/**
+ * Makes a fork the owner of a component it uses (see `fork-nested.mjs`): the copy goes into the fork's folder and the fork is pointed at it, so a change made inside it is
+ * the fork's, and not a change to the original that the rest of the prototype uses.
+ */
+async function forkNestedFor(ws, { slug, id, name }) {
+  const say = (message) => {
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+  };
+  const dir = join(ROOT, slug);
+  if (!existsSync(join(dir, "package.json"))) return say({ error: "Set the project up first: it has no app yet." });
+  try {
+    const recordFile = join(dir, ".studio", "forks.json");
+    const records = JSON.parse(readFileSync(recordFile, "utf8"));
+    if (!records[id]) return say({ error: "That fork isn't in this project's records." });
+    const made = forkNested({ dir, record: records[id], name, commits: { project: commitOf(CONVENTIONS), production: commitOf(PRODUCTION) } });
+    if (made.error) return say({ error: made.error });
+    records[id] = made.record;
+    writeFileSync(recordFile, JSON.stringify(records, null, 2));
+    writeRegistry(dir, records);
+    say({ done: { slug, id, label: name } });
+  } catch (error) {
+    say({ error: `It couldn't be copied: ${error instanceof Error ? error.message : "it stopped."}` });
+  }
 }
 
 // A plain GET is the studio asking whether this prototype can have a terminal: 204 if so, 404 if not. The button is shown on that.
@@ -286,6 +615,52 @@ server.on("upgrade", (request, socket, head) => {
   // The page that opened it must be the studio's own, and the address must be ours (a DNS-rebinding page would carry its own name).
   if (!ALLOWED_ORIGINS.has(request.headers.origin ?? "") || !ALLOWED_HOSTS.has(request.headers.host ?? "")) return refuse();
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
+  if (url.pathname === "/tag") {
+    const slug = url.searchParams.get("slug") ?? "";
+    if (!SLUG.test(slug)) return refuse();
+    return wss.handleUpgrade(request, socket, head, (ws) => {
+      const dir = join(ROOT, slug);
+      let tagged = "skipped";
+      try {
+        if (existsSync(join(dir, "next.config.ts"))) tagged = ensureTagging(dir);
+      } catch {
+        tagged = "skipped";
+      }
+      ws.send(JSON.stringify({ done: { tagged } }));
+      ws.close();
+    });
+  }
+  if (url.pathname === "/forknested") {
+    const [slug, id, name] = [url.searchParams.get("slug") ?? "", url.searchParams.get("id") ?? "", url.searchParams.get("name") ?? ""];
+    if (!SLUG.test(slug) || !/^[a-z0-9-]+$/.test(id) || !/^[A-Z]\w*$/.test(name)) return refuse();
+    return wss.handleUpgrade(request, socket, head, (ws) => void forkNestedFor(ws, { slug, id, name }));
+  }
+  if (url.pathname === "/extract") {
+    const slug = url.searchParams.get("slug") ?? "";
+    if (!SLUG.test(slug)) return refuse();
+    // What it takes is sent as a message once the connection is open: the props of a component are more than an address holds.
+    return wss.handleUpgrade(request, socket, head, (ws) => {
+      ws.once("message", (data) => {
+        let asked;
+        try {
+          asked = JSON.parse(String(data));
+        } catch {
+          return ws.close();
+        }
+        const loc = typeof asked.loc === "string" ? asked.loc : "";
+        const name = typeof asked.name === "string" && /^[\w -]{0,40}$/.test(asked.name) ? asked.name : "";
+        const top = asked.top && typeof asked.top.name === "string" && /^[A-Z]\w*$/.test(asked.top.name) ? { name: asked.top.name, props: asked.top.props, usedAt: typeof asked.top.usedAt === "string" ? asked.top.usedAt : undefined } : null;
+        const owners = Array.isArray(asked.owners) ? asked.owners.filter((one) => one && typeof one.name === "string").slice(0, 8) : [];
+        if (loc && !/^[\w./()[\]@-]+\.tsx:\d+:\d+$/.test(loc)) return ws.close();
+        void extractElement(ws, { slug, loc, name, exact: asked.exact === true, top, owners });
+      });
+    });
+  }
+  if (url.pathname === "/fork") {
+    const [slug, id] = [url.searchParams.get("slug") ?? "", url.searchParams.get("id") ?? ""];
+    if (!SLUG.test(slug) || !/^[a-z0-9-]+$/.test(id)) return refuse();
+    return wss.handleUpgrade(request, socket, head, (ws) => void forkComponent(ws, { slug, id }));
+  }
   if (url.pathname === "/new") {
     const wanted = checkNew(url.searchParams);
     if (!wanted) return refuse();

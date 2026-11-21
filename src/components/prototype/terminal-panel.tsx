@@ -4,7 +4,7 @@ import "@xterm/xterm/css/xterm.css";
 
 import { useEffect, useRef, useState } from "react";
 
-import { CloseIcon } from "@/components/shell/nav-icons";
+import { CloseIcon, TerminalIcon } from "@/components/shell/nav-icons";
 
 import { Button } from "@/components/ui/button";
 import { TERMINAL_HOST } from "@/lib/terminal";
@@ -17,10 +17,14 @@ const MIN_WIDTH = 160;
 
 type State = "starting" | "running" | "closed";
 
+/** The prototypes whose Claude has been started from this page: opening the panel again doesn't ask again. */
+const begun = new Set<string>();
+
 /**
  * Claude Code in the prototype's own folder. The shell lives in the terminal server (`scripts/terminal-server.mjs`), one
  * per prototype, so closing the panel, reloading or opening another prototype leaves it running; this draws it and
- * types into it. xterm is loaded when the panel is first opened.
+ * types into it. Nothing starts until it is asked to (the Start button), so a panel opened to look doesn't leave a
+ * terminal running. xterm is loaded when it starts.
  */
 export function TerminalPanel({
   slug,
@@ -33,6 +37,7 @@ export function TerminalPanel({
   select: { picking: boolean; onPicking: (on: boolean) => void; chip: string | null; onClear: () => void; onWorking: (working: boolean) => void } | null;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const [started, setStarted] = useState(() => begun.has(slug));
   const [state, setState] = useState<State>("starting");
   const [attempt, setAttempt] = useState(0);
   // Starting the helper, when it isn't running: the studio does it (see /api/terminal) and the panel connects once it answers.
@@ -61,7 +66,7 @@ export function TerminalPanel({
 
   useEffect(() => {
     const node = host.current;
-    if (!node) return undefined;
+    if (!node || !started) return undefined;
     let ended = false;
     let socket: WebSocket | undefined;
     let cleanup = () => {};
@@ -143,7 +148,7 @@ export function TerminalPanel({
       cleanup();
       socket?.close();
     };
-  }, [slug, attempt]);
+  }, [slug, attempt, started]);
 
   return (
     <div className="relative flex h-full min-h-64 flex-col bg-[var(--terminal-background)]">
@@ -181,7 +186,24 @@ export function TerminalPanel({
       ) : null}
       <div className="relative min-h-0 flex-1 p-3">
         <div ref={host} className="h-full w-full" />
-        {state === "starting" ? <p className="pointer-events-none absolute left-4 top-3 text-ui text-[var(--terminal-muted)] pulse-soft">Starting Claude</p> : null}
+        {!started ? (
+          <div className="absolute inset-0 grid place-items-center">
+            <div className="flex flex-col items-center gap-4">
+              <TerminalIcon className="size-8 text-[var(--terminal-muted)]" />
+              <p className="text-base font-medium text-[var(--terminal-foreground)]">Claude Code</p>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  begun.add(slug);
+                  setStarted(true);
+                }}
+              >
+                Start
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {started && state === "starting" ? <p className="pointer-events-none absolute left-4 top-3 text-ui text-[var(--terminal-muted)] pulse-soft">Starting Claude</p> : null}
       </div>
       {state === "closed" ? (
         <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 border-t border-border bg-[var(--terminal-background)] p-3">

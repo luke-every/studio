@@ -6,7 +6,7 @@ import { ComponentPanel } from "@/components/prototype/component-panel";
 import { PanelEmpty } from "@/components/prototype/panel-empty";
 import { CheckIcon, CopyIcon, PencilIcon } from "@/components/shell/nav-icons";
 import type { EditSession } from "@/components/prototype/use-edit-session";
-import { AlignGrid, Check, Choice, ColourField, Glyph, NumberField, PanelButton, Row, Section, SelectField, SizeField, TokenField, type TokenOption } from "@/components/prototype/edit-fields";
+import { AlignGrid, Check, Choice, ColourField, FLOW_OPTIONS, Glyph, NumberField, PanelButton, PanelTitle, Row, Section, SelectField, SizeField, TokenField, type TokenOption } from "@/components/prototype/edit-fields";
 import { parseShadow, rgbaOf, shadowCss, toHex, toRgba, type Axis, type Shadow, type Sizing } from "@/lib/edit-dom";
 import type { Part } from "@/lib/edit-part";
 import { designTokensOf } from "@/lib/registry/actions";
@@ -65,6 +65,10 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
   const picture = element ? element.picture : null;
   const flex = /flex|grid/.test(read("display"));
   const column = read("flex-direction").startsWith("column");
+  const grid = /grid/.test(read("display"));
+  // How it flows what is in it, as the frame panel says it: freeform when it does not, otherwise a column, a row or a grid.
+  const flow = !flex ? "freeform" : grid ? "grid" : column ? "column" : "row";
+  const columns = read("grid-template-columns").split(/\s+/).filter((track) => track && track !== "none").length;
   const inFlexParent = element ? /flex|grid/.test(element.parentDisplay) : false;
   const positioned = read("position") !== "static";
   const shadow = parseShadow(read("box-shadow"));
@@ -175,12 +179,9 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
       <div className="flex flex-1 flex-col">
         {element ? (
           <>
-            <div className="flex h-12 items-center justify-between gap-3 border-b border-divider px-4">
-              <p className="text-sm font-medium text-foreground">
-                {`<${element.tag}>`}
-                {element.inside ? <span className="font-normal text-foreground-muted">{` in ${element.inside}`}</span> : null}
-              </p>
-              {session.has(element.selector) ? (
+            <PanelTitle name={`<${element.tag}>`} note={element.inside ? `in ${element.inside}` : undefined} />
+            {session.has(element.selector) ? (
+              <div className="px-4 pt-3">
                 <PanelButton
                   label="Reset this part"
                   onClick={() => {
@@ -190,8 +191,8 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
                 >
                   Reset
                 </PanelButton>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
 
             {picture && element.pictureKind === "img" ? (
               <Section title="Image">
@@ -264,7 +265,14 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
             {/* Inside a component its look is the component's: only its words can change. */}
             {element.inside ? null : (
               <>
-            <Section title="Layout">
+            <Section title={flex ? "Auto layout" : "Layout"}>
+              <Choice
+                label="Flow"
+                caption="Flow"
+                value={flow}
+                options={FLOW_OPTIONS}
+                onChange={(value) => (value === "freeform" ? set(["display", "block"]) : value === "grid" ? set(["display", "grid"]) : set(["display", "flex"], ["flex-direction", value]))}
+              />
               <Row>
                 {dimension("width", "Width")}
                 {dimension("height", "Height")}
@@ -296,7 +304,7 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
                   <NumberField
                     unit="number"
                     glyph={<Glyph><path d="M2.5 8h11M5 5.5 2.5 8 5 10.5M11 5.5 13.5 8 11 10.5" /></Glyph>}
-                    label="Flex grow"
+                    label="Grow"
                     value={read("flex-grow")}
                     onCommit={(value) => set(["flex-grow", value])}
                   />
@@ -314,35 +322,40 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
                   />
                 </Row>
               ) : null}
+              {flex && grid ? (
+                <>
+                  <NumberField
+                    unit="number"
+                    caption="Columns"
+                    glyph={<Glyph><rect x="2" y="2" width="5" height="12" rx="1" /><rect x="9" y="2" width="5" height="12" rx="1" /></Glyph>}
+                    label="Columns"
+                    value={String(columns || 1)}
+                    onCommit={(value) => set(["grid-template-columns", `repeat(${Math.max(1, Math.min(12, Math.round(Number(value)) || 1))}, minmax(0, 1fr))`])}
+                  />
+                  {sized("space", <Glyph><rect x="2" y="5" width="3.5" height="6" rx="0.75" /><rect x="10.5" y="5" width="3.5" height="6" rx="0.75" /></Glyph>, "Gap", ["column-gap", "row-gap"], read("column-gap"))}
+                </>
+              ) : null}
+              {flex && !grid ? (
+                <>
+                  <div className="flex gap-2">
+                    <AlignGrid column={column} justify={read("justify-content")} align={read("align-items")} onChange={(justify, align) => set(["justify-content", justify], ["align-items", align])} />
+                    <div className="flex min-w-0 flex-1 flex-col gap-2">
+                      {sized("space", <Glyph><rect x="2" y="5" width="3.5" height="6" rx="0.75" /><rect x="10.5" y="5" width="3.5" height="6" rx="0.75" /></Glyph>, "Gap", ["column-gap", "row-gap"], read(column ? "row-gap" : "column-gap"))}
+                      <Choice
+                        label="Wrap"
+                        value={read("flex-wrap") === "nowrap" ? "nowrap" : "wrap"}
+                        onChange={(value) => set(["flex-wrap", value])}
+                        options={[
+                          { value: "nowrap", title: "No wrap", icon: <Glyph><path d="M2.5 8h11" /></Glyph> },
+                          { value: "wrap", title: "Wrap", icon: <Glyph><path d="M2.5 5h11M2.5 11h7" /></Glyph> },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                  <Check label="Space between" checked={read("justify-content") === "space-between"} onChange={(on) => set(["justify-content", on ? "space-between" : "flex-start"])} />
+                </>
+              ) : null}
               <Check label="Clip content" checked={["hidden", "clip"].includes(read("overflow-x"))} onChange={(on) => set(["overflow", on ? "hidden" : "visible"])} />
-            </Section>
-
-            <Section title="Flex" applied={flex} onAdd={() => set(["display", "flex"])} action={removeButton("Remove flex", () => set(["display", "block"]))}>
-              <div className="flex gap-2">
-                <AlignGrid column={column} justify={read("justify-content")} align={read("align-items")} onChange={(justify, align) => set(["justify-content", justify], ["align-items", align])} />
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <Choice
-                    label="Direction"
-                    value={column ? "column" : "row"}
-                    onChange={(value) => set(["flex-direction", value])}
-                    options={[
-                      { value: "row", title: "Row", icon: <Glyph><path d="M2.5 8h11M10.5 5l3 3-3 3" /></Glyph> },
-                      { value: "column", title: "Column", icon: <Glyph><path d="M8 2.5v11M5 10.5l3 3 3-3" /></Glyph> },
-                    ]}
-                  />
-                  {sized("space", <Glyph><rect x="2" y="5" width="3.5" height="6" rx="0.75" /><rect x="10.5" y="5" width="3.5" height="6" rx="0.75" /></Glyph>, "Gap", ["column-gap", "row-gap"], read(column ? "row-gap" : "column-gap"))}
-                  <Choice
-                    label="Wrap"
-                    value={read("flex-wrap") === "nowrap" ? "nowrap" : "wrap"}
-                    onChange={(value) => set(["flex-wrap", value])}
-                    options={[
-                      { value: "nowrap", title: "No wrap", icon: <Glyph><path d="M2.5 8h11" /></Glyph> },
-                      { value: "wrap", title: "Wrap", icon: <Glyph><path d="M2.5 5h11M2.5 11h7" /></Glyph> },
-                    ]}
-                  />
-                </div>
-              </div>
-              <Check label="Space between" checked={read("justify-content") === "space-between"} onChange={(on) => set(["justify-content", on ? "space-between" : "flex-start"])} />
             </Section>
 
             {hasText ? (
@@ -440,17 +453,22 @@ export function EditPanel({ part: element, session, slug }: { part: Part | null;
                 };
                 const name = kind[0].toUpperCase() + kind.slice(1);
                 const glyph = (side: keyof typeof sides) => <Glyph><path d={sides[side].path} /></Glyph>;
-                return sidesApart ? (
-                  <Row key={kind}>
+                return (
+                  <div key={kind} className="flex flex-col gap-2">
+                    <p className="text-xs text-foreground-muted">{name}</p>
+                    {sidesApart ? (
+                  <Row>
                     {(["top", "right", "bottom", "left"] as const).map((side) => (
                       <div key={side}>{sized("space", glyph(side), `${name}, ${side}`, [`${kind}-${side}`], read(`${kind}-${side}`))}</div>
                     ))}
                   </Row>
                 ) : (
-                  <Row key={kind}>
+                  <Row>
                     <div>{sized("space", glyph("top"), `${name}, top and bottom`, [`${kind}-top`, `${kind}-bottom`], read(`${kind}-top`))}</div>
                     <div>{sized("space", glyph("left"), `${name}, left and right`, [`${kind}-left`, `${kind}-right`], read(`${kind}-left`))}</div>
                   </Row>
+                    )}
+                  </div>
                 );
               })}
             </Section>

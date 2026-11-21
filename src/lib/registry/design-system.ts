@@ -121,7 +121,8 @@ export async function designTokens(slug: string) {
 
 /** The names of a live version's design-system components and, when one is asked for, its props. */
 export async function designSystem(slug: string, name?: string) {
-  const found = await files(workingFolder(slug));
+  // A prototype's components are its own folder's and the website's, which it imports through the path overlay and so does not have a copy of: both are known by name.
+  const found = new Map([...(await files(join(homedir(), "Claude", "every-website-main"))), ...(await files(workingFolder(slug)))]);
   const path = name ? found.get(name) : undefined;
   return { names: [...found.keys()], props: path && name ? await propsOf(path, name) : [] };
 }

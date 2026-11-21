@@ -39,6 +39,8 @@ export type PrototypeVersion = {
   live?: boolean;
   /** The dev server's address on this machine, to copy. */
   liveUrl?: string;
+  /** Only a canvas so far: no files, nothing to serve. */
+  blank?: boolean;
 };
 
 export type Prototype = {

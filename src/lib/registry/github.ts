@@ -115,10 +115,15 @@ export async function fetchPrototypeFile(
   if (!/^[a-z0-9-]+$/.test(slug) || !/^v\d+-\d+(?:-\d+)?$/.test(versionSegment)) return null;
   if (path.some((segment) => !segment || segment === "." || segment === "..")) return null;
 
+  // A working copy (v0.0) is on this machine: what its folder has built is what it is, whether or not a content repository is connected (which never has a v0.0).
+  if (versionSegment === WORKING_SEGMENT && process.env.NODE_ENV !== "production") {
+    const local = await workingFile(slug, path);
+    if (local) return local;
+  }
   const cfg = config();
   if (!cfg) {
     if (process.env.NODE_ENV === "production") return null;
-    return (versionSegment === WORKING_SEGMENT ? await workingFile(slug, path) : null) ?? readLocalFile(slug, versionSegment, path);
+    return readLocalFile(slug, versionSegment, path);
   }
 
   const file = (path.length ? path : ["index.html"]).map(encodeURIComponent).join("/");

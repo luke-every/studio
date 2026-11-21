@@ -154,7 +154,7 @@ export function StudioProvider({
       setToastText(message);
       setToastError(error);
       setToastAction(action);
-      showToast(!!action);
+      showToast(!!action, error);
     },
     [showToast],
   );
@@ -258,6 +258,7 @@ export function StudioProvider({
       <Toast
         state={toast.state}
         onDone={toast.done}
+        onClose={toast.leave}
         error={toastError}
         action={toastAction && { label: toastAction.label, onPress: () => (toast.leave(), toastAction.onPress()) }}
       >

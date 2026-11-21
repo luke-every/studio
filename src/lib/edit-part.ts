@@ -1,4 +1,5 @@
 import { copyIn, copyOf, drawnScale, imageIdIn, pictureOf, pictureSrcOf, selectorFor, setPicture, sizeProperties, sizingOf, textOf, toHex, unmark, writeText, type Axis, type Sizing } from "@/lib/edit-dom";
+import { nameOfType, plainOf } from "@/lib/capture-props";
 import { boxOfElement, elementAt, rootOf, type Box, type Reach } from "@/lib/anchor";
 import type { Edit } from "@/lib/edits";
 
@@ -171,6 +172,12 @@ export type Part = {
   tokens: Tokens;
   /** Where it is in its page's window, in the page's own pixels. */
   box: { left: number; top: number; width: number; height: number };
+  /** Where this element is written in a fork's file (file:line:column), when the page was built to say so (`data-studio-loc`). */
+  loc?: string;
+  /** Its classes as the code has them: what an engineer copies. */
+  classes?: string;
+  /** When this element is the top of a component the page uses: where the page uses it (file:line:column of that tag). */
+  usedAt?: string;
   /** Set when it is an element inside a design-system component (a live version), not the component itself: the component's name. Its look is the component's, so only its words can be changed. */
   inside?: string;
   /** Set when it is the root of a design-system component instance (a live version): what it is, and its props that are plain values. */
@@ -183,6 +190,51 @@ const fiberOf = (element: Element) => {
   const key = Object.keys(element).find((k) => k.startsWith("__reactFiber$"));
   return key ? ((element as unknown as Record<string, Fiber | null>)[key] ?? null) : null;
 };
+/**
+ * Where the page uses the component this element is the top of: the outermost component whose first element it is, by where its tag is written. The tag's place
+ * (`data-studio-loc`, put on it while the page is built) reaches the component as a prop, so it can be read there. With two uses of one component, it says which.
+ * Elements that are each the only one inside the next (a section holding one wrapper holding the content) are one thing to look at: the top of any of them is the component.
+ */
+const usedAtOf = (element: Element): string | undefined => {
+  const chain = new Set<Element>([element]);
+  for (let up = element.parentElement; up && up.children.length === 1; up = up.parentElement) chain.add(up);
+  let found: string | undefined;
+  for (let fiber = fiberOf(element); fiber; fiber = fiber.return ?? null) {
+    if (typeof fiber.type === "string" || !fiber.type) continue;
+    const loc = fiber.memoizedProps?.["data-studio-loc"];
+    const host = typeof loc === "string" ? hostOf(fiber) : null;
+    if (host && chain.has(host)) found = loc as string;
+  }
+  return found;
+};
+/**
+ * What a copy of an element needs to be drawn somewhere else as it is on this page now (`capture-props.ts`): the component it is the top of, if it is (a
+ * section's own element, or the elements that are each the only one in the next, down from it) with what that was given and where the page uses it; and the
+ * components that drew it, nearest first, each with what it was given. A page in production has no owners to read, so it says nothing.
+ */
+export type Capture = { top: { name: string; props: unknown; usedAt?: string } | null; owners: { name: string; props: unknown }[] };
+
+export function captureOf(element: Element): Capture {
+  const chain = new Set<Element>([element]);
+  for (let up = element.parentElement; up && up.children.length === 1; up = up.parentElement) chain.add(up);
+  let top: Capture["top"] = null;
+  for (let fiber = fiberOf(element); fiber; fiber = fiber.return ?? null) {
+    if (typeof fiber.type === "string" || !fiber.type) continue;
+    const name = nameOfType(fiber.type);
+    const host = name && /^[A-Z]/.test(name) ? hostOf(fiber) : null;
+    if (name && host && chain.has(host)) {
+      const loc = fiber.memoizedProps?.["data-studio-loc"];
+      top = { name, props: plainOf(fiber.memoizedProps), ...(typeof loc === "string" ? { usedAt: loc } : {}) };
+    }
+  }
+  const owners: Capture["owners"] = [];
+  for (let owner = fiberOf(element)?._debugOwner ?? null; owner && owners.length < 6; owner = owner._debugOwner ?? null) {
+    const name = nameOfType(owner.type);
+    if (name && /^[A-Z]/.test(name)) owners.push({ name, props: plainOf(owner.memoizedProps) });
+  }
+  return { top, owners };
+}
+
 const nameOf = (fiber: Fiber) => {
   const type = fiber.type as { displayName?: string; name?: string; render?: { name?: string }; type?: { name?: string } } | string | undefined;
   return type && typeof type !== "string" ? type.displayName || type.name || type.render?.name || type.type?.name || "" : "";
@@ -203,7 +255,49 @@ const hostOf = (fiber: Fiber | null | undefined): Element | null => {
  * children don't); of those, the outermost run of design-system ones is the instance, so an icon inside a Button is
  * the Button. A production build has no owners, and so never finds one.
  */
+/** The files of a project's forks, as an element's mark (`data-studio-loc`) names them. */
+const FORK_FILES = "src/components/forks/";
+const outsideForks = (element: Element) => {
+  const loc = element.getAttribute("data-studio-loc");
+  return loc !== null && !loc.startsWith(FORK_FILES);
+};
+
+/**
+ * A fork's page draws the fork's own files and, inside them, the other components it uses, which are the originals, shared with the rest of the prototype. An element
+ * written in a file that is not the fork's belongs to one of those: this is the top of it (the elements up from it that are of the same kind), or null.
+ */
+function nestedOriginal(element: Element): Element | null {
+  if (element.ownerDocument.location?.pathname !== "/studio-stage" || !outsideForks(element)) return null;
+  let root = element;
+  for (let up = element.parentElement; up && outsideForks(up); up = up.parentElement) root = up;
+  return root;
+}
+
 export function componentOf(element: Element, names: Set<string>) {
+  // A page that says what it drew: the studio's stage marks its component (`data-studio-component`, with its plain props as JSON), which works in a production
+  // build, where there are no owners to read. The component's root is what the mark holds; everything in it is inside it.
+  const marked = element.closest("[data-studio-component]");
+  if (marked?.firstElementChild) {
+    let props: Record<string, string | number | boolean> = {};
+    try {
+      props = JSON.parse(marked.getAttribute("data-studio-props") ?? "{}") as typeof props;
+    } catch {
+      // Props that don't parse are none.
+    }
+    return { root: marked.firstElementChild, name: marked.getAttribute("data-studio-component") ?? "", props, fiber: null as Fiber | null };
+  }
+  // On a fork's page, a component the fork uses but doesn't own is a component here, whole: not the fork's to change, as the design system's are not.
+  const nested = nestedOriginal(element);
+  if (nested) {
+    const owner = fiberOf(nested)?._debugOwner ?? null;
+    const props: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(owner?.memoizedProps ?? {})) {
+      if ((key !== "children" || typeof value === "string") && ["string", "number", "boolean"].includes(typeof value)) props[key] = value as string | number | boolean;
+    }
+    return { root: nested, name: (owner && nameOf(owner)) || nested.tagName.toLowerCase(), props, fiber: owner as Fiber | null };
+  }
+  // Without names there is nothing to look for in the owners.
+  if (!names.size) return null;
   let outer: Fiber | null = null;
   for (let owner = fiberOf(element)?._debugOwner ?? null; owner && names.has(nameOf(owner)); owner = owner._debugOwner ?? null) outer = owner;
   if (!outer) return null;
@@ -253,7 +347,7 @@ export function propPreview() {
       const found = element && componentOf(element, names);
       if (!element || !found) continue;
       wanted.add(key);
-      if (!originals.has(key)) originals.set(key, { element, prop: edit.prop, value: found.fiber.memoizedProps?.[edit.prop], names });
+      if (!originals.has(key)) originals.set(key, { element, prop: edit.prop, value: found.fiber?.memoizedProps?.[edit.prop], names });
       const was = originals.get(key)!.value;
       // The prop keeps the type it had: a number stays a number, a boolean a boolean.
       want(element, names, edit.prop, typeof was === "number" ? Number(edit.value) : typeof was === "boolean" ? edit.value === true || edit.value === "true" : edit.value);
@@ -269,7 +363,7 @@ export function propPreview() {
 
 /** `names` are the design system's components: the root of one is described as that component instance; an element inside one is itself, marked as inside it. */
 export function describePart(picked: Element, names?: string[], copyTokens?: Tokens): Part {
-  const found = names?.length ? componentOf(picked, new Set(names)) : null;
+  const found = componentOf(picked, new Set(names ?? []));
   const inside = found && found.root !== picked ? found.name : undefined;
   const whole = inside ? null : found;
   const element = picked;
@@ -311,6 +405,9 @@ export function describePart(picked: Element, names?: string[], copyTokens?: Tok
     tokens: copyTokens ?? tokensOf(element.ownerDocument),
     box: place(rect),
     inside,
+    loc: element.getAttribute("data-studio-loc") ?? undefined,
+    classes: element.getAttribute("class")?.trim() || undefined,
+    usedAt: usedAtOf(element),
     component: whole ? { name: whole.name, props: whole.props, preview: !!rendererOf() } : undefined,
   };
 }
@@ -447,7 +544,7 @@ export function hoverBox(doc: Document, x: number, y: number, reach: Reach, name
   const element = reachFrom(doc, hit, reach.from ? { selector: reach.from.selector, into: !!reach.from.into } : undefined) ?? (reach.deep !== false ? hit : elementAt(doc, x, y, false));
   if (!element) return null;
   const box = boxOfElement(element, reach.groups);
-  return names?.length && componentOf(element, new Set(names)) ? { ...box, component: true } : box;
+  return componentOf(element, new Set(names ?? [])) ? { ...box, component: true } : box;
 }
 
 type Original = { style: string | null; html: string; src: string | null };

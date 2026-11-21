@@ -5,6 +5,26 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDownIcon } from "@/components/shell/nav-icons";
 import { controlOn, IconButton } from "@/components/ui/button";
 
+/** A menu that is open closes on a press away from it or Escape (which is not also heard by whatever is behind it). */
+function useDismiss(open: boolean, root: React.RefObject<HTMLElement | null>, close: () => void) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (event: PointerEvent) => !root.current?.contains(event.target as Node) && close();
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      close();
+    };
+    window.addEventListener("pointerdown", away, true);
+    window.addEventListener("keydown", escape, true);
+    return () => {
+      window.removeEventListener("pointerdown", away, true);
+      window.removeEventListener("keydown", escape, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `close` is remade each render; only opening and closing matter
+  }, [open]);
+}
+
 /** One thing a tool group offers: a tool to hold (it becomes the group's button), or an action to do once (`action`, the group's button stays as it was). */
 export type ToolOption = { id: string; label: string; icon: ReactNode; shortcut?: string; action?: boolean };
 
@@ -16,21 +36,7 @@ export function ToolGroup({ options, current, active, onChoose, onActivate }: { 
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const shown = options.find((option) => option.id === current) ?? options[0];
-  useEffect(() => {
-    if (!open) return undefined;
-    const away = (event: PointerEvent) => !root.current?.contains(event.target as Node) && setOpen(false);
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      setOpen(false);
-    };
-    window.addEventListener("pointerdown", away, true);
-    window.addEventListener("keydown", escape, true);
-    return () => {
-      window.removeEventListener("pointerdown", away, true);
-      window.removeEventListener("keydown", escape, true);
-    };
-  }, [open]);
+  useDismiss(open, root, () => setOpen(false));
   return (
     <div ref={root} className="relative flex items-center">
       <IconButton tooltipSide="above" label={shown.shortcut ? `${shown.label} (${shown.shortcut})` : shown.label} variant="ghost" aria-pressed={active} className={active ? controlOn : ""} onClick={onActivate}>
@@ -42,7 +48,7 @@ export function ToolGroup({ options, current, active, onChoose, onActivate }: { 
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((now) => !now)}
-        className={`-ml-1 grid h-9 w-4 place-items-center rounded-[var(--r-control)] text-foreground-subtle transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover hover:text-foreground ${open ? "bg-surface-hover text-foreground" : ""}`}
+        className={`grid h-9 w-6 place-items-center rounded-[var(--r-control)] text-foreground-subtle transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-surface-hover hover:text-foreground ${open ? "bg-surface-hover text-foreground" : ""}`}
       >
         <ChevronDownIcon className="size-3 rotate-180" />
       </button>
