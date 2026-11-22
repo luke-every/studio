@@ -671,7 +671,7 @@ export function FlowCanvas({
   // Opening the layers docks both panels to the window's edges, full height: the canvas is what is between them, so a view that is fitted or
   // focused (asked for, or the window changing) is centred there and not behind them. Docking, undocking or dragging a panel's width never
   // moves the view itself. (Floating, they sit over the canvas as they always did.) The card on the right is as wide as the person has dragged it.
-  const docked = layersOpen && !viewOnly;
+  const docked = layersOpen;
   const [cardWidth, setCardWidth] = useState(PROPERTIES_MIN);
   const [layersWidth, setLayersWidth] = useState(LAYERS_MIN);
   const resizeLayers = useRef<{ x: number; width: number } | null>(null);
@@ -5333,7 +5333,7 @@ export function FlowCanvas({
               {typeof topLeft === "function" ? topLeft(docked) : topLeft}
             </div>
           ) : null}
-          {layersOpen && (!viewOnly || dev) ? (
+          {layersOpen ? (
             <div className="min-h-0 flex-1 overflow-hidden border-t border-divider">
           <LayersPanel
             rows={layerRows()}

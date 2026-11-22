@@ -4,8 +4,8 @@ import { usePathname } from "next/navigation";
 import type { DistortionWaveHandle } from "distortion-waves";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { ModalStep, MotionStepModal } from "@/components/motion";
-import { CheckIcon, CloseIcon, FlowIcon, LargePhoneIcon } from "@/components/shell/nav-icons";
+import { ModalStep, MotionStepModal, StatusStep, playFromBadge } from "@/components/motion";
+import { FlowIcon, LargePhoneIcon } from "@/components/shell/nav-icons";
 import { Button } from "@/components/ui/button";
 import { fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
@@ -16,15 +16,15 @@ const STEPS = ["Updating conventions", "Copying the template", "Installing", "St
 
 /** If the wave never reports in (no WebGL, a failed picture), the new prototype opens after this anyway. */
 const WAVE_GIVE_UP_MS = 6000;
-/** The size of the spot the wave opens from, at the middle of the dialog. */
-const WAVE_SPOT = 48;
+/** How long the green tick is left on its own once the wave has passed, before the new prototype opens. */
+const TICK_HOLD_MS = 600;
 
 /**
  * Starts a project or a prototype in ~/Claude/prototypes. Step 0 asks which. A project is a name and a team and is made at
  * once: a folder with a canvas, opened on it. A prototype goes on to what to start from (choosing one moves on), its name
  * and the team it belongs to, then the making of it. The local helper (`scripts/terminal-server.mjs`) runs the /newprototype
- * script and tells this which step it is on, which the third step lists: a spinner on the one in hand, a check on those
- * done. When it is done a wave opens from the middle of the dialog and carries it away, and then the page for the new
+ * script and tells this which step it is on, which the third step shows as its title, under a badge. When it is done the
+ * badge turns to a green tick, a wave opens from behind it and carries the dialog away, and then the page for the new
  * prototype opens with Claude already running in its folder.
  */
 export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClose: () => void }) {
@@ -60,14 +60,10 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
     return () => window.removeEventListener("pageshow", restored);
   }, [onClose]);
 
-  // The list shows every step done first, then the wave leaves from the middle of the dialog.
+  // The badge is a tick first, then the wave leaves from behind it.
   useEffect(() => {
     if (!done) return;
-    const element = wave.current?.element;
-    if (element) {
-      const { width, height } = element.getBoundingClientRect();
-      wave.current?.play({ source: { x: (width - WAVE_SPOT) / 2, y: (height - WAVE_SPOT) / 2, w: WAVE_SPOT, h: WAVE_SPOT } });
-    }
+    playFromBadge(wave.current);
     window.setTimeout(() => leave(done), WAVE_GIVE_UP_MS);
   }, [done]);
 
@@ -204,38 +200,19 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
     </ModalStep>
   );
 
-  // The step in hand; those before it are done. Until the helper says anything, the first is in hand.
-  const at = done ? STEPS.length : Math.max(0, STEPS.indexOf(progress));
   const third = (
-    <ModalStep title={name.trim()} subtitle={template} problem={problem} footer={problem ? <Button onClick={() => setStep(2)}>Back</Button> : null}>
-      <ol aria-live="polite" className="flex flex-col gap-3">
-        {STEPS.map((label, index) => {
-          const state = index < at ? "done" : index > at ? "waiting" : problem ? "failed" : "active";
-          return (
-            <li key={label} className={`flex items-center gap-3 text-base ${state === "waiting" ? "text-foreground-subtle" : state === "done" ? "text-foreground-muted" : "text-foreground"}`}>
-              {state === "done" ? (
-                <CheckIcon />
-              ) : state === "failed" ? (
-                <CloseIcon className="size-4 shrink-0 text-destructive" />
-              ) : state === "active" ? (
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" aria-hidden className="spin size-4 shrink-0">
-                  <path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5" />
-                </svg>
-              ) : (
-                <span aria-hidden className="grid size-4 shrink-0 place-items-center">
-                  <span className="size-1 rounded-[var(--r-full)] bg-current" />
-                </span>
-              )}
-              {label}
-            </li>
-          );
-        })}
-      </ol>
-    </ModalStep>
+    <StatusStep
+      icon={<LargePhoneIcon />}
+      state={done ? "done" : problem ? "failed" : "working"}
+      title={done ? "Ready" : problem ? "Not made" : progress || STEPS[0]}
+      subtitle={`${name.trim()} · ${template}`}
+      problem={problem}
+      footer={problem ? <Button onClick={() => setStep(2)}>Back</Button> : null}
+    />
   );
 
   return (
-    <MotionStepModal open onClose={onClose} label="New" step={step} tallSteps={[1]} waveRef={wave} onWaveFinish={() => done && leave(done)}>
+    <MotionStepModal open onClose={onClose} label="New" step={step} tallSteps={[1]} waveRef={wave} onWaveFinish={() => done && window.setTimeout(() => leave(done), TICK_HOLD_MS)}>
       {[kinds, first, second, third]}
     </MotionStepModal>
   );

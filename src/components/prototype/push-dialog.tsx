@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { ModalStep, MotionStepModal } from "@/components/motion";
-import { CheckIcon, CloseIcon } from "@/components/shell/nav-icons";
+import type { DistortionWaveHandle } from "distortion-waves";
+
+import { ModalStep, MotionStepModal, StatusStep, playFromBadge } from "@/components/motion";
+import { UploadIcon } from "@/components/shell/nav-icons";
 import { Button } from "@/components/ui/button";
 import { fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
@@ -40,10 +42,16 @@ export function PushDialog({ slug, onClose }: { slug: string; onClose: () => voi
   const [done, setDone] = useState<string | null>(null);
   const [checks, setChecks] = useState<string | null>(null);
   const titleField = useRef<HTMLInputElement>(null);
+  const wave = useRef<DistortionWaveHandle>(null);
 
   useEffect(() => {
     if (step === 0) titleField.current?.focus({ preventScroll: true });
   }, [step]);
+
+  // The badge is a tick first, then the wave leaves from behind it.
+  useEffect(() => {
+    if (done) playFromBadge(wave.current);
+  }, [done]);
 
   const wanted = version.trim();
   const versionProblem = !VERSION.test(wanted) ? "Versions look like v0.8." : taken.includes(wanted) ? `${wanted} is already in the studio. Pick another number.` : null;
@@ -130,9 +138,11 @@ export function PushDialog({ slug, onClose }: { slug: string; onClose: () => voi
   );
 
   const second = (
-    <ModalStep
-      title={wanted}
-      subtitle={prototype?.name}
+    <StatusStep
+      icon={<UploadIcon />}
+      state={done ? "done" : problem ? "failed" : "working"}
+      title={done ? "Pushed" : problem ? "Not pushed" : progress}
+      subtitle={done && checks ? `Left in the code: ${checks}.` : `${prototype?.name ?? ""} · ${wanted}`}
       problem={problem}
       footer={
         problem ? (
@@ -148,25 +158,11 @@ export function PushDialog({ slug, onClose }: { slug: string; onClose: () => voi
           </>
         ) : null
       }
-    >
-      <p aria-live="polite" className={`flex items-center gap-3 text-base ${done ? "text-foreground-muted" : "text-foreground"}`}>
-        {done ? (
-          <CheckIcon />
-        ) : problem ? (
-          <CloseIcon className="size-4 shrink-0 text-destructive" />
-        ) : (
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" aria-hidden className="spin size-4 shrink-0">
-            <path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5" />
-          </svg>
-        )}
-        {done ? "Pushed" : problem ? "Not pushed" : progress}
-      </p>
-      {done && checks ? <p className="text-sm text-foreground-muted">Left in the code: {checks}.</p> : null}
-    </ModalStep>
+    />
   );
 
   return (
-    <MotionStepModal open onClose={onClose} label="Push" step={step} tallSteps={[0]}>
+    <MotionStepModal open onClose={onClose} label="Push" step={step} tallSteps={[0]} waveRef={wave}>
       {[first, second]}
     </MotionStepModal>
   );

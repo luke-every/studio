@@ -1276,12 +1276,11 @@ export function PrototypeFrame({
               );
               const name = canvasName && !minimal ? <span className={docked ? "min-w-0 flex-1" : "max-sm:hidden"}>{canvasName}</span> : null;
               const docsMenu = canvasDocs && !minimal ? <span className="max-sm:hidden">{canvasDocs({ onExport: exportable ? openExport : undefined })}</span> : null;
-              const layersToggle =
-                !minimal || devLink ? (
-                  <IconButton variant="ghost" label={layersOpen ? "Hide layers" : "Show layers"} tooltipSide="below" aria-expanded={layersOpen} onClick={() => setLayersOpen((now) => !now)} className={layersOpen ? controlOn : ""}>
-                    <SidebarIcon />
-                  </IconButton>
-                ) : null;
+              const layersToggle = (
+                <IconButton variant="ghost" label={layersOpen ? "Hide layers" : "Show layers"} tooltipSide="below" aria-expanded={layersOpen} onClick={() => setLayersOpen((now) => !now)} className={layersOpen ? controlOn : ""}>
+                  <SidebarIcon />
+                </IconButton>
+              );
               return (
                 <>
                   {exportable && terminalSlug ? <ExportImagesMenu ref={exportRef} button={false} slug={terminalSlug} screens={exportScreens} device={canvasDevices[0] ?? DEVICES[1]} /> : null}
