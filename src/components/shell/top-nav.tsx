@@ -44,7 +44,7 @@ export function TopNav({ feed, onSwitchUser }: { feed: ActivityFeed; onSwitchUse
     <header className="sticky top-0 z-[var(--z-sticky)] bg-background max-lg:in-data-fullscreen:hidden lg:transition-[translate,margin] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] lg:in-data-fullscreen:-mt-[var(--nav-height)] lg:in-data-fullscreen:-translate-y-full">
       <div className="flex h-[var(--nav-height)] items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-4 justify-self-start">
-          <Link href="/" aria-label="Every Studio home" className="shrink-0">
+          <Link href="/" aria-label="Studio home" className="shrink-0">
             <Logo />
           </Link>
           <div className="flex min-w-0 items-center gap-1 max-sm:hidden">

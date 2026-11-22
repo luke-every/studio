@@ -24,7 +24,7 @@ async function shared(token: string) {
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const found = await shared((await params).token);
-  return { title: found ? `${found.prototype.name} ${found.version.version}` : "Every Studio", robots: { index: false } };
+  return { title: found ? `${found.prototype.name} ${found.version.version}` : "Studio", robots: { index: false } };
 }
 
 /** What there is to open from the Docs menu; a link that isn't there is left out. The GitHub one goes straight to the app's source when it has one, for an engineer picking it up. */

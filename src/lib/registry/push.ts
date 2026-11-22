@@ -85,7 +85,7 @@ export async function sendTest(endpoint: string) {
   try {
     await webpush.sendNotification(
       device.subscription,
-      JSON.stringify({ title: "Every Studio", body: "Notifications are working.", icon: avatarSrc(defaultProfile(device.name || "Guest").avatar), url: "/" }),
+      JSON.stringify({ title: "Studio", body: "Notifications are working.", icon: avatarSrc(defaultProfile(device.name || "Guest").avatar), url: "/" }),
     );
   } catch (error) {
     const failure = error as { statusCode?: number; body?: string };

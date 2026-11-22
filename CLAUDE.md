@@ -1,4 +1,4 @@
-# Prototype Studio
+# Studio
 
 An internal tool for a small product design team. It is where work in progress
 lives: prototypes, the question each one is trying to answer, how they evolved,
@@ -32,7 +32,7 @@ Everything below describes how motion works when it is enabled.
 
 ## Motion and interaction principles
 
-Prototype Studio is a dynamic interface. Never assume a view is static.
+Studio is a dynamic interface. Never assume a view is static.
 
 When designing or implementing a new interaction, think:
 

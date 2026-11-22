@@ -108,7 +108,7 @@ if (existsSync(join(dir, "package.json"))) {
 
 console.log(`\nA copy of ${found.name} ${found.version} is in ${dir}\nThe original is untouched.\n`);
 
-const prompt = `This folder is a remix of "${found.name}" ${found.version} from Prototype Studio: an independent copy, so nothing I do here changes the original. Look through it and tell me in a sentence or two what it is, then ask what I want to change.${
+const prompt = `This folder is a remix of "${found.name}" ${found.version} from Studio: an independent copy, so nothing I do here changes the original. Look through it and tell me in a sentence or two what it is, then ask what I want to change.${
   found.description ? ` (The original is described as: ${found.description})` : ""
 }
 

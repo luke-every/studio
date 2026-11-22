@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Push a prototype to Prototype Studio.
+ * Push a prototype to Studio.
  *
  * Commits the whole folder, at its real relative paths, straight to the
  * studio's content repository on GitHub, then tells the studio the commit.
@@ -552,9 +552,9 @@ function commitWithGit() {
   const env = {
     ...process.env,
     GIT_TERMINAL_PROMPT: "0",
-    GIT_AUTHOR_NAME: "Prototype Studio",
+    GIT_AUTHOR_NAME: "Studio",
     GIT_AUTHOR_EMAIL: "studio@users.noreply.github.com",
-    GIT_COMMITTER_NAME: "Prototype Studio",
+    GIT_COMMITTER_NAME: "Studio",
     GIT_COMMITTER_EMAIL: "studio@users.noreply.github.com",
     // The token travels as a header rather than in the address, so it never shows in a process list or an error.
     GIT_CONFIG_COUNT: "1",

@@ -6,7 +6,7 @@ import { duration, easing, spring } from "./tokens";
  * The motion vocabulary.
  *
  * Rather than inventing a transition per component, every animation in
- * Prototype Studio picks one of five registers. The register is chosen by what
+ * Studio picks one of five registers. The register is chosen by what
  * the change *means*, not by how it should look:
  *
  *   gentle     A property changed in place — hover, selection, theme, colour.

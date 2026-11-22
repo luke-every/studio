@@ -6,7 +6,7 @@ import { ThemeProvider, ThemeScript } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Every Studio",
+  title: "Studio",
   description: "Explore what we're making.",
 };
 

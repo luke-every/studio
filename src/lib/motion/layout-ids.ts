@@ -1,7 +1,7 @@
 /**
  * Shared-element identity.
  *
- * Shared layout transitions are a first-class concept in Prototype Studio: the
+ * Shared layout transitions are a first-class concept in Studio: the
  * thing you click *becomes* the thing you land on. That only works if both
  * sides agree on an id, so every shared element is named here rather than
  * having ids built inline at call sites.

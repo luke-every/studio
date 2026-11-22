@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Get a prototype ready for engineering. Checks its final variants against the every-website design system (components and colours) and saves the findings to Prototype Studio, where the designer decides each one and signs it off. Use when the user types /handoff, or asks to hand off a prototype, prepare it for dev or get it ready for engineering. Also use when they ask to apply a signed-off handoff.
+description: Get a prototype ready for engineering. Checks its final variants against the every-website design system (components and colours) and saves the findings to Studio, where the designer decides each one and signs it off. Use when the user types /handoff, or asks to hand off a prototype, prepare it for dev or get it ready for engineering. Also use when they ask to apply a signed-off handoff.
 ---
 
 # /handoff

@@ -100,7 +100,7 @@ export function Welcome({ next, pictures }: { next: string; pictures: string[] }
         {step === "password" ? (
           <>
             <h1 style={{ "--i": 1 } as React.CSSProperties} className="welcome-in text-center text-2xl font-medium tracking-[var(--tracking-tight)] text-foreground">
-              Welcome to Every Studio
+              Welcome to Studio
             </h1>
             <p style={{ "--i": 2 } as React.CSSProperties} className="welcome-in mt-2 text-center text-sm text-foreground-muted">
               Where our work in progress lives.

@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 /** Lets the studio be added to a phone's home screen, which is what lets iOS send it notifications. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Every Studio",
-    short_name: "Every Studio",
+    name: "Studio",
+    short_name: "Studio",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

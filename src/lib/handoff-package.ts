@@ -28,7 +28,7 @@ function fileBlock(file: FileChange) {
 export function briefOf(set: ChangeSet, ctx: BriefContext = {}) {
   const forks = changedForks(set);
   const lines: string[] = [`# ${set.name}: handoff brief`, ""];
-  lines.push("A prototype built to the every-website conventions (team-conventions/conventions.md), made in Prototype Studio. The changes below are against the files they were copied from, so each is a change to apply to the production file of the same component.");
+  lines.push("A prototype built to the every-website conventions (team-conventions/conventions.md), made in Studio. The changes below are against the files they were copied from, so each is a change to apply to the production file of the same component.");
   if (ctx.canvas) lines.push("", `Design, at each breakpoint: ${ctx.canvas}`);
   if (ctx.github) lines.push(`Source on GitHub: ${ctx.github}`);
   lines.push("", "## How to apply", "");

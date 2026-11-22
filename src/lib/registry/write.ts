@@ -118,7 +118,7 @@ export async function createTeam(input: {
       throw new StoreError(`There is already a team called "${input.name}".`);
     }
 
-    const person = named(input.by, "Prototype Studio");
+    const person = named(input.by, "Studio");
     document.teams.push({
       slug,
       name: input.name.trim(),
@@ -153,7 +153,7 @@ export async function createProject(input: {
       slug,
       teamSlug: input.teamSlug,
       name: input.name.trim(),
-      created: { by: named(input.by, "Prototype Studio"), at: today() },
+      created: { by: named(input.by, "Studio"), at: today() },
   });
 
   return slug;

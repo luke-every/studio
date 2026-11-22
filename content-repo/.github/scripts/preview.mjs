@@ -1,5 +1,5 @@
 /**
- * Takes the picture a prototype's tile shows in Prototype Studio.
+ * Takes the picture a prototype's tile shows in Studio.
  *
  * For every version under p/<slug>/<version>/ that has an index.html and no
  * studio-preview.jpg yet, serve the folder on a local port, open it in

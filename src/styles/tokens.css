@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
- * Prototype Studio — primitive tokens
+ * Studio — primitive tokens
  *
  * This file is the only place raw values live. Components never reference
  * anything here directly; they consume the semantic tokens in theme.css and

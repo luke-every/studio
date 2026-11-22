@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.luke.prototype-studio</string>
-  <key>WorkingDirectory</key><string>/Users/luke/Claude/TestKitchen</string>
+  <key>WorkingDirectory</key><string>/Users/luke/Claude/Studio</string>
   <key>ProgramArguments</key>
   <array>
     <string>/Users/luke/.nvm/versions/node/v24.21.0/bin/npm</string>

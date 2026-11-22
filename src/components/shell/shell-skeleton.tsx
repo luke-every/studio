@@ -12,7 +12,7 @@ export function ShellSkeleton() {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-[var(--z-sticky)] bg-background">
         <div className="flex h-[var(--nav-height)] items-center px-4 sm:px-6">
-          <Link href="/" aria-label="Every Studio home" className="shrink-0">
+          <Link href="/" aria-label="Studio home" className="shrink-0">
             <Logo />
           </Link>
         </div>

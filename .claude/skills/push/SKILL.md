@@ -1,11 +1,11 @@
 ---
 name: push
-description: Save the prototype you are working on into Prototype Studio as a new version, writing up what changed. Use when the user types /push, or asks to publish, ship, save a version of, or push a prototype to the studio.
+description: Save the prototype you are working on into Studio as a new version, writing up what changed. Use when the user types /push, or asks to publish, ship, save a version of, or push a prototype to the studio.
 ---
 
 # /push
 
-Save the prototype in the current folder into Prototype Studio. Work out what changed, write it up honestly, and upload it: you were there, so the person shouldn't have to tell you.
+Save the prototype in the current folder into Studio. Work out what changed, write it up honestly, and upload it: you were there, so the person shouldn't have to tell you.
 
 One script does the rest (installs and builds a Next app, uploads only what changed, records the version). **Never run git yourself**, and don't read the folder's files to check the upload: trust the script's output.
 
