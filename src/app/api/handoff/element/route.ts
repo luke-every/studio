@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
         links: found ? [fileLink(found.path), ...(github ? [`${github}/${found.path}`] : [])] : [],
         against,
         identical: found && theirs !== null ? theirs.trim() === found.text.trim() : undefined,
+        productionSource: theirs ?? undefined,
         provenance: found ? provenanceOf(found.text) : null,
         todos: (found?.text ?? "").split("\n").flatMap((row, at) => (row.includes("TODO(lift)") ? [{ line: at + 1, text: row.replace(/^[\s/{*]+|[\s*/}]+$/g, "").replace(/^TODO\(lift\):?\s*/, "").slice(0, 200) }] : [])),
       };
@@ -93,7 +94,9 @@ export async function GET(request: NextRequest) {
     const productionSource = production ? await productionText(production) : null;
 
     // The designer's note on the version, and the states kept on its canvas.
-    const plain = folder === WORKING_SEGMENT || (!version.changes?.trim() && (!version.title || /^(Version v|First version)/.test(version.title)));
+    // A note says something only when it has what changed, or a title that is more than the prototype's own name or the studio's placeholder.
+    const named = (version.title ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") === slug;
+    const plain = folder === WORKING_SEGMENT || (!version.changes?.trim() && (!version.title || named || /^(Version v|First version)/.test(version.title)));
     const canvas = await readCanvas(slug, version.key).catch(() => null);
 
     // Pictures, where there is a Chrome here and the prototype is running: the section, the page, and each kept state, at the sizes the canvas draws. A pushed version's

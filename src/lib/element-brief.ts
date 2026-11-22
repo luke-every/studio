@@ -24,6 +24,8 @@ export type Used = {
   identical?: boolean;
   /** What its doc comment says about where it comes from. */
   provenance?: Provenance | null;
+  /** Production's file at `against.path`, to say how the props of a port differ from its. */
+  productionSource?: string;
 };
 
 /** A note for the developers, left by the designer on the canvas. */
@@ -130,7 +132,46 @@ function parseElement(source: string, file: string, line: number, column: number
     const target = resolveImport(file, statement.moduleSpecifier.text);
     if (target) for (const name of names) if (tags.has(name)) nested.push({ name, spec: statement.moduleSpecifier.text, target });
   }
-  return { sf, element, imports, nested };
+  // The module-level constants the section uses (a class string, a number): short ones are shown with it, since the section is unreadable without them.
+  const constants: string[] = [];
+  for (const statement of sf.statements) {
+    if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      const init = declaration.initializer;
+      const simple = !!init && (ts.isStringLiteral(init) || ts.isNoSubstitutionTemplateLiteral(init) || ts.isNumericLiteral(init) || ts.isArrayLiteralExpression(init) || ts.isObjectLiteralExpression(init));
+      if (simple && ts.isIdentifier(declaration.name) && used.has(declaration.name.text) && statement.getText(sf).length <= CONSTANT_MAX) constants.push(statement.getText(sf));
+    }
+  }
+  return { sf, element, imports, nested, constants };
+}
+
+/** The longest constant shown with the section. */
+const CONSTANT_MAX = 400;
+
+/** The members of a component's props type (`type …Props = {…}` or `interface …Props`), each as written, or null when it has none of that shape. */
+export function propsOf(source: string): { name: string; text: string }[] | null {
+  const sf = ts.createSourceFile("component.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  for (const statement of sf.statements) {
+    const members = ts.isTypeAliasDeclaration(statement) && /Props$/.test(statement.name.text) && ts.isTypeLiteralNode(statement.type) ? statement.type.members : ts.isInterfaceDeclaration(statement) && /Props$/.test(statement.name.text) ? statement.members : null;
+    if (members) return members.filter(ts.isPropertySignature).map((member) => ({ name: member.name.getText(sf), text: member.getText(sf).replace(/\s+/g, " ").replace(/[;,]$/, "") }));
+  }
+  return null;
+}
+
+const quoted = (list: string[], most = 8) => list.slice(0, most).map((one) => `\`${one}\``).join(", ") + (list.length > most ? ` and ${list.length - most} more` : "");
+
+/** What a component says about its props: the whole list for a new one, and for a port or extension how they differ from production's. */
+function propsLine(used: Used | undefined, standing: string | null) {
+  const mine = used?.source ? propsOf(used.source) : null;
+  if (!mine?.length) return "";
+  if (/^new\b/.test(standing ?? "")) return `\n  - Props: ${mine.map((one) => one.text).join("; ").slice(0, 600)}`;
+  const theirs = used?.productionSource ? propsOf(used.productionSource) : null;
+  if (!theirs) return "";
+  const [here, there] = [new Set(mine.map((one) => one.name)), new Set(theirs.map((one) => one.name))];
+  const onlyThere = theirs.map((one) => one.name).filter((name) => !here.has(name));
+  const onlyHere = mine.map((one) => one.name).filter((name) => !there.has(name));
+  if (!onlyThere.length && !onlyHere.length) return "";
+  return `\n  - Props differ from production's: ${[onlyThere.length ? `it also takes ${quoted(onlyThere)}` : "", onlyHere.length ? `this one adds ${quoted(onlyHere)}` : ""].filter(Boolean).join("; ")}.`;
 }
 
 /** The most lines of the section shown as not being in production's file. */
@@ -167,7 +208,7 @@ function standingOf(used: Used | undefined, target: string) {
 export function elementBrief(source: string, context: ElementContext): string | null {
   const found = parseElement(source, context.file, context.line, context.column);
   if (!found) return null;
-  const { sf, element, imports, nested } = found;
+  const { sf, element, imports, nested, constants } = found;
   const start = sf.getLineAndCharacterOfPosition(element.getStart(sf)).line;
   const end = sf.getLineAndCharacterOfPosition(element.getEnd()).line;
   const lines = source.split("\n").slice(start, end + 1);
@@ -178,7 +219,7 @@ export function elementBrief(source: string, context: ElementContext): string | 
     const used = context.uses?.[target];
     const origin = context.origin?.(target);
     const standing = origin ?? standingOf(used, target);
-    return `- \`${name}\` (\`${spec}\`)${standing ? `: ${standing}` : ""}${used?.links.length ? ` File: ${used.links.join(" · ")}` : ""}`;
+    return `- \`${name}\` (\`${spec}\`)${standing ? `: ${standing}` : ""}${used?.links.length ? ` File: ${used.links.join(" · ")}` : ""}${propsLine(used, standing)}`;
   });
   // Only this section's own lines, looked for in production's file: what the rest of the file does or doesn't have is not part of it.
   const compared: string[] = [];
@@ -253,6 +294,7 @@ export function elementBrief(source: string, context: ElementContext): string | 
     "```tsx",
     ...imports,
     ...(imports.length ? [""] : []),
+    ...(constants.length ? ["// Defined above this section, in the same file:", ...constants, ""] : []),
     ...lines.slice(0, MAX_LINES),
     ...(cut ? ["// … cut short: the file has the rest"] : []),
     "```",
