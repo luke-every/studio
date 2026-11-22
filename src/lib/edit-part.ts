@@ -1,3 +1,4 @@
+import { jsxOf } from "@/lib/jsx-snapshot";
 import { copyIn, copyOf, drawnScale, imageIdIn, pictureOf, pictureSrcOf, selectorFor, setPicture, sizeProperties, sizingOf, textOf, toHex, unmark, writeText, type Axis, type Sizing } from "@/lib/edit-dom";
 import { nameOfType, plainOf } from "@/lib/capture-props";
 import { boxOfElement, elementAt, rootOf, type Box, type Reach } from "@/lib/anchor";
@@ -212,7 +213,7 @@ const usedAtOf = (element: Element): string | undefined => {
  * section's own element, or the elements that are each the only one in the next, down from it) with what that was given and where the page uses it; and the
  * components that drew it, nearest first, each with what it was given. A page in production has no owners to read, so it says nothing.
  */
-export type Capture = { top: { name: string; props: unknown; usedAt?: string } | null; owners: { name: string; props: unknown }[] };
+export type Capture = { top: { name: string; props: unknown; usedAt?: string } | null; owners: { name: string; props: unknown }[]; /** The element as the page draws it now, as JSX that stands on its own (see `jsxOf`): what is taken when its code can't be, because it uses values only the code around it has. */ markup?: string };
 
 export function captureOf(element: Element): Capture {
   const chain = new Set<Element>([element]);
@@ -232,7 +233,7 @@ export function captureOf(element: Element): Capture {
     const name = nameOfType(owner.type);
     if (name && /^[A-Z]/.test(name)) owners.push({ name, props: plainOf(owner.memoizedProps) });
   }
-  return { top, owners };
+  return { top, owners, markup: jsxOf(element) ?? undefined };
 }
 
 const nameOf = (fiber: Fiber) => {

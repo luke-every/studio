@@ -55,7 +55,8 @@ export function StickyNote({
   const base = note.base ?? Math.min(note.width, note.height);
   const unit = base * scale;
   const [w, h] = [note.width * scale, note.height * scale];
-  const font = Math.max(5, unit / 12);
+  // Everything about a note is in proportion to it (words, padding, the name): no least size, or zoomed out the words stop shrinking and wrap into more lines than they do at full size.
+  const font = unit / 12;
   const pad = unit / 10;
   // The room under the words for the name of whoever wrote it.
   const nameRoom = note.author ? unit / 12 + unit / 18 : 0;
@@ -67,7 +68,8 @@ export function StickyNote({
   useLayoutEffect(() => {
     const room = measure.current?.getBoundingClientRect().height;
     if (!room) return;
-    const wanted = Math.max(base, room / scale);
+    // Measured at the note's own size (one pixel to a unit), not at the zoom it is drawn at: small, the browser rounds the words' size and where they wrap, and a note zoomed out would measure taller.
+    const wanted = Math.max(base, room);
     // Only a real change: the measure moves a little with the zoom, and the saved canvas should not.
     if (Math.abs(wanted - note.height) > 1) onFit(wanted);
   });
@@ -85,7 +87,7 @@ export function StickyNote({
       <span
         ref={measure}
         aria-hidden
-        style={{ ...type, width: w, padding: `${pad}px ${pad}px ${pad + nameRoom}px` }}
+        style={{ fontSize: base / 12, width: note.width, padding: `${base / 10}px ${base / 10}px ${base / 10 + (note.author ? base / 12 + base / 18 : 0)}px` }}
         className="invisible absolute left-0 top-0 whitespace-pre-wrap break-words font-sans font-medium leading-snug"
       >
         {words || " "}
@@ -119,7 +121,7 @@ export function StickyNote({
         </span>
       )}
       {note.author ? (
-        <span aria-hidden style={{ left: pad, bottom: unit / 12, fontSize: Math.max(5, unit / 18), color: "rgba(43,39,36,0.6)", maxWidth: w * 0.8 }} className="pointer-events-none absolute truncate font-sans font-medium">
+        <span aria-hidden style={{ left: pad, bottom: unit / 12, fontSize: unit / 18, color: "rgba(43,39,36,0.6)", maxWidth: w * 0.8 }} className="pointer-events-none absolute truncate font-sans font-medium">
           {note.author}
         </span>
       ) : null}

@@ -20,6 +20,7 @@ import {
   deletePrototype as deletePrototypeAction,
   deleteVersion as deleteVersionAction,
   renameVersion as renameVersionAction,
+  setReadyForDev as setReadyForDevAction,
   updatePrototype as updatePrototypeAction,
   type WriteResult,
 } from "@/lib/registry/actions";
@@ -52,6 +53,8 @@ type StudioContextValue = {
   updatePrototype: (input: Parameters<typeof updatePrototypeAction>[0], keys: string[], message?: string) => void;
   /** Rename a version, as people see it. Same way. */
   renameVersion: (input: Parameters<typeof renameVersionAction>[0], keys: string[], message?: string) => void;
+  /** Mark a version ready for engineering, or take the mark back. Same way. */
+  setReadyForDev: (input: Parameters<typeof setReadyForDevAction>[0], keys: string[], message?: string) => void;
   /** Take a version out of the history. Resolves when it is done and the screen has been refreshed; a problem comes back as text. */
   deleteVersion: (input: Parameters<typeof deleteVersionAction>[0], message?: string) => Promise<string | null>;
   /** Delete a whole prototype (see `deletePrototype` in write.ts). Resolves when it is done and the screen has been refreshed; a problem comes back as text. */
@@ -190,6 +193,11 @@ export function StudioProvider({
     [background],
   );
 
+  const setReadyForDev = useCallback<StudioContextValue["setReadyForDev"]>(
+    (input, keys, message = "Saved") => background(() => setReadyForDevAction(input), keys, message),
+    [background],
+  );
+
   const deleteVersion = useCallback<StudioContextValue["deleteVersion"]>(
     async (input, message = "Deleted") => {
       const result = await deleteVersionAction(input);
@@ -239,6 +247,7 @@ export function StudioProvider({
       filePrototype,
       updatePrototype,
       renameVersion,
+      setReadyForDev,
       deleteVersion,
       deletePrototype,
       isSaving,
@@ -249,7 +258,7 @@ export function StudioProvider({
       error,
       dismissError,
     }),
-    [snapshot, addTeam, addProject, filePrototype, updatePrototype, renameVersion, deleteVersion, deletePrototype, isSaving, notify, markOpened, opened, saving, pending, error, dismissError],
+    [snapshot, addTeam, addProject, filePrototype, updatePrototype, renameVersion, setReadyForDev, deleteVersion, deletePrototype, isSaving, notify, markOpened, opened, saving, pending, error, dismissError],
   );
 
   return (

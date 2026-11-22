@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { diffCanvas, type CanvasDoc } from "@/lib/canvas-doc";
-import { loadCanvas, loadCanvasImage, loadSharedCanvas, loadSharedCanvasImage, patchCanvas, storeCanvasImage } from "@/lib/registry/actions";
+import { loadCanvas, loadCanvasImage, loadSharedCanvas, loadSharedCanvasImage, patchCanvas, patchSharedCanvas, storeCanvasImage } from "@/lib/registry/actions";
+import { stickyOwner } from "@/lib/sticky-owner";
 import type { SavedCanvas } from "@/lib/canvas-saved";
 
 /** Saved this long after the last change: a click is one save, a drag (the pointer is down) waits for the pointer to lift. */
@@ -53,7 +54,8 @@ function picturesIn(canvas: SavedCanvas) {
  *    that, the window asks before it closes. The browser's own copy keeps everything meanwhile, and is what opens next time.
  *  - A save that fails (no connection) is tried again, a little later each time, and at once when the connection or the tab returns.
  *
- * A share link's page only reads. `status` is for a small mark in the panel.
+ * A share link's page only reads, except for sticky notes: `stickies` (the ids of the ones this browser made) lets it send those, and only those, through
+ * the link (see `saveSharedStickies`). `status` is for a small mark in the panel.
  */
 export function useCloudCanvas({
   cloud,
@@ -62,6 +64,7 @@ export function useCloudCanvas({
   viewOnly,
   canvas,
   by,
+  stickies,
   adopt,
   havePicture,
   pictureData,
@@ -75,6 +78,8 @@ export function useCloudCanvas({
   viewOnly: boolean;
   canvas: SavedCanvas;
   by?: string;
+  /** On a share page that may leave sticky notes: the ids of the notes this browser made, the only layers it sends. */
+  stickies?: ReadonlySet<string>;
   /** Puts a canvas that was in the cloud on the screen. */
   adopt: (canvas: SavedCanvas) => void;
   havePicture: (name: string) => boolean;
@@ -86,7 +91,7 @@ export function useCloudCanvas({
   /** What the cloud holds, as far as this page knows: what a patch is made against. */
   const synced = useRef<SavedCanvas | null>(null);
   const uploaded = useRef(new Set<string>());
-  const latest = useRef({ canvas, adopt, havePicture, pictureData, putPicture, by });
+  const latest = useRef({ canvas, adopt, havePicture, pictureData, putPicture, by, stickies });
   const pressed = useRef(false);
   const inflight = useRef(false);
   const attempts = useRef(0);
@@ -94,10 +99,13 @@ export function useCloudCanvas({
   const firstUnsaved = useRef(0);
   const savedTimer = useRef(0);
   useEffect(() => {
-    latest.current = { canvas, adopt, havePicture, pictureData, putPicture, by };
+    latest.current = { canvas, adopt, havePicture, pictureData, putPicture, by, stickies };
   });
   const slug = cloud?.slug;
   const version = cloud?.version;
+  // A share link that may leave notes: it reads like any, and sends only its own notes.
+  const noting = viewOnly && !!token && !!stickies;
+  const sendsAny = !viewOnly || noting;
 
   // Whether the pointer is down: a drag is not sent until it lets go.
   useEffect(() => {
@@ -133,8 +141,8 @@ export function useCloudCanvas({
             if (!stale && picture.ok && typeof picture.value === "string") latest.current.putPicture(name, picture.value);
           });
         }
-      } else if (!viewOnly) {
-        // Nothing saved yet: this browser's own copy is the first, if there is one.
+      } else if (sendsAny) {
+        // Nothing saved yet: this browser's own copy is the first, if there is one (a link's notes are made against an empty canvas).
         synced.current = EMPTY;
       }
       setReady(true);
@@ -144,14 +152,16 @@ export function useCloudCanvas({
       stale = true;
     };
     // Opened once per version: the canvas itself is read from the latest ref.
-  }, [slug, version, token, base, viewOnly]);
+  }, [slug, version, token, base, viewOnly, sendsAny]);
 
   // Sending: what changed since the cloud's copy, with the pictures it uses.
   const send = useRef<() => void>(() => {});
   const retry = useRef<() => void>(() => {});
   useEffect(() => {
-    if (!slug || !version || viewOnly) return;
-    const pending = () => (synced.current ? diffCanvas(synced.current, latest.current.canvas) : null);
+    if (!slug || !version || !sendsAny) return;
+    // A link's notes: only the layers this browser made are compared, so nothing else of the canvas is ever in what it sends.
+    const part = (canvas: SavedCanvas): SavedCanvas => (noting ? { offsets: {}, pieces: [], frames: canvas.frames.filter((frame) => latest.current.stickies?.has(frame.id)) } : canvas);
+    const pending = () => (synced.current ? diffCanvas(part(synced.current), part(latest.current.canvas)) : null);
     const mark = (next: CloudStatus) => {
       window.clearTimeout(savedTimer.current);
       setStatus(next);
@@ -167,7 +177,7 @@ export function useCloudCanvas({
       // A drag is not sent while the pointer is down, until it has gone on for too long.
       if (pressed.current && Date.now() - firstUnsaved.current < SAVE_AT_MOST_MS) return later(150);
       const sent = latest.current.canvas;
-      const patch = diffCanvas(synced.current, sent);
+      const patch = diffCanvas(part(synced.current), part(sent));
       if (!patch) {
         flag(base, false);
         firstUnsaved.current = 0;
@@ -175,8 +185,8 @@ export function useCloudCanvas({
       }
       inflight.current = true;
       mark("saving");
-      // Pictures first, once each, so a layer never arrives before its picture.
-      for (const name of picturesIn(sent)) {
+      // Pictures first, once each, so a layer never arrives before its picture (a link's notes have none).
+      for (const name of noting ? [] : picturesIn(sent)) {
         const data = latest.current.pictureData(name);
         if (data && !uploaded.current.has(name)) {
           const result = await storeCanvasImage(slug, name, data).catch(() => null);
@@ -191,7 +201,7 @@ export function useCloudCanvas({
           }
         }
       }
-      const result = await patchCanvas(slug, version, patch, latest.current.by).catch(() => null);
+      const result = await (noting && token ? patchSharedCanvas(token, patch, stickyOwner(), latest.current.by) : patchCanvas(slug, version, patch, latest.current.by)).catch(() => null);
       inflight.current = false;
       if (result?.ok) {
         synced.current = sent;
@@ -223,7 +233,7 @@ export function useCloudCanvas({
     const keepalive = () => {
       const patch = pending();
       if (!patch) return true;
-      const body = JSON.stringify({ slug, version, patch, by: latest.current.by });
+      const body = JSON.stringify(noting ? { token, owner: stickyOwner(), patch, by: latest.current.by } : { slug, version, patch, by: latest.current.by });
       if (body.length > KEEPALIVE_MAX) return false;
       void fetch("/api/canvas", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body }).catch(() => {});
       return true;
@@ -249,13 +259,13 @@ export function useCloudCanvas({
       document.removeEventListener("visibilitychange", hide);
       document.removeEventListener("visibilitychange", back);
     };
-  }, [slug, version, viewOnly, base]);
+  }, [slug, version, viewOnly, base, noting, sendsAny, token]);
 
   // Changed: sent a moment later.
   // (Its parts are what is watched: the canvas object itself is new on every render.)
   useEffect(() => {
-    if (ready && !viewOnly) send.current();
-  }, [canvas.offsets, canvas.pieces, canvas.frames, canvas.devices, ready, viewOnly]);
+    if (ready && sendsAny) send.current();
+  }, [canvas.offsets, canvas.pieces, canvas.frames, canvas.devices, ready, sendsAny]);
 
   return status;
 }

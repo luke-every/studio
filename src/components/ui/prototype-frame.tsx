@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ToolGroup } from "@/components/prototype/tool-group";
 import type { EditComponent } from "@/components/prototype/use-fork";
@@ -22,14 +22,13 @@ import { CloseIcon, CodeIcon, NoteIcon, PencilIcon, TerminalIcon, CommentIcon, C
 import { ComponentsPanel, SHOW_COMPONENTS } from "@/components/prototype/components-panel";
 
 import { controlOn, IconButton } from "./button";
-import { Dot, type Tone } from "./chip";
 import { DialogForm } from "./dialog-form";
 import { Toggle } from "./toggle";
 import { withParams, type Flow, type FlowScreen } from "@/lib/flow";
 import { PREVIEW_QUERY } from "@/lib/preview-query";
 import { InAppChrome } from "@/components/prototype/in-app-chrome";
 import { DEFAULT_DEVICE, DEVICES, IN_APPS, barsOf, type Device, type InApp } from "@/lib/phone";
-import { useFlag } from "@/lib/use-flag";
+import { useFlag, useSwitch } from "@/lib/use-flag";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useUser } from "@/lib/use-user";
 import { editInPlace } from "@/lib/edit-dom";
@@ -47,7 +46,7 @@ import type { Selection } from "@/lib/handoff-selection";
 import { followPart, scopeOf, setDesignSystem, watchScrolled } from "@/components/prototype/frame-page";
 import { useWritten } from "@/components/prototype/use-written";
 import { refreshCopies } from "@/lib/screen-copies";
-import { designSystemOf } from "@/lib/registry/actions";
+import { designSystemOf, sharedDesignSystem } from "@/lib/registry/actions";
 import { inspectDocument, type MotionSeen, type Picked } from "@/lib/inspect";
 import { watchTaps } from "@/lib/anchor";
 import { applyEmbed } from "@/lib/embed";
@@ -61,6 +60,7 @@ const DevProperties = dynamic(() => import("@/components/prototype/dev-propertie
 const FlowCanvas = dynamic(() => import("@/components/prototype/flow-canvas").then((m) => m.FlowCanvas), { ssr: false });
 // The comments code is fetched once the page has painted, so it is ready without being asked for and never holds the prototype up.
 const ExportImagesMenu = dynamic(() => import("@/components/prototype/export-images-menu").then((m) => m.ExportImagesMenu), { ssr: false });
+const PushDialog = dynamic(() => import("@/components/prototype/push-dialog").then((m) => m.PushDialog), { ssr: false });
 const TerminalDock = dynamic(() => import("@/components/prototype/terminal-dock").then((m) => m.TerminalDock), { ssr: false });
 const CommentsPanel = dynamic(() => import("@/components/prototype/comments-panel").then((m) => m.CommentsPanel), { ssr: false });
 const CommentLayer = dynamic(() => import("@/components/prototype/comment-layer").then((m) => m.CommentLayer), { ssr: false });
@@ -104,7 +104,6 @@ export function PrototypeFrame({
   share,
   corner,
   bottom,
-  handoff,
   side,
   center,
   device,
@@ -140,9 +139,11 @@ export function PrototypeFrame({
   onBare,
   onOpenPrototype,
   docs,
+  canvasName,
   canvasDocs,
-  canvasHandoff,
   minimal = false,
+  devLink = false,
+  shareToken,
   onPlace,
 }: {
   url?: string;
@@ -155,8 +156,6 @@ export function PrototypeFrame({
   corner?: ReactNode;
   /** Which version the Share menu in the corner links to. */
   share?: { slug: string };
-  /** Beside the canvas button: a handoff has been scanned for this version. The dot says how far it has got. */
-  handoff?: { label: string; tone: Tone; hollow?: boolean; onOpen: () => void };
   /** On a phone only: a control in the middle of the first row of the bar. */
   bottom?: ReactNode;
   /** Down the tile's left edge on a wide screen: what belongs to the prototype but not to its frame (a handoff, its variants). */
@@ -199,7 +198,7 @@ export function PrototypeFrame({
   /** The prototype's variants as a canvas of their own, with the setup each one shows. It shares the flow's place: looked at instead of the prototype. */
   variants?: { flow: Flow; setups: Record<string, string> } | null;
   /** The handoff has been signed off for these designs (a design is a variant's id): the canvas marks their screens Ready for dev. Null when it hasn't. */
-  readyForDev?: string[] | null;
+  readyForDev?: boolean;
   /** Engineers looking at a handed-off version: a tap on a canvas screen selects the part of the handoff under it; `inspectPanel` says what it is. */
   handoffInspect?: { elements: SourceEl[]; onSelect: (selection: Selection | null) => void; selection: Selection | null };
   /** The handed-off version's new and extended components, drawn in a frame after the canvas's last screen. */
@@ -212,7 +211,7 @@ export function PrototypeFrame({
   /** Where the project runs on this machine: the forks made in it are drawn from there. */
   forkBase?: string;
   /** A link to one element's code for an engineer's agent (Dev view). */
-  agentLink?: (loc: string) => Promise<string>;
+  agentLink?: (loc: string, notes?: string[]) => Promise<string>;
   onFlowOpen: (open: boolean) => void;
   /** A project with no prototype yet can put a template into its canvas: the plus in the canvas's bar. */
   addTemplate?: AddTemplate | null;
@@ -237,12 +236,16 @@ export function PrototypeFrame({
   /** A share page's link to the version's files on GitHub, for engineers. */
   /** Beside the canvas button: the prototype's documents and links (a menu of its own). */
   docs?: ReactNode;
-  /** The same menu drawn for the canvas bar, beside Export images. */
-  canvasDocs?: ReactNode;
-  /** Hand off, beside the docs in the canvas bar. */
-  canvasHandoff?: ReactNode;
+  /** The canvas's name and its menu, after the way out. */
+  canvasName?: ReactNode;
+  /** The Docs menu for the canvas bar. It is given what only the frame can open: the export of the prototype's images, a row at the foot of the menu. */
+  canvasDocs?: (docs: { onExport?: () => void }) => ReactNode;
   /** A share page: the version, the viewport, the comment buttons and full screen on the bar, and no look toggle, canvas, restart or share. */
   minimal?: boolean;
+  /** A dev link: the canvas starts in Dev, whatever this browser last chose. */
+  devLink?: boolean;
+  /** The share link's token, which lets a dev link read the design system's component names. */
+  shareToken?: string;
   /** The prototype has put somewhere else in its own address (its query, as `?a=1`): where it is now, for the page to follow. */
   onPlace?: (search: string) => void;
 }) {
@@ -258,7 +261,8 @@ export function PrototypeFrame({
   // share the left). It is mounted the first time it is opened, which is when its list is asked for, and kept after, so closing
   // and reopening is instant.
   // The layers panel, on the left of the canvas; the components panel stands to the right of it when both are open.
-  const [layersOpen, setLayersOpen] = useState(false);
+  // Left as it was last time, collapsed or expanded: per person, on this browser.
+  const [layersOpen, setLayersOpen] = useSwitch("proto.canvas-layers");
   // ⌘. puts every control away, to look at the canvas alone, and brings them back.
   const [uiHidden, setUiHidden] = useState(false);
   const [componentsOpen, setComponentsOpen] = useState(false);
@@ -356,6 +360,9 @@ export function PrototypeFrame({
   // On the canvas the comments and the notes can each be put away (shift C, shift D); while leaving one, both are in view.
   const [commentsShown, setCommentsShown] = useState(true);
   const [notesShown, setNotesShown] = useState(true);
+  // The notes for the developers that sit inside the element picked on the canvas, as the canvas finds them: the link for an agent carries them, and no others.
+  const [nearNotes, setNearNotes] = useState<string[]>([]);
+  const developerNotes = useMemo(() => allComments.filter((item) => item.note && !item.parentId && !item.resolvedAt), [allComments]);
   const others = useOtherComments(commentsOf?.slug, (commentsOf?.versions ?? []).map((item) => item.key).filter((key) => key !== commentsOf?.version), !dev && (showPins || mode === "comment"));
   const groups: CommentGroup[] = (commentsOf?.versions ?? []).map((item) => ({
     key: item.key,
@@ -397,12 +404,14 @@ export function PrototypeFrame({
   // address) the frame it is in and that page's own description of it, kept up to date by the page. Either way the
   // panel is given a description.
   // Design or Dev, as in Figma: Dev is for looking at the code of what is picked, with nothing to change. Kept for next time.
-  const [devView, setDevView] = useState(false);
+  const [devView, setDevView] = useState(devLink);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- read once the page is on screen: it is not known on the server
-  useEffect(() => setDevView(window.localStorage.getItem("canvas-view") === "dev"), []);
+  useEffect(() => (devLink ? undefined : setDevView(window.localStorage.getItem("canvas-view") === "dev")), [devLink]);
   const chooseView = (next: "design" | "dev") => {
     if (next === "dev" && editing) exitMode();
     setDevView(next === "dev");
+    // A shared page's look is its own: it doesn't change the studio's.
+    if (minimal) return;
     try {
       window.localStorage.setItem("canvas-view", next);
     } catch {
@@ -473,15 +482,18 @@ export function PrototypeFrame({
     const list = [...(flow?.screens ?? []), ...(variants?.flow.screens ?? [])];
     return (list.length ? list : single.screens).map((screen) => ({ name: screen.name, src: `${withParams(screen.url ?? base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}` }));
   };
-  const exportControl = (variant?: "ghost", align: "start" | "end" = "end") => (process.env.NODE_ENV !== "production" && terminalSlug && !minimal ? <span className="max-sm:hidden"><ExportImagesMenu slug={terminalSlug} screens={exportScreens} device={canvasDevices[0] ?? DEVICES[1]} variant={variant} tooltipAlign={align} /></span> : null);
+  // Export images is a row of the Docs menu; this is where its dialog lives, and whether there is anything to export.
+  const exportable = process.env.NODE_ENV !== "production" && !!terminalSlug && !minimal;
+  const exportRef = useRef<{ show: () => void }>(null);
+  const openExport = useCallback(() => exportRef.current?.show(), []);
   // The bar of Cancel, undo, redo and Save is for a mode being worked in. On the canvas, picking an element is only looking at it: the bar comes once a change is made.
   const modeBar = commenting || (dev && !(editing && showingFlow && !session.edits.length));
   // A live version can always be edited: what is picked inside one of its design system's components is that component (see `setDesignSystem`). The names are there before the first pick, not after it.
   const liveSlug = edit?.live ? edit.slug : null;
   useEffect(() => {
-    if (!liveSlug) return undefined;
+    if (!liveSlug && !(devLink && shareToken)) return undefined;
     let stale = false;
-    void designSystemOf(liveSlug).then((result) => {
+    void (liveSlug ? designSystemOf(liveSlug) : sharedDesignSystem(shareToken!)).then((result) => {
       if (stale || !result.ok) return;
       setDesignSystem(result.value.names);
       // Screens copied before the names arrived have no components in them: they are read again.
@@ -491,7 +503,7 @@ export function PrototypeFrame({
       stale = true;
       setDesignSystem(null);
     };
-  }, [liveSlug]);
+  }, [liveSlug, devLink, shareToken]);
   // While Selecting, clicks pick a part; while Interacting they go to the prototype, to move between screens.
   const [interacting, setInteracting] = useState(false);
   const show = (screen: FlowScreen) => {
@@ -646,6 +658,11 @@ export function PrototypeFrame({
         }
         return;
       }
+      // V is the move tool on the canvas: it puts down whatever else is in hand, comments and notes included (the canvas lets go of its own tools on the same key).
+      if (event.key.toLowerCase() === "v" && !event.repeat && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && commenting && showingFlow) {
+        changeMode("view");
+        return;
+      }
       if (event.key === "Escape" && commenting) {
         exitMode();
         return;
@@ -730,6 +747,8 @@ export function PrototypeFrame({
         if (!undoKey || target.closest("[data-native-undo]")) return;
         target.blur();
       }
+      // A tool chosen by its key isn't the button last pressed: left focused, that one takes a focus ring (and its label) the moment a key is pressed, as if it were still the one in hand.
+      if (target instanceof HTMLButtonElement && /^[a-z]$/i.test(event.key) && !event.metaKey && !event.ctrlKey && !event.altKey) target.blur();
       hotkeyRef.current(event);
     };
     window.addEventListener("keydown", listen);
@@ -912,6 +931,8 @@ export function PrototypeFrame({
         </IconButton>
       </span>
     ) : null;
+  // Saving the folder as a new version (`PushDialog`): the first row of the canvas's Share menu, where the helper can reach the folder.
+  const [pushOpen, setPushOpen] = useState(false);
   // A design QA is never shared: its place in the bar is a way to open it in a browser tab at once.
   const shareControl = share ? (
     share.slug.startsWith("qa-") && newTab ? (
@@ -919,16 +940,19 @@ export function PrototypeFrame({
         <ExternalIcon />
       </IconButton>
     ) : (
-      <ShareMenu {...share} stage={stage} newTab={newTab} onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined} />
+      <ShareMenu {...share} newTab={newTab} onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined} onPush={terminal.ready && !minimal ? () => setPushOpen(true) : undefined} />
     )
   ) : null;
+  // The detail bar's own: Share is what that surface is for, so it is the one labelled, solid button.
+  const shareBar =
+    share && !(share.slug.startsWith("qa-") && newTab) ? <ShareMenu {...share} prominent newTab={newTab} onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined} /> : shareControl;
 
   /** What the side panel holds: what an engineer picked, the edit panel, the comments, or dev mode's. On the canvas it is in the card with the zoom and share. */
   const panelBody = (
     <>
       {inspectShown ? inspectPanel : null}
           {devView && showingFlow ? (
-            <DevProperties part={part} agentLink={agentLink} />
+            <DevProperties part={part} agentLink={agentLink ? (loc) => agentLink(loc, nearNotes) : undefined} />
           ) : inspectShown && !(editing && part) ? null : panelKind === "edit" && edit ? (
             <EditPanel part={part} session={session} slug={edit.slug} />
           ) : panelKind === "comments" && noting ? (
@@ -1058,14 +1082,6 @@ export function PrototypeFrame({
                 )
               ) : null}
               {docs && url && addressed && !showingFlow ? <span className="max-sm:hidden">{docs}</span> : null}
-              {handoff && url && !showingFlow ? (
-                <div className="relative max-sm:hidden">
-                  <IconButton label={handoff.label} aria-haspopup="dialog" onClick={handoff.onOpen}>
-                    <CodeIcon />
-                  </IconButton>
-                  <Dot tone={handoff.tone} hollow={handoff.hollow} className="pointer-events-none absolute right-1.5 top-1.5" />
-                </div>
-              ) : null}
             </div>
             {/* Picking a phone makes no sense on a phone. */}
             <div className={`hidden justify-self-center ${showingFlow ? "" : "sm:block"}`}>
@@ -1130,7 +1146,7 @@ export function PrototypeFrame({
                     <CanvasPlayButton />
                   </span>
                 ) : null}
-                {shareControl ? <div className="max-sm:justify-self-end max-sm:[grid-area:1/3]">{shareControl}</div> : null}
+                {showingFlow ? null : terminalToggle()}
                 <span className={`hidden ${showingFlow ? "" : "lg:block"}`}>
                   <IconButton
                     label={fullscreen ? "Exit full screen (F)" : "Full screen (F)"}
@@ -1142,8 +1158,7 @@ export function PrototypeFrame({
                     <ExpandIcon />
                   </IconButton>
                 </span>
-                {showingFlow ? null : exportControl()}
-                {showingFlow ? null : terminalToggle()}
+                {shareBar ? <div className="max-sm:justify-self-end max-sm:[grid-area:1/3]">{shareBar}</div> : null}
               </div>
             ) : null}
           </>
@@ -1251,23 +1266,47 @@ export function PrototypeFrame({
             // The website's components, with the text and image tools at the foot.
             layersOpen={layersOpen}
             onLayersOpen={setLayersOpen}
-            topLeft={
-              <>
-                {commenting ? <IconButton variant="ghost" onClick={exitMode}>Done</IconButton> : null}
+            // Floating it is one row. Docked, the panel is too narrow for all of it: the way out, the name and the layers toggle are the first row, and Docs and Handoff sit under them.
+            topLeft={(docked) => {
+              const done = commenting ? <IconButton variant="ghost" onClick={exitMode}>Done</IconButton> : null;
+              const close = (
                 <IconButton variant="ghost" label="Close canvas" tooltipSide="below" tooltipAlign="start" onClick={closeCanvas}>
                   <CloseIcon />
                 </IconButton>
-                {leading}
-                {!minimal ? (
+              );
+              const name = canvasName && !minimal ? <span className={docked ? "min-w-0 flex-1" : "max-sm:hidden"}>{canvasName}</span> : null;
+              const docsMenu = canvasDocs && !minimal ? <span className="max-sm:hidden">{canvasDocs({ onExport: exportable ? openExport : undefined })}</span> : null;
+              const layersToggle =
+                !minimal || devLink ? (
                   <IconButton variant="ghost" label={layersOpen ? "Hide layers" : "Show layers"} tooltipSide="below" aria-expanded={layersOpen} onClick={() => setLayersOpen((now) => !now)} className={layersOpen ? controlOn : ""}>
                     <SidebarIcon />
                   </IconButton>
-                ) : null}
-                {exportControl("ghost", "start")}
-                {canvasDocs && !minimal ? <span className="max-sm:hidden">{canvasDocs}</span> : null}
-                {canvasHandoff && !minimal ? <span className="max-sm:hidden">{canvasHandoff}</span> : null}
-              </>
-            }
+                ) : null;
+              return (
+                <>
+                  {exportable && terminalSlug ? <ExportImagesMenu ref={exportRef} button={false} slug={terminalSlug} screens={exportScreens} device={canvasDevices[0] ?? DEVICES[1]} /> : null}
+                  {docked ? (
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <div className="flex items-center gap-1">
+                        {done}
+                        {close}
+                        {name}
+                        {layersToggle}
+                      </div>
+                      {docsMenu ? <div className="flex items-center gap-1">{docsMenu}</div> : null}
+                    </div>
+                  ) : (
+                    <>
+                      {done}
+                      {close}
+                      {name}
+                      {docsMenu}
+                      {layersToggle}
+                    </>
+                  )}
+                </>
+              );
+            }}
             // Whatever the side panel holds (the edit panel, the comments, what an engineer picked): in the same card as the zoom and share.
             deviceChoice={chosenDevices}
             onDeviceChoice={keepDevices}
@@ -1277,8 +1316,6 @@ export function PrototypeFrame({
             editHistory={editing && edit ? <EditHistory session={session} written={written} /> : undefined}
             topRight={
               <>
-                {/* Editing on the canvas: undo and redo, and saving a version when there is one to save, sit with the zoom. */}
-                {editing && edit ? <EditBar session={session} slug={edit.slug} baseVersionId={edit.versionId} variantId={edit.variantId} versionOnly live={edit.live} history={false} /> : null}
                 {minimal && onOpenPrototype && !fullscreen ? (
                   <IconButton variant="ghost" label="Open the prototype" tooltipSide="below" tooltipAlign="end" onClick={onOpenPrototype}>
                     <ExternalIcon />
@@ -1298,10 +1335,18 @@ export function PrototypeFrame({
                   <CanvasZoomMenu ghost />
                 </span>
                 <CanvasPlayButton />
+                {terminalToggle("ghost")}
                 {shareControl}
               </>
             }
             uiHidden={uiHidden && showingFlow}
+            // The canvas's right-click menu puts the interface away and the comments out of sight as the keys do, and copies the link for an agent from what is pressed.
+            onToggleUi={() => setUiHidden((now) => !now)}
+            commentsShown={commentsShown}
+            onToggleComments={commentsOf ? () => setCommentsShown((now) => !now) : undefined}
+            agentLink={agentLink}
+            developerNotes={developerNotes}
+            onNotesNear={(ids) => setNearNotes((now) => (now.join(",") === ids.join(",") ? now : ids))}
             tools={!minimal && !devView ? (
               <>
                 {SHOW_COMPONENTS ? (
@@ -1309,7 +1354,6 @@ export function PrototypeFrame({
                     <ComponentIcon />
                   </IconButton>
                 ) : null}
-                {terminalToggle("ghost", "bar")}
               </>
             ) : undefined}
             // The comment buttons sit in the canvas's own bar at the foot.
@@ -1327,8 +1371,8 @@ export function PrototypeFrame({
             fold={fold}
             inspect={handoffInspect}
             sheet={handoffSheet}
-            // The variants canvas marks the designs that were handed off; a flow of steps is one design, so every step.
-            ready={readyForDev ? (canvas.setups ? (id: string) => readyForDev.includes(id) : () => true) : undefined}
+            // A version marked ready for dev marks every design on the canvas.
+            ready={readyForDev ? () => true : undefined}
             // The two canvases are different layouts of different screens, so each starts afresh.
             key={canvas.setups ? "variants" : "flow"}
             flow={canvas.flow}
@@ -1345,7 +1389,7 @@ export function PrototypeFrame({
             // The pins are on the canvas whenever it is open, not only while commenting: the eye switch is for the prototype itself.
             comments={showingFlow && commentsUi ? { ...commentsUi, visible: true, list: commentsShown || commenting ? (canvas.setups ? everything : withAsked) : [], notes: notesShown || commenting ? commentsUi.notes : [] } : undefined}
             // Wherever the version can be edited, and nothing else is going on: not on a share page or a phone, nor on a live version (no `edit`).
-            picking={showingFlow && (edit || devView) && !minimal && !narrow && !bare && (mode === "view" || editing || devView) ? { target: part, onPick: pickPart, onText: session.setText, onRemove: session.remove, busy: (editing && (session.edits.length > 0 || session.canUndo || session.canRedo)) || written.canUndo || written.canRedo, onPage: session.redraw } : undefined}
+            picking={showingFlow && (edit || devView) && (!minimal || devLink) && !narrow && !bare && (mode === "view" || editing || devView) ? { target: part, onPick: pickPart, onText: session.setText, onRemove: session.remove, busy: (editing && (session.edits.length > 0 || session.canUndo || session.canRedo)) || written.canUndo || written.canRedo, onPage: session.redraw } : undefined}
           />
         </div>
       ) : null}
@@ -1375,6 +1419,7 @@ export function PrototypeFrame({
 
 
     {/* Claude Code in the prototype's folder: a column of its own on the right, for the canvas and the prototype alike, with a grip to resize it. Not when only the prototype is on screen. */}
+    {pushOpen && terminalSlug ? <PushDialog slug={terminalSlug} onClose={() => setPushOpen(false)} /> : null}
     {terminalSlug && terminal.available ? <TerminalDock slug={terminalSlug} open={terminalShown} onStop={terminal.stop} square={fullscreen} select={canSelect ? { picking: selecting, onPicking: setSelecting, chip: selected?.chip ?? null, onClear: () => setSelected(null), onWorking: setClaudeWorking } : null} /> : null}
 
     {/* On a phone the list is a sheet over the prototype. */}

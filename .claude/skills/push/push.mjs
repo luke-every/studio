@@ -234,6 +234,19 @@ if (appMode) {
     }
     lap("install");
   }
+  // The conventions ask for a prototype that passes its own lint and type check. Whatever is left is told at the end, and never stops the push.
+  console.log("Checking the code ...");
+  const counted = (command) => {
+    const result = spawnSync(command, { cwd: root, shell: true, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+    return { ok: result.status === 0, text: `${result.stdout ?? ""}${result.stderr ?? ""}` };
+  };
+  const lint = packageJson.scripts?.lint ? counted(`${usesPnpm ? pnpm : "npm"} run lint`) : null;
+  const types = existsSync(join(root, "tsconfig.json")) ? counted(`${usesPnpm ? `${pnpm} exec` : "npx"} tsc --noEmit`) : null;
+  const lintLeft = lint && !lint.ok ? Number(/✖ (\d+) problem/.exec(lint.text)?.[1] ?? 1) : 0;
+  const typesLeft = types && !types.ok ? (types.text.match(/error TS\d+/g) ?? []).length || 1 : 0;
+  const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+  console.log(`Checks: ${[lintLeft && `${plural(lintLeft, "lint problem")}`, typesLeft && `${plural(typesLeft, "type error")}`].filter(Boolean).join(", ") || "clean"}`);
+  lap("checks");
   const segment = start.version.replace(/\./g, "-");
   const out = join(root, "out");
   rmSync(out, { recursive: true, force: true });
@@ -308,7 +321,8 @@ if (appMode) {
   entryPath = join(out, "index.html");
   // The built site is the version; the app's own source rides along in _source/ so engineers can read it all.
   const site = walk(out, new Set()).map((filePath) => ({ filePath, path: relative(out, filePath).split(sep).join("/"), size: statSync(filePath).size }));
-  const source = walk(root, new Set([...SKIP_DIRS, "out"])).map((filePath) => ({ filePath, path: `_source/${relative(root, filePath).split(sep).join("/")}`, size: statSync(filePath).size }));
+  // `src/app/studio-stage/` is the page the studio draws a copy with: not the designer's code, and nothing in the app uses it, so engineers don't need to read it.
+  const source = walk(root, new Set([...SKIP_DIRS, "out"])).filter((filePath) => !relative(root, filePath).split(sep).join("/").startsWith("src/app/studio-stage/")).map((filePath) => ({ filePath, path: `_source/${relative(root, filePath).split(sep).join("/")}`, size: statSync(filePath).size }));
   files = [...site, ...source];
 } else {
   files = walk(root).map((filePath) => ({

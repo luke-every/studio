@@ -41,6 +41,8 @@ export type PrototypeVersion = {
   liveUrl?: string;
   /** Only a canvas so far: no files, nothing to serve. */
   blank?: boolean;
+  /** Who marked this version as ready for engineering, and when. */
+  readyForDev?: { by: string; at: string };
 };
 
 export type Prototype = {

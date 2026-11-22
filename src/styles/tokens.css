@@ -188,6 +188,9 @@
   /* The canvas's properties card (top right) opens at its least and can be dragged out to its most. Mirrored for JS as PROPERTIES_MIN / PROPERTIES_MAX in flow-canvas.tsx. */
   --properties-min-width: 275px;
   --properties-max-width: 400px;
+  /* The layers panel, docked on the left, is the same: its least is what its header needs, and it can be dragged out to its most. Mirrored for JS as LAYERS_MIN / LAYERS_MAX in flow-canvas.tsx. */
+  --layers-min-width: 240px;
+  --layers-max-width: 400px;
   /* The comments panel reads like a conversation, so it keeps the wider column the side panels used to share. */
   --comments-panel-width: 20rem;
   /* The terminal needs room for a Claude Code screen: about 80 columns at its size. */

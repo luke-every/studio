@@ -33,6 +33,8 @@ import { TextInPlace } from "./edit-layer";
 import type { EditComponent } from "./use-fork";
 import { BunchPanel, FramePanel, MultiPanel, PiecePanel, type AlignMode, type MultiPatch, type MultiTarget, type TextStyle } from "./frame-panel";
 import { LayersPanel, type LayerRow } from "./layers-panel";
+import { selectorFor } from "@/lib/edit-dom";
+import { pressedOf, replaySteps, type Step } from "@/lib/state-replay";
 import { StickyNote } from "./sticky-note";
 import { StickyTool } from "./sticky-tool";
 import { ToolGroup, type ToolOption } from "./tool-group";
@@ -46,6 +48,8 @@ import { useVariants, variantLabel } from "@/lib/use-variants";
 import { usePinWatch } from "./use-pin-watch";
 import { useCloudCanvas } from "./use-cloud-canvas";
 import { useSharedComments } from "./shared-comments";
+import type { Comment } from "@/lib/comments";
+import { useStudio } from "@/lib/data/studio-store";
 import { useUser } from "@/lib/use-user";
 
 /** A pointer from a drawing, its point at `x y`; the usual crosshair where drawings aren't used. */
@@ -62,6 +66,12 @@ const EDGE_GRIP = 8;
 const PROPERTIES_MIN = 275;
 const PROPERTIES_MAX = 400;
 const PROPERTIES_KEY = "canvas-properties-width";
+/** The docked layers panel's least and most (mirrors `--layers-min-width` and `--layers-max-width` in tokens.css). Kept per browser. */
+const LAYERS_MIN = 240;
+const LAYERS_MAX = 400;
+const LAYERS_KEY = "canvas-layers-width";
+/** How far from the edge of what can be seen the right-click menu stays. */
+const MENU_MARGIN = 8;
 /** Where a duplicate with nothing to go by is put: this far (canvas units) to the right of the original. */
 const DUPLICATE_GAP = 16;
 /** The nearest whole pixel as the panel shows it (the canvas draws at half size, so that is a multiple of half a unit): what a drag lands on, as Figma does. Typing a number in the panel is not rounded. */
@@ -85,7 +95,7 @@ const isPiece = (id: string) => id.startsWith("stage/");
 /** A component placed on the canvas is a screen of its own on this device, as big as the component is. */
 const pieceDevice = (piece: Piece): Device => ({ id: "stage", name: "Component", kind: "desktop", width: piece.width, height: piece.height });
 const LAYER = "/canvas-layer.html";
-const pieceScreen = (piece: Piece, forkBase?: string): FlowScreen => piece.kind ? { id: piece.id, name: piece.label, url: LAYER, params: { kind: piece.kind, ...Object.fromEntries(Object.entries(piece.props).filter(([key]) => !(piece.kind === "text" && key === "w")).map(([key, value]) => [key, String(value)])) } } : ({ id: piece.id, name: piece.label, url: piece.fork && forkBase ? `${forkBase}/studio-stage` : STAGE, params: { id: piece.story, ...(Object.keys(piece.props).length ? { props: JSON.stringify(piece.props) } : {}), ...(piece.texts && Object.keys(piece.texts).length ? { texts: JSON.stringify(piece.texts) } : {}) } });
+const pieceScreen = (piece: Piece, forkBase?: string): FlowScreen => piece.kind === "state" && piece.state ? { id: piece.id, name: piece.label, url: piece.state.url, params: { ...piece.state.params, "studio-state": piece.id } } : piece.kind ? { id: piece.id, name: piece.label, url: LAYER, params: { kind: piece.kind, ...Object.fromEntries(Object.entries(piece.props).filter(([key]) => !(piece.kind === "text" && key === "w")).map(([key, value]) => [key, String(value)])) } } : ({ id: piece.id, name: piece.label, url: piece.fork && forkBase ? `${forkBase}/studio-stage` : STAGE, params: { id: piece.story, ...(Object.keys(piece.props).length ? { props: JSON.stringify(piece.props) } : {}), ...(piece.texts && Object.keys(piece.texts).length ? { texts: JSON.stringify(piece.texts) } : {}) } });
 /** The bar's shapes menu: what each draws. */
 const SHAPE_OPTIONS: ToolOption[] = [
   { id: "rectangle", label: "Rectangle", icon: <RectangleIcon className="size-4" />, shortcut: "R" },
@@ -262,6 +272,12 @@ export function FlowCanvas({
   deviceChoice,
   onDeviceChoice,
   uiHidden = false,
+  onToggleUi,
+  commentsShown = true,
+  onToggleComments,
+  agentLink,
+  developerNotes,
+  onNotesNear,
   viewOnly = false,
   dev = false,
   viewToggle,
@@ -287,7 +303,8 @@ export function FlowCanvas({
   layersOpen?: boolean;
   onLayersOpen?: (open: boolean) => void;
   /** The controls at the top left, over the layers, and at the top right, over the properties: one card each. */
-  topLeft?: React.ReactNode;
+  /** A function when the card is laid out differently docked (its header cannot fit one row in the panel). */
+  topLeft?: React.ReactNode | ((docked: boolean) => React.ReactNode);
   topRight?: React.ReactNode;
   /** Undo and redo while editing: a card of their own, just left of the top right one. */
   editHistory?: React.ReactNode;
@@ -302,6 +319,17 @@ export function FlowCanvas({
   onDeviceChoice?: (ids: string[]) => void;
   /** ⌘. : the canvas's own controls (panels, the bar at the foot) are put out of sight. */
   uiHidden?: boolean;
+  /** The menu's way to put the interface away and bring it back (the same as ⌘.). */
+  onToggleUi?: () => void;
+  /** Whether the comments are drawn on the canvas, and the way to show or hide them (⇧C): only where there are comments to show. */
+  commentsShown?: boolean;
+  onToggleComments?: () => void;
+  /** A link to an element's code for an engineer's agent, given where it is written (see `DevProperties`). */
+  agentLink?: (loc: string, notes?: string[]) => Promise<string>;
+  /** The notes for the developers on this version (not resolved), whether or not they are drawn: to tell which sit inside an element that is picked. */
+  developerNotes?: Comment[];
+  /** Told, as an element is picked, which of those notes sit inside it. */
+  onNotesNear?: (ids: string[]) => void;
   /** The prototype's address, without any screen's parameters. */
   base: string;
   /** Which version's canvas this is in the cloud: it is saved there, and read from there when opened. */
@@ -640,11 +668,36 @@ export function FlowCanvas({
     if (!placing) setDraft(null);
   }
 
+  // Opening the layers docks both panels to the window's edges, full height: the canvas is what is between them, so a view that is fitted or
+  // focused (asked for, or the window changing) is centred there and not behind them. Docking, undocking or dragging a panel's width never
+  // moves the view itself. (Floating, they sit over the canvas as they always did.) The card on the right is as wide as the person has dragged it.
+  const docked = layersOpen && !viewOnly;
+  const [cardWidth, setCardWidth] = useState(PROPERTIES_MIN);
+  const [layersWidth, setLayersWidth] = useState(LAYERS_MIN);
+  const resizeLayers = useRef<{ x: number; width: number } | null>(null);
+  useEffect(() => {
+    try {
+      const kept = Number(window.localStorage.getItem(LAYERS_KEY));
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the width kept in this browser can only be read once the page is there
+      if (kept) setLayersWidth(Math.min(LAYERS_MAX, Math.max(LAYERS_MIN, kept)));
+    } catch {
+      // Nothing kept: it opens at its least.
+    }
+  }, []);
+  const dock = {
+    left: docked ? Math.min(LAYERS_MAX, Math.max(LAYERS_MIN, layersWidth)) : 0,
+    right: docked ? Math.min(PROPERTIES_MAX, Math.max(PROPERTIES_MIN, cardWidth)) : 0,
+  };
+  const centreX = (room: { width: number }) => dock.left + (room.width - dock.left - dock.right) / 2;
+
   // The part of the canvas that isn't under the toolbar.
-  const clear = (room: { width: number; height: number }) => ({ width: room.width - INSET.side * 2, height: room.height - INSET.top - INSET.side });
+  const clear = (room: { width: number; height: number }) => ({ width: room.width - dock.left - dock.right - INSET.side * 2, height: room.height - INSET.top - INSET.side });
 
   // As tall as the room, and as wide as the row is: the start of it at the left, unless all of it fits.
-  const fitted = (room: { width: number; height: number }): View => fitView({ width, height }, room, INSET, MIN_ZOOM);
+  const fitted = (room: { width: number; height: number }): View => {
+    const view = fitView({ width, height }, { width: room.width - dock.left - dock.right, height: room.height }, INSET, MIN_ZOOM);
+    return { ...view, x: view.x + dock.left };
+  };
 
   // Laid out once the room has stopped changing.
   useEffect(() => {
@@ -742,7 +795,7 @@ export function FlowCanvas({
     const tall = heightOf(entry.copyId);
     const scale = Math.min(MAX_ZOOM, space.width / widthOf(entry.copyId), space.height / tall);
     touch(true);
-    camera.set({ scale, x: size.width / 2 - (spot.x + widthOf(entry.copyId) / 2) * scale, y: INSET.top + space.height / 2 - (spot.y + tall / 2) * scale });
+    camera.set({ scale, x: centreX(size) - (spot.x + widthOf(entry.copyId) / 2) * scale, y: INSET.top + space.height / 2 - (spot.y + tall / 2) * scale });
     // Only when asked, not each time the layout or the size moves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asked]);
@@ -770,7 +823,7 @@ export function FlowCanvas({
         touch(true);
         // And outlined, so what it is can be seen.
         setInspected({ id: "section", copyId: copy.id, box: { left: found.left, top: found.top, width: found.width, height: found.height } });
-        camera.set({ scale, x: size.width / 2 - (world.x + world.width / 2) * scale, y: INSET.top + space.height / 2 - (world.y + world.height / 2) * scale }, { glide: true });
+        camera.set({ scale, x: centreX(size) - (world.x + world.width / 2) * scale, y: INSET.top + space.height / 2 - (world.y + world.height / 2) * scale }, { glide: true });
         return;
       }
       if (attempt < 3) {
@@ -783,7 +836,7 @@ export function FlowCanvas({
       const tall = heightOf(first.id);
       const scale = Math.min(MAX_ZOOM, space.width / widthOf(first.id), space.height / tall);
       touch(true);
-      camera.set({ scale, x: size.width / 2 - (spot.x + widthOf(first.id) / 2) * scale, y: INSET.top + space.height / 2 - (spot.y + tall / 2) * scale }, { glide: true });
+      camera.set({ scale, x: centreX(size) - (spot.x + widthOf(first.id) / 2) * scale, y: INSET.top + space.height / 2 - (spot.y + tall / 2) * scale }, { glide: true });
     };
     timers.push(window.setTimeout(() => go(0), 300));
     return () => {
@@ -913,6 +966,34 @@ export function FlowCanvas({
   // The canvas in the cloud: taken when opened, saved a moment after each change. What it brings in starts the undo history afresh.
   const user = useUser();
   const sharedAs = useSharedComments();
+  // A share link's canvas (not Dev's) takes sticky notes of the viewer's own: the one thing a link can add. The notes made in this browser are kept here by id,
+  // which is what makes them theirs to move, write on and delete (the studio checks the same on its side).
+  const stickies = viewOnly && !!sharedAs?.token && !dev;
+  const [mine, setMine] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    if (!stickies) return;
+    try {
+      const kept = JSON.parse(localStorage.getItem(`proto:sticky-mine:${base}`) ?? "[]") as unknown;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- what this browser made can only be read once the page is there
+      if (Array.isArray(kept)) setMine(new Set(kept.filter((id): id is string => typeof id === "string")));
+    } catch {
+      // Nothing kept: the notes already on the canvas are not theirs.
+    }
+  }, [stickies, base]);
+  const markMine = (id: string) => {
+    setMine((now) => new Set(now).add(id));
+    try {
+      const key = `proto:sticky-mine:${base}`;
+      const kept = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
+      localStorage.setItem(key, JSON.stringify([...new Set([...(Array.isArray(kept) ? kept : []), id])]));
+    } catch {
+      // Blocked storage: theirs until the page closes.
+    }
+  };
+  const stickyNow = useRef({ on: stickies, mine });
+  useEffect(() => {
+    stickyNow.current = { on: stickies, mine };
+  });
   const [, setPictureArrived] = useState(0);
   const cloudStatus = useCloudCanvas({
     cloud,
@@ -920,6 +1001,7 @@ export function FlowCanvas({
     base,
     viewOnly,
     by: user.name,
+    stickies: stickies ? mine : undefined,
     canvas: { offsets, pieces, frames: shapes, devices: deviceChoice },
     adopt: (found) => {
       history.current = { past: [], future: [], now: { offsets: found.offsets, pieces: found.pieces, shapes: found.frames } };
@@ -1236,7 +1318,7 @@ export function FlowCanvas({
       // A canvas that is closed stays loaded out of sight: its keys are not for it then.
       if (box.current?.closest("[inert]")) return;
       const tool = event.shiftKey && event.key.toLowerCase() === "l" ? "arrow" : event.shiftKey ? undefined : ({ r: "rectangle", o: "ellipse", l: "line", s: "sticky" } as Record<string, CanvasShape>)[event.key.toLowerCase()];
-      if (tool && !event.repeat && !viewOnly) {
+      if (tool && !event.repeat && (!viewOnly || (stickyNow.current.on && tool === "sticky"))) {
         shapeActs.current.pick(tool);
       } else if (event.key === "Enter" && shapingNow.current === "path") {
         shapeActs.current.finish(false);
@@ -1263,7 +1345,7 @@ export function FlowCanvas({
       } else if (event.key === "Backspace" || event.key === "Delete") {
         // Anything put on the canvas can go: a frame, or a placed component. The prototype's own screens stay.
         // An element picked inside something is not the thing: Delete takes that element out, and leaves what it was in.
-        if (viewOnly) return;
+        if (viewOnly && !(stickyNow.current.on && shapeNow.current && stickyNow.current.mine.has(shapeNow.current))) return;
         const taken = pickingNow.current;
         if (taken?.target) {
           event.preventDefault();
@@ -1381,6 +1463,7 @@ export function FlowCanvas({
         });
   const putShape = (kind: CanvasShape, box: { x: number; y: number; width: number; height: number }, more: Partial<CanvasFrame> = {}) => {
     const id = `frame-${Math.random().toString(36).slice(2, 8)}`;
+    if (stickies && kind === "sticky") markMine(id);
     const line = kind === "line" || kind === "arrow" || kind === "path";
     setShapes((was) => [
       ...was,
@@ -1390,7 +1473,7 @@ export function FlowCanvas({
         ...box,
         shape: kind,
         // Inside the frame it lands in, which it then moves with.
-        parent: frameAt(box.x + box.width / 2, box.y + box.height / 2),
+        parent: stickies ? undefined : frameAt(box.x + box.width / 2, box.y + box.height / 2),
         fill: kind === "line" || kind === "arrow" ? undefined : "#d9d9d9",
         stroke: line ? "#111111" : undefined,
         strokeWidth: line ? 1 : undefined,
@@ -2038,17 +2121,33 @@ export function FlowCanvas({
   const leaveCopy = (sel: Chosen) => {
     if (sel.keys.length || sel.frames.length) spawn(readHeld(sel), 0, 0, false);
   };
-  const copyChosen = () => {
+  // An element picked inside a screen (or a state) is what ⌘C takes, and ⌘V pulls it out onto the canvas the way an Alt drag does: as a fork of its own, put down in the
+  // middle of the view. Layers are copied as before. Whichever was copied last is what ⌘V puts down.
+  const heldPart = useRef<{ copyId: string; part: Part } | null>(null);
+  const lastCopied = useRef<"layers" | "part">("layers");
+  const copyChosen = (): Chosen | null => {
+    if (picked && editComponent && !viewOnly) {
+      heldPart.current = { copyId: picked.copyId, part: picked.part };
+      lastCopied.current = "part";
+      pastes.current = 0;
+      void navigator.clipboard?.writeText("studio layers").catch(() => {});
+      return { keys: [], frames: [] };
+    }
+    return copyLayers();
+  };
+  const copyLayers = () => {
     const sel = selectedPieces();
     if (!sel.keys.length && !sel.frames.length) return null;
     held.current = readHeld(sel);
+    heldPart.current = null;
+    lastCopied.current = "layers";
     pastes.current = 0;
     // The system clipboard stops holding a fill that was copied before, so ⌘V puts down what was copied last.
     void navigator.clipboard?.writeText("studio layers").catch(() => {});
     return sel;
   };
   const cutChosen = () => {
-    const sel = copyChosen();
+    const sel = copyLayers();
     if (!sel) return false;
     deleteGroupNow.current({ copies: sel.keys, frames: sel.frames });
     setSelected(null);
@@ -2073,7 +2172,40 @@ export function FlowCanvas({
       setBunch({ copies: made.loose, frames: made.frames });
     }
   };
+  // The element copied, pulled out as if it had been dragged: taken from its screen's page as it is now and put down in the middle of the view, each paste a little further along.
+  const pastePart = () => {
+    const taken = heldPart.current;
+    if (!taken || !editComponent || !box.current || !copyOf.has(taken.copyId)) return false;
+    const rect = box.current.getBoundingClientRect();
+    pastes.current += 1;
+    const step = 24 * (pastes.current - 1);
+    pullFind.current = Promise.resolve({ part: taken.part, copyId: taken.copyId, page: pageFor(taken.copyId) ?? undefined });
+    ghostAt.current = null;
+    void finishPull(rect.left + rect.width / 2 + step, rect.top + rect.height / 2 + step);
+    return true;
+  };
+  // "Paste here" in the menu: what was copied put down with its top left where the right button was pressed. Layers keep how they sit with each other; an element is pulled out
+  // as in `pastePart`, held by its top left as an Alt drag holds it by the place it was taken from.
+  const pasteAt = (client: { x: number; y: number }) => {
+    if (lastCopied.current === "part" && heldPart.current) {
+      const taken = heldPart.current;
+      if (!editComponent || !copyOf.has(taken.copyId)) return false;
+      pullFind.current = Promise.resolve({ part: taken.part, copyId: taken.copyId, page: pageFor(taken.copyId) ?? undefined });
+      ghostAt.current = { x: client.x, y: client.y, grip: { x: 0, y: 0 } };
+      void finishPull(client.x, client.y);
+      return true;
+    }
+    const data = held.current;
+    if (!data) return false;
+    const world = worldAt(client.x, client.y);
+    // A layer's top is where its box starts, below the name a screen carries: `LABEL_HEIGHT` on from the offset it is kept at.
+    const left = Math.min(...data.pieces.map(({ offset }) => offset.x), ...data.frames.map((one) => one.x));
+    const top = Math.min(...data.pieces.map(({ offset }) => offset.y + LABEL_HEIGHT), ...data.frames.map((one) => one.y));
+    chooseMade(spawn(data, world.x - left, world.y - top, true));
+    return true;
+  };
   const pasteHeld = () => {
+    if (lastCopied.current === "part" && heldPart.current) return pastePart();
     const data = held.current;
     if (!data) return false;
     // Each paste lands a little further along, so copies don't sit unseen on each other.
@@ -2219,9 +2351,9 @@ export function FlowCanvas({
     setBunch({ copies: [], frames: [] });
     setShape(null);
     setSelected(key);
-    const scale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(size.width / (across + 160), size.height / (tall + 160))));
+    const scale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min((size.width - dock.left - dock.right) / (across + 160), size.height / (tall + 160))));
     touch(true);
-    camera.set({ scale, x: size.width / 2 - (here.x + across / 2) * scale, y: size.height / 2 - (here.y - LABEL_HEIGHT + tall / 2) * scale });
+    camera.set({ scale, x: centreX(size) - (here.x + across / 2) * scale, y: size.height / 2 - (here.y - LABEL_HEIGHT + tall / 2) * scale });
   };
   const leaveIsolation = () => {
     if (!isolated) return;
@@ -2314,7 +2446,7 @@ export function FlowCanvas({
     const part = found.part;
     // What the page has it as now: the component it is the top of, if it is, and the ones that drew it, each with what it was given.
     const captured = part && found.page ? await found.page.capture(part.selector) : null;
-    if (!part || (!part.loc && !captured?.top)) {
+    if (!part || (!part.loc && !captured?.top && !captured?.markup)) {
       editComponent.problem("Restart the project's server, then try again: it tags its elements as it starts. (An element of production's own code can't be taken out: fork its component instead.)");
       return;
     }
@@ -2324,7 +2456,7 @@ export function FlowCanvas({
     const size = { width: width * SCREEN_SCALE * camera.target.scale, height: height * SCREEN_SCALE * camera.target.scale };
     setPulling({ x: held?.x ?? clientX - size.width / 2, y: held?.y ?? clientY - size.height / 2, ...size, grip: held?.grip ?? { x: 0.5, y: 0.5 }, busy: true });
     // The top of a component the page uses is taken as that use: the one it is, where there are several.
-    const made = await editComponent.extract({ loc: part.loc, top: captured?.top ?? undefined, owners: captured?.owners });
+    const made = await editComponent.extract({ loc: part.loc, top: captured?.top ?? undefined, owners: captured?.owners, markup: captured?.markup });
     setPulling(null);
     if (!made) return;
     const piece: Piece = { id: newId(), story: made.id, label: made.label, component: made.label, fork: made.label, ...(made.existing || made.shared ? { instance: true } : {}), props: {}, width, height };
@@ -2336,7 +2468,7 @@ export function FlowCanvas({
     if (placing || space.current) return;
     event.stopPropagation();
     // Alt on a screen of the prototype (a piece is copied, as it always was): the element under the pointer is pulled out, to be a component of its own on the canvas.
-    if (event.altKey && !viewOnly && !isPiece(id) && editComponent && picking) {
+    if (event.altKey && !viewOnly && (!isPiece(id) || pieceByKey(id)?.kind === "state") && editComponent && picking) {
       drag.current = { x: event.clientX, y: event.clientY, from: camera.target, moved: false, pan: false, pull: { copyId: id } };
       pullPicked.current = null;
       ghostAt.current = null;
@@ -2570,13 +2702,44 @@ export function FlowCanvas({
     );
     setMenu(null);
   };
+  // Hidden or locked, what is selected: each layer flips on its own, so a mixed selection all ends up the same way after two presses.
+  const flipSelected = (what: "hidden" | "locked") => {
+    const { keys, frames: held } = layersSelected();
+    if (viewOnly || (!keys.length && !held.length)) return;
+    setShapes((now) => now.map((one) => (held.includes(one.id) ? { ...one, [what]: !one[what] } : one)));
+    setPieces((now) => now.map((piece) => (keys.includes(copyKey("stage", piece.id)) ? { ...piece, [what]: !piece[what] } : piece)));
+  };
+  // What is drawn later is on top: to the front is to the end of its list, to the back the start of it.
+  const reorderSelected = (front: boolean) => {
+    const { keys, frames: held } = layersSelected();
+    if (viewOnly || (!keys.length && !held.length)) return;
+    const order = <T,>(list: T[], moving: (item: T) => boolean) => [...(front ? list.filter((one) => !moving(one)) : list.filter(moving)), ...(front ? list.filter(moving) : list.filter((one) => !moving(one)))];
+    if (held.length) setShapes((now) => order(now, (one) => held.includes(one.id)));
+    if (keys.length) setPieces((now) => order(now, (piece) => keys.includes(copyKey("stage", piece.id))));
+  };
+  // Takes the layout off a frame that has one: what is in it stays where it is drawn.
+  const removeLayout = () => {
+    const { frames: held } = layersSelected();
+    if (viewOnly || !held.length) return;
+    setShapes((now) => now.map((one) => (held.includes(one.id) && one.layout ? { ...one, layout: undefined } : one)));
+    setSettle((value) => value + 1);
+  };
+  const deleteSelected = () => {
+    const { keys, frames: held } = layersSelected();
+    if (viewOnly || (!keys.length && !held.length)) return;
+    deleteGroupNow.current({ copies: keys, frames: held });
+    setSelected(null);
+    setShape(null);
+  };
   const wrapNow = useRef(wrap);
   const unwrapNow = useRef(unwrap);
   const autoLayoutNow = useRef(autoLayout);
+  const actsNow = useRef({ flipSelected, reorderSelected });
   useEffect(() => {
     wrapNow.current = wrap;
     unwrapNow.current = unwrap;
     autoLayoutNow.current = autoLayout;
+    actsNow.current = { flipSelected, reorderSelected };
   });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -2591,17 +2754,66 @@ export function FlowCanvas({
         unwrapNow.current();
       } else if (event.code === "KeyA" && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
         autoLayoutNow.current();
+      } else if ((event.code === "KeyH" || event.code === "KeyL") && event.shiftKey && !event.altKey && (event.metaKey || event.ctrlKey)) {
+        // Hide and lock, as Figma has them: always the canvas's, the browser would open its history, or take the address bar.
+        event.preventDefault();
+        actsNow.current.flipSelected(event.code === "KeyH" ? "hidden" : "locked");
+      } else if ((event.code === "BracketRight" || event.code === "BracketLeft") && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
+        actsNow.current.reorderSelected(event.code === "BracketRight");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   // The menu under the right button: on what is pressed, which is selected first unless it is already part of the selection.
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; client: { x: number; y: number }; paste: boolean; bare: boolean } | null>(null);
+  const { notify } = useStudio();
+  // A link copied for an engineer's agent: made while the tap is still the tap (Safari only lets a page write the clipboard straight from one), so the clipboard is handed a promise of it.
+  // The menu stays in view: where it was opened unless that would take it past an edge of what can be seen of the canvas (the window, and the part of it the canvas has), and as tall as the
+  // room there is, scrolling when its sections are taller. Placed after it is drawn, and again as its size changes (what is picked arrives a moment later and adds to it).
+  const menuBox = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = menuBox.current;
+    const canvas = box.current;
+    if (!menu || !element || !canvas) return undefined;
+    const place = () => {
+      const room = canvas.getBoundingClientRect();
+      const [left, top] = [Math.max(room.left, 0) + MENU_MARGIN, Math.max(room.top, 0) + MENU_MARGIN];
+      const [right, bottom] = [Math.min(room.right, window.innerWidth) - MENU_MARGIN, Math.min(room.bottom, window.innerHeight) - MENU_MARGIN];
+      element.style.maxHeight = `${Math.max(bottom - top, 80)}px`;
+      const [width, height] = [element.offsetWidth, element.offsetHeight];
+      const at = { x: Math.min(Math.max(room.left + menu.x, left), Math.max(left, right - width)), y: Math.min(Math.max(room.top + menu.y, top), Math.max(top, bottom - height)) };
+      element.style.left = `${at.x - room.left}px`;
+      element.style.top = `${at.y - room.top}px`;
+    };
+    place();
+    const watching = new ResizeObserver(place);
+    watching.observe(element);
+    return () => watching.disconnect();
+  }, [menu]);
+  const nearNotes = useRef<string[]>([]);
+  const copyLink = (loc: string) => {
+    if (!agentLink) return;
+    const link = agentLink(loc, nearNotes.current);
+    const copied =
+      typeof ClipboardItem === "undefined"
+        ? link.then((text) => navigator.clipboard.writeText(text))
+        : navigator.clipboard.write([new ClipboardItem({ "text/plain": link.then((text) => new Blob([text], { type: "text/plain" })) })]);
+    copied.then(
+      () => notify("Copied the link for an agent"),
+      () => notify("Couldn't copy the link", true),
+    );
+  };
+  const copyWords = (text: string, done: string) => navigator.clipboard.writeText(text).then(() => notify(done), () => notify("Couldn't copy", true));
   const openMenu = (event: React.MouseEvent, on: { copy?: string; frame?: string }) => {
     event.preventDefault();
     event.stopPropagation();
-    if (viewOnly) return;
+    // Looking at the code (Dev, or a share page): nothing is changed from the menu, but what is pressed is picked so it can be copied from it.
+    if (viewOnly) {
+      const rect = box.current!.getBoundingClientRect();
+      if (picking && !on.frame) void pick(event.clientX, event.clientY, true);
+      return setMenu({ x: event.clientX - rect.left, y: event.clientY - rect.top, client: { x: event.clientX, y: event.clientY }, paste: false, bare: !on.copy && !on.frame });
+    }
     const now = bunchNow.current;
     if (!(on.copy && now.copies.includes(on.copy)) && !(on.frame && now.frames.includes(on.frame))) {
       setBunch({ copies: [], frames: [] });
@@ -2609,7 +2821,9 @@ export function FlowCanvas({
       setShape(on.frame ?? null);
     }
     const rect = box.current!.getBoundingClientRect();
-    setMenu({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+    // On the bare canvas there is nothing selected to act on: the menu is only for putting down what was copied.
+    const paste = lastCopied.current === "part" ? !!heldPart.current && !!editComponent : !!held.current;
+    setMenu({ x: event.clientX - rect.left, y: event.clientY - rect.top, client: { x: event.clientX, y: event.clientY }, paste, bare: !on.copy && !on.frame });
   };
   useEffect(() => {
     if (!menu) return undefined;
@@ -2840,14 +3054,14 @@ export function FlowCanvas({
     const pieceRows = (piece: Piece, depth: number) => {
       const id = copyKey("stage", piece.id);
       const text = String(piece.props.text ?? "").replace(/\s+/g, " ").trim();
-      const row: LayerRow = { id, kind: piece.kind ?? "component", name: piece.kind === "text" ? text || "Text" : piece.label, depth, own: true, hovered: hoverLayer === id, hidden: piece.hidden, locked: piece.locked, selected: selected === id || bunch.copies.includes(id), ...(piece.fork ? { fork: true } : {}), ...(isMaster(piece) ? { master: true } : {}) };
-      if (piece.kind) return void rows.push(row);
+      const row: LayerRow = { id, kind: piece.kind === "state" ? "screen" : (piece.kind ?? "component"), name: piece.kind === "text" ? text || "Text" : piece.label, depth, own: true, hovered: hoverLayer === id, hidden: piece.hidden, locked: piece.locked, selected: selected === id || bunch.copies.includes(id), ...(piece.fork ? { fork: true } : {}), ...(isMaster(piece) ? { master: true } : {}) };
+      if (piece.kind && piece.kind !== "state") return void rows.push(row);
       const tree = trees[id];
       const pickedHere = picked?.copyId === id ? picked.part.selector : null;
       const pickedIx = tree && pickedHere ? tree.selector.indexOf(pickedHere) : -1;
       const open = unfolded.has(`screen:${id}`);
       // A fork is code, and all of it is its own: its layers begin at its top element (the `<section>` of a section), not inside the wrappers that hold one thing.
-      const start = tree ? (isMaster(piece) && tree.stage !== undefined ? tree.stage : contentStart(tree)) : -1;
+      const start = piece.kind === "state" ? -1 : tree ? (isMaster(piece) && tree.stage !== undefined ? tree.stage : contentStart(tree)) : -1;
       // What is picked below the component's root is what is selected, not the component; the root itself (or a wrapper above it) is the component.
       let below = false;
       if (tree && pickedIx >= 0) {
@@ -2923,7 +3137,7 @@ export function FlowCanvas({
   }, [propsComponent, propsKey, pagesSeen]);
   // The layers' trees, read from each screen that is open (and again when a page loads or comes), one page at a time.
   const [trees, setTrees] = useState<Record<string, PageTree>>({});
-  const openScreens = kept.filter((one) => !pieceByKey(one.id)?.kind && (unfolded.has(`screen:${one.id}`) || picked?.copyId === one.id)).map((one) => one.id).join(" ");
+  const openScreens = kept.filter((one) => (!pieceByKey(one.id)?.kind || pieceByKey(one.id)?.kind === "state") && (unfolded.has(`screen:${one.id}`) || picked?.copyId === one.id)).map((one) => one.id).join(" ");
   useEffect(() => {
     let stale = false;
     const timers: number[] = [];
@@ -3021,6 +3235,94 @@ export function FlowCanvas({
     return { x: (clientX - rect.left - now.x) / now.scale, y: (clientY - rect.top - now.y) / now.scale };
   };
   const newId = () => `piece-${Math.random().toString(36).slice(2, 8)}`;
+  // Using a screen where it stands records what is pressed in it (only by a person: the replay of a state presses too, and isn't recorded), so what it ends up
+  // showing (a modal, a menu, an open accordion) can be kept as a screen of its own. A page on another address can't be reached from here, and isn't recorded.
+  // The kept states whose steps didn't all play the last time they were drawn: the page has changed since, and the state can't be reached as it was.
+  const [unreached, setUnreached] = useState<ReadonlySet<string>>(() => new Set());
+  // ⌘I is the play and stop square by a screen's name, from the keyboard: it starts using the screen selected (or the one an element is picked in), and stops the one being used.
+  const toggleUsing = useRef<() => boolean>(() => false);
+  useEffect(() => {
+    toggleUsing.current = () => {
+      if (usingId) {
+        setUsing(null);
+        return true;
+      }
+      const id = picked?.copyId ?? selected;
+      const piece = id ? pieceByKey(id) : undefined;
+      // Screens, forks and kept states run; a text, an image or a plain component has nothing to press.
+      if (!id || !copyOf.has(id) || interact || placing || (piece && piece.kind !== "state" && !piece.fork)) return false;
+      setSelected(id);
+      setUsing(id);
+      return true;
+    };
+  });
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== "KeyI" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.repeat) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "") || box.current?.closest("[inert]")) return;
+      if (toggleUsing.current()) event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const recorded = useRef<Step[]>([]);
+  const [recordedCount, setRecordedCount] = useState(0);
+  // Each screen used starts a record of its own.
+  const [recordedFor, setRecordedFor] = useState<string | null>(null);
+  if (recordedFor !== usingId) {
+    setRecordedFor(usingId);
+    setRecordedCount(0);
+  }
+  useEffect(() => {
+    recorded.current = [];
+    const frame = usingId ? frames.current.get(usingId) : undefined;
+    if (!frame) return undefined;
+    let watched: Document | null = null;
+    const pressed = (event: MouseEvent) => {
+      if (!event.isTrusted || !(event.target instanceof Element)) return;
+      recorded.current.push({ click: selectorFor(pressedOf(event.target)) });
+      setRecordedCount(recorded.current.length);
+    };
+    const attach = () => {
+      watched?.removeEventListener("click", pressed, true);
+      try {
+        watched = frame.contentDocument;
+      } catch {
+        watched = null;
+      }
+      watched?.addEventListener("click", pressed, true);
+    };
+    attach();
+    // The page loading again (a press that goes to another page) is watched too.
+    frame.addEventListener("load", attach);
+    return () => {
+      watched?.removeEventListener("click", pressed, true);
+      frame.removeEventListener("load", attach);
+    };
+  }, [usingId]);
+  // What the page is in now, kept as a screen beside the one it began from: the same page, and the steps that reach it, played again each time it is drawn so it stays
+  // as current as the code. Using it ends; the new screen is selected, to be picked from, its layers read, and lifted out of like any other.
+  const keepState = (id: string) => {
+    const copy = copyOf.get(id);
+    const mine = pieceByKey(id);
+    if (!copy || !recorded.current.length) return;
+    const began = mine?.kind === "state" && mine.state ? mine.state : null;
+    const origin = began?.origin ?? id;
+    const beside = pieces.filter((piece) => piece.kind === "state" && piece.state?.origin === origin).length;
+    const state: Piece = {
+      id: newId(),
+      kind: "state",
+      story: "",
+      label: `${copy.screen.name} · state ${beside + 1}`,
+      props: {},
+      width: copy.device.width,
+      height: Math.round(pageHeight(origin)),
+      state: { url: began?.url ?? copy.screen.url ?? base, params: began?.params ?? copy.screen.params, steps: [...(began?.steps ?? []), ...recorded.current], origin },
+    };
+    setUsing(null);
+    putDown(state, { x: at(origin).x + (beside + 1) * (widthOf(origin) + DEVICE_GAP), y: at(origin).y }, false);
+  };
   const addText = (clientX: number, clientY: number) => {
     const id = putDown({ id: newId(), kind: "text", story: "", label: "Text", props: { text: "Text" }, width: 120, height: 32 }, worldAt(clientX, clientY), false);
     setTexting(false);
@@ -3211,9 +3513,75 @@ export function FlowCanvas({
       return;
     }
     setPickedOn(part ? { selector: part.selector, copyId: found.copy.id } : null);
+    // What the pointer outlined was read against the selection before this one (its parent, after a step in): dropped, and asked again.
+    setTarget(null);
     setEchoes([]);
     if (part) void echo(found.copy, part.selector, (frame) => selectorBox(frame, part.selector));
     if (part || picking.target) picking.onPick(found.frame, part, found.frame ? null : found.page.scope);
+  };
+  // Which notes for the developers are about what is picked: those left on something inside it, found by where that element is on the same screen (the page says, a copy or a live
+  // one), not by its words, which a translation key can hide. Carried by the link for an agent, so the brief has only those.
+  const pickedKey = picked ? `${picked.copyId}|${picked.part.selector}` : "";
+  useEffect(() => {
+    let stale = false;
+    const copy = picked ? copyOf.get(picked.copyId) : undefined;
+    const page = picked ? pageFor(picked.copyId) : null;
+    if (!picked || !copy || !page || !developerNotes?.length) {
+      nearNotes.current = [];
+      onNotesNear?.([]);
+      return undefined;
+    }
+    const box = picked.part.box;
+    void (async () => {
+      const ids: string[] = [];
+      for (const note of developerNotes) {
+        if (!note.anchor.selector || (note.device && note.device !== copy.device.id) || (note.anchor.flowScreen && note.anchor.flowScreen !== copy.screen.id)) continue;
+        const there = await page.boxOf(note.anchor.selector);
+        if (!there) continue;
+        const [x, y] = [there.left + there.width / 2, there.top + there.height / 2];
+        if (x >= box.left && x <= box.left + box.width && y >= box.top && y <= box.top + box.height) ids.push(note.id);
+      }
+      if (stale) return;
+      nearNotes.current = ids;
+      onNotesNear?.(ids);
+    })();
+    return () => {
+      stale = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedKey, developerNotes]);
+  // The page itself as a pick: its top element, below the wrappers that hold one thing and nothing else, which is the whole design with nothing in it picked.
+  const pickRoot = async (id: string) => {
+    const page = pageFor(id);
+    if (!picking || !copyOf.has(id) || !page) return;
+    const tree = await page.tree();
+    if (!tree?.selector.length) return;
+    let at = -1;
+    for (let kids = childrenIn(tree, at); kids.length === 1; kids = childrenIn(tree, at)) at = kids[0];
+    const part = await page.partOf(tree.selector[Math.max(at, 0)], pieceComponent(id));
+    if (!part) return;
+    const frame = frames.current.get(id) ?? null;
+    setPickedOn({ selector: part.selector, copyId: id });
+    setTarget(null);
+    setEchoes([]);
+    picking.onPick(frame, part, frame ? null : page.scope);
+  };
+  // ⌘⇧ on an element adds it to the one selected (or takes it out): outlined with it, on the screen it is on. Kept for as long as that element is the selection.
+  const [more, setMore] = useState<{ base: string; items: { key: string; copyId: string; box: Box; component: boolean }[] }>({ base: "", items: [] });
+  const baseKey = picked ? `${picked.copyId}|${picked.part.selector}` : "";
+  const alsoPicked = more.base && more.base === baseKey ? more.items : [];
+  const addElement = async (clientX: number, clientY: number, id: string) => {
+    const found = picking && pointIn(clientX, clientY);
+    // Whole things (a text, an image, a component instance) are added as they are.
+    if (!found || isComponentPiece(found.copy.id) || (pieceByKey(id)?.kind && pieceByKey(id)?.kind !== "state")) return toggleSelected(id);
+    if (!picked) return pick(clientX, clientY, true);
+    const part = await found.page.partAt(found.x, found.y, true);
+    const key = `${found.copy.id}|${part?.selector}`;
+    if (!part || key === baseKey) return;
+    setMore((now) => {
+      const items = now.base === baseKey ? now.items : [];
+      return { base: baseKey, items: items.some((one) => one.key === key) ? items.filter((one) => one.key !== key) : [...items, { key, copyId: found.copy.id, box: part.box, component: !!(part.component || part.inside) }] };
+    });
   };
   // A second tap on words types over them, where they are.
   // With `only`, just the words with that selector; returns whether it began typing. Where other elements are among the words, the piece of text under the point.
@@ -3221,6 +3589,8 @@ export function FlowCanvas({
     // Already typing: a second start (the browser's double-click comes after the two taps that already began it) must not read the words again, which by now
     // are drawn clear while they are typed over, and give the box their colour.
     if (typed) return true;
+    // Looking at the code (Dev, or a share page) changes nothing, words included.
+    if (viewOnly) return false;
     const found = picking && pointIn(clientX, clientY);
     if (!found) return false;
     const part = editable(await found.page.partAt(found.x, found.y), found.x, found.y);
@@ -3280,7 +3650,9 @@ export function FlowCanvas({
   // A fork is the same: a tap selects it whole, and a double tap goes in one layer (to its top element); then a double tap goes in again, as with groups.
   const isLayer = (id: string, deep = false) => {
     const piece = pieceByKey(id);
-    return !!piece && (!!piece.kind || (enteredNow.current !== id && !deep));
+    // A fork with an element picked in it is entered, however that came about (a layer chosen, not a double tap): hovering and tapping reach its other elements.
+    const inside = isMaster(piece) && picked?.copyId === id;
+    return !!piece && piece.kind !== "state" && (!!piece.kind || (enteredNow.current !== id && !deep && !inside));
   };
   // Goes into a fork one layer: its top element (what its own layers begin with) is picked, and what is pressed inside it is picked from here on.
   const enterFork = async (id: string) => {
@@ -3334,6 +3706,10 @@ export function FlowCanvas({
   useEffect(() => {
     repoint.current = point;
   });
+  // A new selection changes what the pointer's outline means (it was read against the one before): it is asked again.
+  useEffect(() => {
+    if (pointer.current) repoint.current(pointer.current, reaching.current);
+  }, [pickedOn]);
   useEffect(() => {
     if (!selecting || placing) return;
     const change = (event: KeyboardEvent | FocusEvent) => {
@@ -3501,10 +3877,9 @@ export function FlowCanvas({
     });
     return [...ofFrames, ...ofPieces];
   })();
-  const frameSelected = !framing && shapes.some((one) => one.id === shape);
+  const frameSelected = !framing && !stickies && shapes.some((one) => one.id === shape);
   const hasProperties = !!selectedPiece || grouped || frameSelected;
-  // The card at the top right is as wide as the person has dragged it (its left edge), between its least and most.
-  const [cardWidth, setCardWidth] = useState(PROPERTIES_MIN);
+  // The card at the top right is as wide as the person has dragged it (its left edge), between its least and most (`cardWidth`, above).
   useEffect(() => {
     try {
       const kept = Number(window.localStorage.getItem(PROPERTIES_KEY));
@@ -3515,6 +3890,113 @@ export function FlowCanvas({
     }
   }, []);
   const resizeCard = useRef<{ x: number; width: number } | null>(null);
+
+  // The menu's sections, by what it is on: what is selected (the things Figma's menu has that the canvas has: copy, paste, order, wrap, layout, hide, lock, delete), the bare canvas, and a
+  // link's (Dev, or a share page), which only reads: what can be copied from what was pressed, and what is shown. Built as it is drawn, from what is selected now.
+  type MenuItem = { label: string; keys?: string; run: () => void; off?: boolean; danger?: boolean };
+  const menuView = () => {
+    if (!menu) return null;
+    const { keys, frames: held } = layersSelected();
+    const anySelected = keys.length + held.length > 0;
+    const one = held.length === 1 && !keys.length ? shapes.find((item) => item.id === held[0]) : undefined;
+    const first = held[0] ? shapes.find((item) => item.id === held[0]) : keys[0] ? pieceByKey(keys[0]) : undefined;
+    const part = picked?.part;
+    const sections: MenuItem[][] = [];
+
+    // What can be copied from what is picked, for an engineer's agent or for the code.
+    const code: MenuItem[] = [
+      ...(part?.loc && agentLink ? [{ label: "Copy link for agent", run: () => copyLink(part.loc!) }] : []),
+      ...(part?.classes ? [{ label: "Copy classes", run: () => void copyWords(part.classes!, "Copied the classes") }] : []),
+    ];
+    const view: MenuItem[] = [
+      ...(onToggleUi ? [{ label: uiHidden ? "Show interface" : "Hide interface", keys: "⌘.", run: onToggleUi }] : []),
+      ...(onToggleComments ? [{ label: commentsShown ? "Hide comments" : "Show comments", keys: "⇧C", run: onToggleComments }] : []),
+    ];
+
+    if (viewOnly) {
+      sections.push(code, view);
+    } else if (menu.bare) {
+      sections.push([{ label: "Paste here", run: () => pasteAt(menu.client), off: !menu.paste }, { label: "Select all", keys: "⌘A", run: () => void clipNow.current.selectAll() }], view);
+    } else {
+      const canCopy = anySelected || !!(picked && editComponent);
+      sections.push(
+        [
+          { label: "Copy", keys: "⌘C", run: () => void clipNow.current.copy(), off: !canCopy },
+          { label: "Cut", keys: "⌘X", run: () => void clipNow.current.cut(), off: !anySelected },
+          { label: "Paste here", run: () => pasteAt(menu.client), off: !menu.paste },
+          { label: "Duplicate", keys: "⌘D", run: () => void clipNow.current.duplicate(), off: !anySelected },
+        ],
+        code,
+        [
+          { label: "Bring to front", keys: "]", run: () => reorderSelected(true), off: !anySelected },
+          { label: "Send to back", keys: "[", run: () => reorderSelected(false), off: !anySelected },
+        ],
+        [
+          { label: "Wrap in frame", keys: "⌥⌘G", run: () => wrap(false), off: !anySelected },
+          { label: "Ungroup", keys: "⇧⌘G", run: unwrap, off: !ungroupable().length },
+          ...(one?.layout ? [{ label: "Remove auto layout", run: removeLayout }] : [{ label: "Add auto layout", keys: "⇧A", run: autoLayout, off: !anySelected }]),
+        ],
+        // The piece is taken now, as the menu is drawn: by the time the item is pressed the selection may have moved on.
+        (() => {
+          const key = selectedNow.current;
+          const piece = key ? pieceByKey(key) : undefined;
+          const part = picked && picked.copyId === key ? picked.part : null;
+          const nested = part ? (part.component?.name ?? part.inside) : null;
+          const runs = !!key && copyOf.has(key) && (!piece || piece.kind === "state" || !!piece.fork);
+          return [
+            ...(runs ? [{ label: usingId === key ? "Stop interacting" : "Interact", keys: "⌘I", run: () => void toggleUsing.current() }] : []),
+            ...(editComponent && key && piece && isComponentPiece(key) && !piece.fork ? [{ label: "Fork", run: () => forkPiece(piece), off: editComponent.busy }] : []),
+            // A component a fork uses and doesn't own (drawn purple inside it): to change it, it is forked too, or the change would be the shared original's.
+            ...(editComponent && piece && isMaster(piece) && nested && part?.loc && !part.loc.startsWith("src/components/forks/") ? [{ label: `Fork ${nested} too`, run: () => void editComponent.forkNested(piece.story, nested), off: editComponent.busy }] : []),
+            ...(instances().length ? [{ label: "Reset instance", run: resetInstances, off: !instances().some((key) => changedInstance(pieceByKey(key)!)) }] : []),
+          ];
+        })(),
+        [
+          { label: first?.hidden ? "Show" : "Hide", keys: "⇧⌘H", run: () => flipSelected("hidden"), off: !anySelected },
+          { label: first?.locked ? "Unlock" : "Lock", keys: "⇧⌘L", run: () => flipSelected("locked"), off: !anySelected },
+        ],
+        [{ label: "Delete", keys: "⌫", run: deleteSelected, off: !anySelected, danger: true }],
+        view,
+      );
+    }
+    return sections
+      .filter((items) => items.length)
+      .map((items, at) => (
+        <div key={at} className={at ? "mt-1 flex flex-col border-t border-divider pt-1" : "flex flex-col"}>
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              disabled={item.off}
+              onClick={() => {
+                setMenu(null);
+                item.run();
+              }}
+              className={`flex h-8 items-center justify-between rounded-[var(--r-control)] px-2 text-xs transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] enabled:hover:bg-surface-inset disabled:text-foreground-subtle ${item.danger ? "text-destructive" : "text-foreground"}`}
+            >
+              {item.label}
+              <span className="text-foreground-subtle">{item.keys}</span>
+            </button>
+          ))}
+        </div>
+      ));
+  };
+
+  // The sticky note tool: in the toolbar with the others, and by itself on a share link, where it is the one thing the toolbar offers besides moving.
+  const stickyTool = (
+    <StickyTool
+      active={shaping === "sticky"}
+      color={stickyColor}
+      size={Math.min(240, Math.max(48, STICKY_SIZE * view.scale))}
+      onActivate={() => pickShape("sticky")}
+      onColor={(color) => {
+        setStickyColor(color);
+        pickShape("sticky", true);
+      }}
+      onDrop={dropSticky}
+    />
+  );
 
   return (
     <div
@@ -3587,7 +4069,11 @@ export function FlowCanvas({
           return;
         }
         if (start.dup) {
-          leaveCopy(start.dup);
+          // A piece on its own: the original stays where it is and the copy (an instance, for a fork) is what the pointer carries.
+          if (start.screen && !start.group && !start.dup.frames.length && start.dup.keys.length === 1) {
+            const [carried] = spawn(readHeld(start.dup), 0, 0, false).loose;
+            if (carried) start.screen = carried;
+          } else leaveCopy(start.dup);
           start.dup = undefined;
           start.copied = true;
         }
@@ -3705,14 +4191,22 @@ export function FlowCanvas({
           setInspected(null);
           setEchoes([]);
           select({ kind: "frame", screenId: screenOfCopy(done.screen) });
+        } else if (viewOnly && picking && done && !done.moved && done.screen && (event.target as Element).closest("[data-screen-name]")) {
+          // Looking at the code, with no handoff to say what a frame is: its name picks the page itself, so its properties are there to read and copy.
+          void pickRoot(done.screen);
         }
         window.setTimeout(() => (drag.current = null), 0);
       }}
       // Shift is for selecting several: it must not also select the words between one press and the next.
       onMouseDown={(event) => event.shiftKey && event.preventDefault()}
+      // The bare canvas has a menu too, to paste where the right button is pressed. What is on it opens its own, and the panels, cards and toolbar keep the browser's.
+      onContextMenu={(event) => {
+        if (placing || (event.target as Element).closest("[data-ui], [data-menu]")) return;
+        openMenu(event, {});
+      }}
       // Placing a comment or a note: the pointer says so, over everything, as it does while panning.
       style={placing && !panning ? { cursor: comments?.noting ? NOTE_CURSOR : COMMENT_CURSOR } : undefined}
-      className={`absolute inset-0 touch-none overflow-hidden ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : placing ? "[&_*]:!cursor-[inherit]" : ""}`}
+      className={`absolute inset-0 touch-none overflow-hidden ${panning ? "cursor-grab active:cursor-grabbing [&_*]:!cursor-[inherit]" : placing ? "[&_*:not([data-ui],[data-ui]_*)]:!cursor-[inherit]" : ""}`}
     >
       <div ref={worldEl} className="absolute left-0 top-0 origin-top-left" style={{ visibility: size ? undefined : "hidden" }}>
         {(isolated ? [] : shapes.filter((one) => one.shape !== "sticky")).map((one) => (
@@ -3783,7 +4277,7 @@ export function FlowCanvas({
                 event.stopPropagation();
                 // A tap is over: left recorded as a drag begun (this keeps the release from the canvas, which would clear it), the next movement over the canvas would carry the screen along.
                 drag.current = null;
-                if (event.shiftKey) return toggleSelected(id);
+                if (event.shiftKey) return event.metaKey || event.ctrlKey ? void addElement(event.clientX, event.clientY, id) : toggleSelected(id);
                 setShape(null);
                 setSelected(id);
                 // The first tap selects the part under it as well; a second on the same screen, soon after (a double-click, a
@@ -3868,6 +4362,8 @@ export function FlowCanvas({
                 }}
                 src={`${withParams(screen.url ?? base, screen.params)}${Object.keys(screen.params).length ? "&" : "?"}${PREVIEW_QUERY}`}
                 device={on}
+                replay={pieceByKey(id)?.kind === "state" ? pieceByKey(id)?.state?.steps : undefined}
+                onReplayed={(reached) => setUnreached((now) => (reached ? (now.has(id) ? without(now, id) : now) : now.has(id) ? now : new Set(now).add(id)))}
               />
               {fold && pageHeight(id) > on.height ? (
                 <span aria-hidden style={{ top: on.height * SCREEN_SCALE }} className="pointer-events-none absolute inset-x-0 bottom-0 bg-surface opacity-50" />
@@ -3928,7 +4424,7 @@ export function FlowCanvas({
                 background={backgroundOf(one)}
                 outline={dropInto === one.id ? "3px solid var(--selection)" : shape === one.id || bunch.frames.includes(one.id) ? "2px solid var(--selection)" : hoverShape === one.id ? "1px solid var(--selection)" : undefined}
                 transition={popping === one.id ? "width var(--dur-fast) var(--curve-spatial)" : undefined}
-                locked={viewOnly || frameState(one.id, "locked")}
+                locked={(viewOnly && !(stickies && mine.has(one.id))) || frameState(one.id, "locked")}
                 editing={editingSticky === one.id}
                 handlers={{
                   onPointerDown: (event) => frameDown(event, one),
@@ -4171,7 +4667,7 @@ export function FlowCanvas({
                 {piece.fork && !temporary ? (
                   <button
                     type="button"
-                    aria-label={usingId === id ? "Stop interacting" : "Interact"}
+                    aria-label={usingId === id ? "Stop interacting" : "Interact"} title={usingId === id ? "Stop interacting (⌘I)" : "Interact (⌘I)"}
                     aria-pressed={usingId === id}
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={() => {
@@ -4207,7 +4703,8 @@ export function FlowCanvas({
           })}
           {copies.map(({ id, screen, device: on }) => {
             // A placeholder has its name too.
-            if (!revealed || isPiece(id) || isolated) return null;
+            const stateScreen = pieceByKey(id)?.kind === "state";
+            if (!revealed || (isPiece(id) && !stateScreen) || isolated) return null;
             const spot = toScreen(at(id).x, at(id).y);
             // The name is a handle too: pressed, it selects its screen and moves it.
             return (
@@ -4222,7 +4719,37 @@ export function FlowCanvas({
                 className={`absolute flex select-none items-center gap-1.5 text-xs font-medium ${placing ? "pointer-events-none" : "pointer-events-auto cursor-grab"} ${selected === id ? "text-foreground" : "text-foreground-muted"}`}
               >
                 {/* With several devices on, each copy says which it is. */}
-                <span className="truncate">{devices.length > 1 ? `${screen.name} · ${on.name}` : screen.name}</span>
+                <span className="truncate">{devices.length > 1 && !stateScreen ? `${screen.name} · ${on.name}` : screen.name}</span>
+                {/* As a fork's: the screen runs, to be used in place, and is let go of to pick from it again. */}
+                <button
+                  type="button"
+                  aria-label={usingId === id ? "Stop interacting" : "Interact"} title={usingId === id ? "Stop interacting (⌘I)" : "Interact (⌘I)"}
+                  aria-pressed={usingId === id}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => {
+                    setSelected(id);
+                    setUsing(usingId === id ? null : id);
+                  }}
+                  className={`grid size-4 shrink-0 cursor-default place-items-center rounded-[var(--r-xs)] border border-border transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] ${usingId === id ? "bg-accent text-accent-foreground" : "text-foreground-muted hover:bg-surface-inset hover:text-foreground"}`}
+                >
+                  <span className="grid size-2 [&>svg]:size-full">{usingId === id ? <StopIcon /> : <PlayIcon />}</span>
+                </button>
+                {stateScreen && unreached.has(id) ? (
+                  <span title="What it presses isn't on the page any more: use the screen it began from and keep the state again." className="shrink-0 text-xs font-normal text-destructive">
+                    Couldn&apos;t reach this state
+                  </span>
+                ) : null}
+                {/* Pressed something while using it: what the page is in now can be kept, as a screen of its own beside this one. */}
+                {usingId === id && recordedCount > 0 && !viewOnly ? (
+                  <button
+                    type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => keepState(id)}
+                    className="shrink-0 cursor-default rounded-[var(--r-full)] bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-accent-hover"
+                  >
+                    Keep state
+                  </button>
+                ) : null}
                 {ready?.(screen.id) ? (
                   <span role="img" aria-label="Ready for dev" title="Ready for dev" className="grid size-4 shrink-0 place-items-center rounded-[var(--r-xs)] bg-success text-success-foreground">
                     <CodeIcon className="size-3" />
@@ -4328,6 +4855,7 @@ export function FlowCanvas({
       {size && selecting ? (
         <div className="absolute inset-0">
           {picked && !writing ? outline("picked", picked.copyId, picked.part.box, !!(picked.part.component || picked.part.inside || isComponentPiece(picked.copyId))) : null}
+          {alsoPicked.filter((item) => copyOf.has(item.copyId)).map((item) => outline(`also-${item.key}`, item.copyId, item.box, item.component))}
           {picked ? echoes.filter((item) => item.key === picked.part.selector && copyOf.has(item.copyId)).map((item) => outline(`echo-${item.copyId}`, item.copyId, item.box, !!(picked.part.component || picked.part.inside || isComponentPiece(picked.copyId)))) : null}
           {rowBox && !writing ? outline("row", rowBox.copyId, rowBox.box, rowBox.box.component) : null}
           {target && !writing ? outline("target", target.copyId, target.box, target.box.component) : null}
@@ -4409,13 +4937,13 @@ export function FlowCanvas({
       ) : null}
 
       {/* One card at the top right: the zoom, play and share, and under them the properties of whatever is selected. */}
-      <div className="pointer-events-none absolute bottom-16 right-8 top-8 z-[var(--z-raised)] hidden flex-col items-end sm:flex">
+      <div data-ui="" className={`pointer-events-none absolute z-[var(--z-raised)] hidden cursor-default flex-col items-end transition-[top,right,bottom] duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:flex ${docked ? "inset-y-0 right-0" : "bottom-16 right-4 top-4"}`}>
         {editHistory ? (
           <div
             inert={uiHidden}
             onPointerDown={(event) => event.stopPropagation()}
             onPointerUp={(event) => event.stopPropagation()}
-            className={`pointer-events-auto absolute right-full top-0 mr-2 flex items-center gap-1 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1.5 shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
+            className={`pointer-events-auto absolute right-full ${docked ? "top-4" : "top-0"} mr-2 flex items-center gap-1 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1.5 shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
           >
             {editHistory}
           </div>
@@ -4426,10 +4954,10 @@ export function FlowCanvas({
           onPointerUp={(event) => event.stopPropagation()}
           onWheel={(event) => event.stopPropagation()}
           data-properties={sidePanel || hasProperties ? "" : undefined}
-          style={sidePanel || hasProperties ? { width: `clamp(var(--properties-min-width), ${cardWidth}px, var(--properties-max-width))` } : undefined}
-          className={`pointer-events-auto relative flex max-h-full flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${sidePanel && sideFull ? "h-full" : ""} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
+          style={sidePanel || hasProperties || docked ? { width: `clamp(var(--properties-min-width), ${cardWidth}px, var(--properties-max-width))` } : undefined}
+          className={`pointer-events-auto relative flex max-h-full flex-col border-border bg-surface-elevated transition-[opacity,border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${docked ? "h-full rounded-none border-l" : "rounded-[var(--r-tile)] border shadow-floating"} ${sidePanel && sideFull ? "h-full" : ""} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
         >
-          {sidePanel || hasProperties ? (
+          {sidePanel || hasProperties || docked ? (
             // Its left edge is the handle: drag it left for a wider card, right for a narrower one.
             <div
               role="separator"
@@ -4481,6 +5009,7 @@ export function FlowCanvas({
               sizing={(() => {
                 const filling = !!frame?.layout;
                 const fill = (side: "width" | "height") => piece.sizing?.[side] === "fill";
+                if (piece.kind === "state") return { width: "fixed", height: "fixed", widthModes: ["fixed"], heightModes: ["fixed"] } as const;
                 if (piece.kind === "text") return { width: fill("width") ? "fill" : piece.props.w ? "fixed" : "hug", height: "hug", widthModes: filling ? ["fixed", "hug", "fill"] : ["fixed", "hug"], heightModes: ["hug"] } as const;
                 if (piece.kind === "image") return { width: fill("width") ? "fill" : "fixed", height: fill("height") ? "fill" : "fixed", widthModes: filling ? ["fixed", "fill"] : ["fixed"], heightModes: filling ? ["fixed", "fill"] : ["fixed"] } as const;
                 // A component is as big as it comes (hug), or given a size of its own, or takes what an auto layout leaves.
@@ -4761,20 +5290,47 @@ export function FlowCanvas({
         </div>
       ) : null}
       {/* One card at the top left: the version, closing the canvas and the layers button, and under them the layers when open. */}
-      <div className="pointer-events-none absolute bottom-16 left-8 top-8 z-[var(--z-raised)] hidden flex-col items-start sm:flex">
+      <div data-ui="" className={`pointer-events-none absolute z-[var(--z-raised)] hidden cursor-default flex-col items-start transition-[top,left,bottom] duration-[var(--dur-standard)] ease-[var(--curve-standard)] sm:flex ${docked ? "inset-y-0 left-0" : "bottom-16 left-4 top-4"}`}>
         <div
           inert={uiHidden}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onWheel={(event) => event.stopPropagation()}
-          className={`pointer-events-auto flex max-h-full flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated shadow-floating transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${layersOpen && !viewOnly ? "h-full w-60" : ""} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
+          style={docked ? { width: `clamp(var(--layers-min-width), ${layersWidth}px, var(--layers-max-width))` } : undefined}
+          className={`pointer-events-auto relative flex max-h-full flex-col border-border bg-surface-elevated transition-[opacity,border-radius] duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${docked ? "h-full rounded-none border-r" : "rounded-[var(--r-tile)] border shadow-floating"} ${uiHidden ? "pointer-events-none opacity-0" : ""}`}
         >
+          {docked ? (
+            // Its right edge is the handle: drag it right for a wider panel, left for a narrower one.
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize the layers"
+              aria-valuemin={LAYERS_MIN}
+              aria-valuemax={LAYERS_MAX}
+              aria-valuenow={layersWidth}
+              className="absolute inset-y-0 -right-1 z-[var(--z-raised)] w-2 cursor-ew-resize touch-none"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                resizeLayers.current = { x: event.clientX, width: layersWidth };
+              }}
+              onPointerMove={(event) => {
+                const start = resizeLayers.current;
+                if (start) setLayersWidth(Math.min(LAYERS_MAX, Math.max(LAYERS_MIN, Math.round(start.width + event.clientX - start.x))));
+              }}
+              onPointerUp={() => {
+                resizeLayers.current = null;
+                try {
+                  window.localStorage.setItem(LAYERS_KEY, String(layersWidth));
+                } catch {
+                  // Not kept: it is the width for now.
+                }
+              }}
+            />
+          ) : null}
           {topLeft ? (
             <div className="flex shrink-0 items-center gap-1 p-1.5">
-              {topLeft}
-              <span aria-live="polite" className={`pl-1 pr-2 text-xs transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${cloudStatus === "idle" ? "hidden" : cloudStatus === "offline" ? "text-foreground" : "text-foreground-subtle"}`}>
-                {cloudStatus === "saving" ? "Saving" : cloudStatus === "saved" ? "Saved" : cloudStatus === "offline" ? "Offline, will retry" : ""}
-              </span>
+              {typeof topLeft === "function" ? topLeft(docked) : topLeft}
             </div>
           ) : null}
           {layersOpen && (!viewOnly || dev) ? (
@@ -4817,54 +5373,34 @@ export function FlowCanvas({
       </div>
       {menu ? (
         <div
+          ref={menuBox}
           data-menu=""
+          data-ui=""
+          // The canvas leaves a plain scroll over this to it: a long menu scrolls, and does not pan what is behind.
+          data-scroll=""
           role="menu"
           style={{ left: menu.x, top: menu.y, zIndex: "var(--z-sticky)" }}
           onContextMenu={(event) => event.preventDefault()}
-          className="absolute flex w-56 flex-col rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating"
+          className="absolute flex w-56 flex-col overflow-y-auto overscroll-contain rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating [scrollbar-width:thin]"
         >
-          {[
-            { label: "Group", keys: "⌥⌘G", run: () => wrap(false), off: !layersSelected().keys.length && !layersSelected().frames.length },
-            { label: "Ungroup", keys: "⇧⌘G", run: unwrap, off: !ungroupable().length },
-            { label: "Add auto layout", keys: "⇧A", run: autoLayout, off: !layersSelected().keys.length && !layersSelected().frames.length },
-            // The piece is taken now, as the menu is drawn: by the time the item is pressed the selection may have moved on.
-            ...(() => {
-              const key = selectedNow.current;
-              const piece = key ? pieceByKey(key) : undefined;
-              return editComponent && key && piece && isComponentPiece(key) && !piece.fork ? [{ label: "Fork", keys: "", run: () => forkPiece(piece), off: editComponent.busy }] : [];
-            })(),
-            // A component a fork uses and doesn't own (drawn purple inside it): to change it, it is forked too, or the change would be the shared original's.
-            ...(() => {
-              const key = selectedNow.current;
-              const piece = key ? pieceByKey(key) : undefined;
-              const part = picked && picked.copyId === key ? picked.part : null;
-              const nested = part ? (part.component?.name ?? part.inside) : null;
-              return editComponent && piece && isMaster(piece) && nested && part?.loc && !part.loc.startsWith("src/components/forks/") ? [{ label: `Fork ${nested} too`, keys: "", run: () => void editComponent.forkNested(piece.story, nested), off: editComponent.busy }] : [];
-            })(),
-            ...(instances().length ? [{ label: "Reset instance", keys: "", run: resetInstances, off: !instances().some((key) => changedInstance(pieceByKey(key)!)) }] : []),
-          ].map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              disabled={item.off}
-              onClick={item.run}
-              className="flex h-8 items-center justify-between rounded-[var(--r-control)] px-2 text-xs text-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] enabled:hover:bg-surface-inset disabled:text-foreground-subtle"
-            >
-              {item.label}
-              <span className="text-foreground-subtle">{item.keys}</span>
-            </button>
-          ))}
+          {menuView()}
         </div>
       ) : null}
       {/* Always on: the tools, as in Figma. Pointer is the default; Frame opens the devices to start from, above it. */}
+      {/* Saving and Saved are not shown; a canvas that cannot save is the one thing worth saying, where nothing covers it. */}
+      {cloudStatus === "offline" ? (
+        <p role="status" style={{ left: dock.left + 16 }} className="pointer-events-none absolute bottom-8 text-xs text-foreground">
+          Offline, will retry
+        </p>
+      ) : null}
       <div
         inert={!!interact || uiHidden}
-        style={{ zIndex: "var(--z-sticky)" }}
+        style={{ zIndex: "var(--z-sticky)", paddingLeft: dock.left, paddingRight: dock.right }}
         // A press on the bar is not a press on the canvas: letting go of one would count as a tap there, and let go of the selection the bar is about.
         onPointerDown={(event) => event.stopPropagation()}
         onPointerUp={(event) => event.stopPropagation()}
-        className={`pointer-events-none absolute inset-x-0 bottom-4 flex flex-col items-center gap-2 transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${interact || uiHidden ? "opacity-0" : ""}`}
+        data-ui=""
+        className={`pointer-events-none absolute inset-x-0 bottom-4 flex cursor-default flex-col items-center gap-2 transition-[opacity,padding] duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${interact || uiHidden ? "opacity-0" : ""}`}
       >
         <div
           inert={!framing}
@@ -4928,26 +5464,10 @@ export function FlowCanvas({
               <FrameIcon className="size-[1.125rem]" />
             </IconButton>
           )}
+          {viewOnly && stickies ? stickyTool : null}
           {viewOnly ? null : (
             <>
-              <ToolGroup
-                options={SHAPE_OPTIONS}
-                current={shapeKind}
-                active={!!shaping && shaping !== "path" && shaping !== "sticky"}
-                onActivate={() => pickShape(shapeKind)}
-                onChoose={(id) => pickShape(id as CanvasShape, true)}
-              />
-              <StickyTool
-                active={shaping === "sticky"}
-                color={stickyColor}
-                size={Math.min(240, Math.max(48, STICKY_SIZE * view.scale))}
-                onActivate={() => pickShape("sticky")}
-                onColor={(color) => {
-                  setStickyColor(color);
-                  pickShape("sticky", true);
-                }}
-                onDrop={dropSticky}
-              />
+              {tools}
               <IconButton
                 tooltipSide="above"
                 label="Text (T)"
@@ -4965,7 +5485,14 @@ export function FlowCanvas({
               >
                 <TextIcon className="size-[1.125rem]" />
               </IconButton>
-              {tools}
+              <ToolGroup
+                options={SHAPE_OPTIONS}
+                current={shapeKind}
+                active={!!shaping && shaping !== "path" && shaping !== "sticky"}
+                onActivate={() => pickShape(shapeKind)}
+                onChoose={(id) => pickShape(id as CanvasShape, true)}
+              />
+              {stickyTool}
             </>
           )}
           {bar ? (
@@ -5078,7 +5605,13 @@ function ScreenFrame({
   interactive = false,
   onLeave,
   donate,
+  replay,
+  onReplayed,
 }: {
+  /** A state of a screen: what is pressed, in order, once the page has loaded, before it is read as a copy (see `replaySteps`). */
+  replay?: Step[];
+  /** Told once whether the steps were all played: false when something they press wasn't there. */
+  onReplayed?: (reached: boolean) => void;
   src: string;
   device: Device;
   /** The page takes the pointer, as in a window of its own (the screen is being used where it stands). */
@@ -5141,11 +5674,18 @@ function ScreenFrame({
     return () => doc.removeEventListener("wheel", onWheel, { capture: true });
   }, [loaded, interactive]);
 
-  // Escape leaves a screen that is being used, from inside its page when that can be reached.
+  // Escape (or ⌘I) leaves a screen that is being used, from inside its page when that can be reached.
   useEffect(() => {
     const doc = frame.current?.contentDocument;
     if (!interactive || !loaded || !doc) return undefined;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onLeave?.();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onLeave?.();
+      // ⌘I is the canvas's key for using a screen, so it ends it from in here too, where the keys go while the page has them.
+      else if (event.code === "KeyI" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && !event.repeat) {
+        event.preventDefault();
+        onLeave?.();
+      }
+    };
     doc.addEventListener("keydown", onKey);
     return () => doc.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5153,10 +5693,28 @@ function ScreenFrame({
 
   // Offered to be read as a copy once the page is there and has settled; at once if it has settled already.
   const settled = useRef(false);
+  // The steps are played once for this frame, and whoever comes after (the page loading again as a press goes to another page) waits for the same run.
+  const replaying = useRef<Promise<boolean> | null>(null);
   useEffect(() => {
-    if (!donate || !loaded) return undefined;
-    const timer = window.setTimeout(() => frame.current && donate(frame.current), settled.current ? 0 : READY_AFTER_LOAD_MS + 100);
-    return () => window.clearTimeout(timer);
+    if ((!donate && !replay?.length) || !loaded) return undefined;
+    let stale = false;
+    const timer = window.setTimeout(async () => {
+      const element = frame.current;
+      if (!element) return;
+      if (replay?.length) {
+        replaying.current ??= replaySteps(element, replay).then((reached) => {
+          onReplayed?.(reached);
+          return reached;
+        });
+        await replaying.current;
+      }
+      if (!stale && frame.current) donate?.(frame.current);
+    }, settled.current ? 0 : READY_AFTER_LOAD_MS + 100);
+    return () => {
+      stale = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [donate, loaded]);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
+import { NoPageZoom } from "@/components/shell/no-page-zoom";
 import { ThemeProvider, ThemeScript } from "@/lib/theme";
 
 import "./globals.css";
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeScript />
       </head>
       <body className="min-h-full">
+        <NoPageZoom />
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

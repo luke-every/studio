@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/ui/tip";
 import Image from "next/image";
 import type { ReactNode } from "react";
 
@@ -61,18 +62,13 @@ export function UserAvatar({
   return tip ? <WithTip label={name}>{circle}</WithTip> : circle;
 }
 
-/** A small label under something, on hover. The same one the icon buttons use. */
+/** A small label under something, on hover. The same one the icon buttons use, with the same pause before it shows. */
 function WithTip({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <span role="img" aria-label={label} className="group/tip relative inline-flex shrink-0">
-      {children}
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded-[var(--r-md)] bg-accent px-2.5 py-1 text-xs font-normal text-accent-foreground opacity-0 transition-opacity duration-[var(--dur-instant)] ease-[var(--curve-entrance)] group-hover/tip:opacity-100"
-        style={{ zIndex: "var(--z-popover)" }}
-      >
-        {label}
-      </span>
+    <span role="img" aria-label={label} className="inline-flex shrink-0">
+      <Tip label={label} side="below" align="center">
+        {children}
+      </Tip>
     </span>
   );
 }

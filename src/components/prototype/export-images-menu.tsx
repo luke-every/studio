@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useImperativeHandle, useState, type Ref } from "react";
 import { createPortal } from "react-dom";
 
 import { MotionModal } from "@/components/motion";
@@ -37,7 +37,7 @@ const field = "h-8 rounded-[var(--r-control)] bg-surface-inset px-2 text-sm text
  * chosen, and put in a folder in the prototype's own folder, which opens in Finder. The list is organised as the folders are: variant, then section, each
  * section open or folded. Only on this machine, where that folder is.
  */
-export function ExportImagesMenu({ slug, screens: screensOf, device, variant, tooltipAlign = "end" }: { slug: string; /** Which side of the button its label lines up with. */ tooltipAlign?: "start" | "end"; /** Every screen of the prototype, in the flow and in the variants, whichever the page is showing. */ screens: () => ScreenToRead[]; /** The device the screens are opened at. */ device: { width: number; height: number }; variant?: "ghost" }) {
+export function ExportImagesMenu({ slug, screens: screensOf, device, variant, tooltipAlign = "end", button = true, ref }: { slug: string; /** Without its own button: something else (the Docs menu) opens it through `ref`. */ button?: boolean; ref?: Ref<{ show: () => void }>; /** Which side of the button its label lines up with. */ tooltipAlign?: "start" | "end"; /** Every screen of the prototype, in the flow and in the variants, whichever the page is showing. */ screens: () => ScreenToRead[]; /** The device the screens are opened at. */ device: { width: number; height: number }; variant?: "ghost" }) {
   const { notify } = useStudio();
   const [open, setOpen] = useState(false);
   const [found, setFound] = useState<FoundImage[]>([]);
@@ -76,6 +76,7 @@ export function ExportImagesMenu({ slug, screens: screensOf, device, variant, to
     setOpen(true);
     void scan();
   };
+  useImperativeHandle(ref, () => ({ show }));
 
   // The variants (screens) there are, and what is shown of them: the list is organised as the folders are, variant then section.
   const variants = [...new Set(found.map((one) => one.screen).filter(Boolean))];
@@ -140,9 +141,11 @@ export function ExportImagesMenu({ slug, screens: screensOf, device, variant, to
   const widest = Math.max(...scales);
   return (
     <>
-      <IconButton label="Export images" variant={variant} tooltipSide="below" tooltipAlign={tooltipAlign} aria-haspopup="dialog" onClick={show}>
-        <ImageIcon />
-      </IconButton>
+      {button ? (
+        <IconButton label="Export images" variant={variant} tooltipSide="below" tooltipAlign={tooltipAlign} aria-haspopup="dialog" onClick={show}>
+          <ImageIcon />
+        </IconButton>
+      ) : null}
       {/* In the page itself rather than the canvas: the canvas takes the wheel for panning, and would not let the list scroll. */}
       {createPortal(
             <MotionModal open={open} onClose={() => (busy ? undefined : setOpen(false))} label="Export images" className="h-[44rem] !max-w-[40rem]">

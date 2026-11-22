@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
+import { Tip } from "./tip";
+
 /**
  * The studio's buttons. Every one is a pill, so a screen of them reads as one
  * family; the only choices are how much it asks for.
@@ -136,20 +138,9 @@ export function IconButton({
   className?: string;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children" | "aria-label">) {
   const classes = `${controlBase} ${controlSize[size]} ${look[variant]} ${className ?? ""}`;
-  const tip = label && tooltip ? (
-    <span
-      role="tooltip"
-      className={`pointer-events-none absolute ${tooltipSide === "above" ? "bottom-full mb-2" : "top-full mt-2"} whitespace-nowrap rounded-[var(--r-md)] bg-accent px-2.5 py-1 text-xs font-normal text-accent-foreground opacity-0 transition-opacity duration-[var(--dur-instant)] ease-[var(--curve-entrance)] group-hover/tip:opacity-100 peer-focus-visible:opacity-100 ${
-        tooltipAlign === "end" ? "right-0" : tooltipAlign === "start" ? "left-0" : "left-1/2 -translate-x-1/2"
-      }`}
-      style={{ zIndex: "var(--z-popover)" }}
-    >
-      {label}
-    </span>
-  ) : null;
 
-  return (
-    <span className="group/tip relative inline-flex">
+  const control = (
+    <>
       {href && external ? (
         <a href={href} target="_blank" rel="noreferrer" aria-label={label} className={`${classes} peer`}>
           {children}
@@ -166,7 +157,15 @@ export function IconButton({
           </span>
         </button>
       )}
-      {tip}
-    </span>
+    </>
+  );
+
+  // Without a label to show it is only the anchor the control hangs from.
+  return label && tooltip ? (
+    <Tip label={label} side={tooltipSide} align={tooltipAlign}>
+      {control}
+    </Tip>
+  ) : (
+    <span className="group/tip relative inline-flex">{control}</span>
   );
 }

@@ -70,12 +70,13 @@ function Shared({
   versionKey,
   docs,
   token,
+  dev = false,
 }: {
   name: string;
   description: string;
   people: Person[];
   updatedAt: string;
-  version: { label: string; url: string };
+  version: { label: string; url: string; readyForDev?: boolean };
   /** Added to the prototype's address, which is what lets a press and hold leave a comment. */
   review: string;
   /** The share link's token, which is what lets comments be read and written here. */
@@ -85,6 +86,8 @@ function Shared({
   versionKey: string;
   /** Where its design, write-up, copy documents and files on GitHub are, for those that exist. */
   docs: DocLinks;
+  /** A dev link: its canvas opens in Dev, with the Design/Dev toggle. */
+  dev?: boolean;
 }) {
   const offered = usePrototypeControls(version.url);
   const variants = useVersionVariants(version.url);
@@ -280,7 +283,7 @@ function Shared({
           onPlace={followPlace}
           flow={flow}
           variants={variantsCanvas}
-          readyForDev={handoff ? handoff.variants : null}
+          readyForDev={version.readyForDev}
           handoffInspect={handoff ? { elements: handoff.elements, onSelect: setSection, selection: section } : undefined}
           handoffSheet={handoff?.marks.length ? { marks: handoff.marks } : undefined}
           inspectPanel={
@@ -318,7 +321,11 @@ function Shared({
           onOpenPrototype={() => window.location.assign(address)}
           docs={<SharedDocsMenu links={docs} />}
           minimal
-          corner={full ? undefined : <ShareQr />}
+          devLink={dev}
+          shareToken={dev ? token : undefined}
+          // The engineer's door gives the same link for an element as the studio does: the share link's own token is what opens it, as it opens the handoff.
+          agentLink={dev ? async (loc, notes) => `${window.location.origin}/api/handoff/element?${new URLSearchParams({ slug, version: version.url.split("/").pop() ?? "", token, loc, ...(notes?.length ? { notes: notes.join(",") } : {}), ...(docs.github ? { github: docs.github.replace(/\/p\/.*$/, "") } : {}) })}` : undefined}
+          corner={full || dev ? undefined : <ShareQr />}
         />
       </div>
 

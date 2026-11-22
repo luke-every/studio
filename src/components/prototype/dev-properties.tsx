@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import { PanelButton, PanelTitle, Section } from "@/components/prototype/edit-fields";
-import { CheckIcon, CopyIcon, SendIcon } from "@/components/shell/nav-icons";
+import { CheckIcon, CopyIcon, SparkleIcon } from "@/components/shell/nav-icons";
 import { toHex } from "@/lib/edit-dom";
 import type { Part } from "@/lib/edit-part";
 
@@ -97,23 +97,32 @@ function groupsOf(classes: string | undefined) {
   return groups;
 }
 
-/** Copies a link to this element's code, for an engineer's agent to open: the element, its imports, and where the rest is. */
+/**
+ * Copies a link to this element's code, for an engineer's agent to open: the element, its imports, and where the rest is. The panel's first action, so it is a full-width
+ * button under the element's name, in the Dev green (a shade darker than the tint, so the words read on it).
+ */
 function AgentLink({ loc, make }: { loc: string; make: (loc: string) => Promise<string> }) {
   const [state, setState] = useState<"idle" | "busy" | "copied" | "failed">("idle");
   const label = state === "busy" ? "Making the link…" : state === "copied" ? "Copied" : state === "failed" ? "Couldn't copy, try again" : "Copy link for agent";
   return (
-    <PanelButton
-      label={label}
+    <button
+      type="button"
+      disabled={state === "busy"}
       onClick={() => {
         setState("busy");
-        make(loc)
-          .then((url) => navigator.clipboard.writeText(url))
-          .then(() => setState("copied"), () => setState("failed"))
-          .finally(() => window.setTimeout(() => setState("idle"), 1600));
+        // The clipboard is handed a promise of the link, made while the tap is still the tap: Safari only lets a page write it straight from one.
+        const link = make(loc);
+        const copied =
+          typeof ClipboardItem === "undefined"
+            ? link.then((url) => navigator.clipboard.writeText(url))
+            : navigator.clipboard.write([new ClipboardItem({ "text/plain": link.then((url) => new Blob([url], { type: "text/plain" })) })]);
+        copied.then(() => setState("copied"), () => setState("failed")).finally(() => window.setTimeout(() => setState("idle"), 1600));
       }}
+      className="flex h-9 w-full items-center justify-center gap-2 rounded-[var(--r-control)] bg-[var(--dev-muted)] px-3 text-sm font-medium text-[color-mix(in_oklab,var(--dev)_72%,var(--foreground))] transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-[var(--dev-highlight)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] disabled:opacity-60"
     >
-      {state === "copied" ? <CheckIcon className="size-4" /> : <SendIcon className="size-4" />}
-    </PanelButton>
+      {state === "copied" ? <CheckIcon className="size-4" /> : <SparkleIcon className="size-4" />}
+      <span aria-live="polite">{label}</span>
+    </button>
   );
 }
 
@@ -143,14 +152,15 @@ export function DevProperties({ part, agentLink }: { part: Part | null; agentLin
 
   return (
     <div className="flex min-h-full flex-col">
-      <PanelTitle name={`<${part.tag}>`} note={part.component ? part.component.name : part.inside ? `in ${part.inside}` : undefined} component={!!part.component} />
+      <PanelTitle name={`<${part.tag}>`} note={part.component ? part.component.name : part.inside ? `in ${part.inside}` : undefined} component={!!part.component}>
+        {part.loc && agentLink ? <AgentLink loc={part.loc} make={agentLink} /> : null}
+      </PanelTitle>
 
       {part.loc || part.classes ? (
         <Section
           title="Code"
           action={
             <>
-              {part.loc && agentLink ? <AgentLink loc={part.loc} make={agentLink} /> : null}
               {part.classes ? <CopyAll text={part.classes} label="Copy all classes" /> : null}
             </>
           }

@@ -118,6 +118,8 @@ export const versionSchema = z.object({
   liveUrl: z.string().optional(),
   /** A project's canvas, with no prototype in it yet (see `local-prototypes.ts`). Never stored. */
   blank: z.boolean().optional(),
+  /** Set when the designer marked this version as ready for engineering. */
+  readyForDev: z.object({ by: z.string().max(80), at: isoTimestamp }).optional(),
 });
 
 export const prototypeSchema = z.object({

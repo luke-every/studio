@@ -82,6 +82,10 @@ export async function deletePrototype(input: Parameters<typeof registry.deletePr
   return attempt(() => registry.deletePrototype(input), ["/"]);
 }
 
+export async function setReadyForDev(input: Parameters<typeof registry.setReadyForDev>[0]) {
+  return attempt(() => registry.setReadyForDev(input), ["/"]);
+}
+
 export async function deleteVersion(input: Parameters<typeof registry.deleteVersion>[0]) {
   return attempt(() => registry.deleteVersion(input), ["/"]);
 }
@@ -173,8 +177,8 @@ export async function reviewToken(slug: string, version: string, forever = false
 }
 
 /** A link that opens without the password, for sharing outside the studio. It follows the latest version, or with `key` (the version it is stored under, v2.0) stays on that one. */
-export async function shareLink(slug: string, key?: string) {
-  return attempt(async () => `/s/${mintShareToken(slug, key ?? LATEST)}`, []);
+export async function shareLink(slug: string, key?: string, dev?: boolean) {
+  return attempt(async () => `/s/${mintShareToken(slug, key ?? LATEST, undefined, dev)}`, []);
 }
 
 /**
@@ -223,6 +227,20 @@ export async function storeCanvasImage(slug: string, name: string, data: string)
   return attempt(() => canvases.saveCanvasImage(slug, name, data), []);
 }
 
+/**
+ * A share link's sticky notes: the one thing a link may add to a canvas (a Dev link may not). What it can change is only the notes its browser made
+ * (see `saveSharedStickies`); the link names the version, so it can't be pointed at another.
+ */
+export async function patchSharedCanvas(token: string, patch: unknown, owner: string, by?: string): Promise<WriteResult<{ value: string }>> {
+  const named = await resolveShareToken(token);
+  if (!named || named.dev) return { ok: false, error: "This share link can't leave notes." };
+  try {
+    return { ok: true, value: await canvases.saveSharedStickies(named.slug, named.key, patch, owner, by) };
+  } catch (error) {
+    return { ok: false, error: userMessage(error, "The note couldn't be saved.") };
+  }
+}
+
 /** The canvas a share link opens on, and its pictures: read only, and only of the version the link names. */
 export async function loadSharedCanvas(token: string) {
   return shared(token, (at) => canvases.readCanvas(at.slug, at.version));
@@ -239,6 +257,11 @@ export async function likeComment(input: Parameters<typeof comments.setLiked>[0]
 /** A live version's design-system components, and when one is named, its props (see `design-system.ts`). */
 export async function designSystemOf(slug: string, name?: string) {
   return attempt(() => system.designSystem(slug, name), []);
+}
+
+/** The same for a share link, which names the prototype and nothing else. */
+export async function sharedDesignSystem(token: string) {
+  return shared(token, (at) => system.designSystem(at.slug));
 }
 
 /** A version's colour tokens, from its design system's stylesheet (see `designTokens`). */

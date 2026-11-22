@@ -1,3 +1,4 @@
+import { jsxOf } from "@/lib/jsx-snapshot";
 import type { Box, Reach } from "@/lib/anchor";
 import type { Snapshot } from "@/lib/dom-snapshot";
 import { nameOfElement, treeOfRoot } from "@/lib/page-tree";
@@ -198,8 +199,13 @@ export function copyPage(snapshot: Snapshot, shadow: ShadowRoot): FramePage {
       const ix = indexOfSelector(selector);
       return ix >= 0 ? box(ix) : null;
     },
-    // A static copy has nothing running behind it to read.
-    capture: async () => null,
+    // A static copy has nothing running behind it to read: no component, no props. What it draws is still there, and that is what can be taken.
+    capture: async (selector) => {
+      const ix = indexOfSelector(selector);
+      const element = ix >= 0 ? shadow.querySelector(`[data-ix="${ix}"]`) : null;
+      const markup = element ? jsxOf(element) : null;
+      return markup ? { top: null, owners: [], markup } : null;
+    },
     partOf: async (selector) => {
       const ix = indexOfSelector(selector);
       return ix >= 0 ? partFor(ix) : null;

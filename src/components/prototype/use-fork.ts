@@ -11,7 +11,7 @@ export type EditComponent = {
    * Takes an element out into a component of its own, free of the page: the component it is the top of, with what it has now, or the element as markup with the props it uses.
    * `loc` is where it is written (`file:line:column`), when it is in the project's own code. What was made, or null (the problem is said).
    */
-  extract: (request: { loc?: string; top?: unknown; owners?: unknown }) => Promise<{ id: string; label: string; existing: boolean; shared: boolean } | null>;
+  extract: (request: { loc?: string; top?: unknown; owners?: unknown; markup?: string }) => Promise<{ id: string; label: string; existing: boolean; shared: boolean; snapshot?: boolean } | null>;
   /** Makes a fork the owner of a component it uses, so a change inside it is the fork's and not the shared original's (true when it is). */
   forkNested: (id: string, name: string) => Promise<boolean>;
   /** Says a problem the way the rest does. */
@@ -20,7 +20,7 @@ export type EditComponent = {
 };
 
 /** What the helper said at the end of a conversation: an `error`, or `done` with what it made. */
-type Said = { error?: string; done?: { id?: string; label?: string; existing?: boolean; shared?: boolean; tagged?: string } };
+type Said = { error?: string; done?: { id?: string; label?: string; existing?: boolean; shared?: boolean; snapshot?: boolean; tagged?: string } };
 
 /** One conversation with the helper: it says what it is doing and ends with `done` or an `error`. */
 function conversation(path: string, params: Record<string, string>, send?: unknown) {
@@ -87,7 +87,7 @@ export function useEditComponent(slug: string, blank: boolean, onProblem: (messa
         onProblem(said.error ?? "It couldn't be taken out.");
         return null;
       }
-      return { id: said.done.id, label: said.done.label ?? said.done.id, existing: !!said.done.existing, shared: !!said.done.shared };
+      return { id: said.done.id, label: said.done.label ?? said.done.id, existing: !!said.done.existing, shared: !!said.done.shared, snapshot: !!said.done.snapshot };
     },
     forkNested: async (id, name) => {
       if (busy) return false;

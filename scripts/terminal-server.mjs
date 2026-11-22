@@ -21,7 +21,7 @@ import { createRequire } from "node:module";
 import { spawn } from "node-pty";
 import { WebSocketServer } from "ws";
 
-import { extractSection } from "./extract-section.mjs";
+import { extractSection, snapshotSection } from "./extract-section.mjs";
 import { forkNested } from "./fork-nested.mjs";
 import { ensureTagging } from "./tag-source.mjs";
 
@@ -52,7 +52,9 @@ for (const target of existsSync(prebuilds) ? readdirSync(prebuilds) : []) {
 // its own CLAUDE_* variables in it: the session id, a messaging socket and CLAUDE_CODE_CHILD_SESSION, which makes every `claude`
 // opened in the panel think it is that session's child (and stops it saving its transcript). What you set in ~/.zshrc is
 // exported again by the shell itself.
-const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^CLAUDE/i.test(name)));
+// What a terminal, a push or a dev server starts with. Not the studio's own `NODE_ENV` and Next variables, which this process inherits when the studio starts it: a prototype's `next build` run
+// with `NODE_ENV=development` fails on `/_global-error`.
+const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(CLAUDE|NEXT_|__NEXT|NODE_ENV$)/i.test(name)));
 
 // What the studio selected in the prototype reaches Claude through two hooks (scripts/studio-hook.mjs), which only the sessions
 // started here load, with `claude --settings`: as a prompt is sent, the hook asks this helper what is selected and Claude
@@ -324,7 +326,7 @@ class Boundary extends ReactComponent<{ children: ReactNode }, { problem: string
     return { problem: error instanceof Error ? error.message : "It stopped." };
   }
   render() {
-    return this.state.problem ? <p style={{ padding: 24, font: "14px system-ui" }}>This copy can't be drawn on its own: {this.state.problem}</p> : this.props.children;
+    return this.state.problem ? <p style={{ padding: 24, font: "14px system-ui" }}>This copy can&apos;t be drawn on its own: {this.state.problem}</p> : this.props.children;
   }
 }
 
@@ -502,7 +504,7 @@ async function forkComponent(ws, { slug, id }) {
  * Takes an element of a project's own code out into a component of its own (see `extract-section.mjs`), records it like any copy, and has the project draw it.
  * An element that needs what only the code around it has is not taken: it is said what it needs, which is for Claude.
  */
-async function extractElement(ws, { slug, loc, name, exact, top, owners }) {
+async function extractElement(ws, { slug, loc, name, exact, top, owners, markup }) {
   const say = (message) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
   };
@@ -517,7 +519,19 @@ async function extractElement(ws, { slug, loc, name, exact, top, owners }) {
     } catch {
       records = {};
     }
-    const made = extractSection({ dir, loc, name, records, followed: exact, top, owners, commits: { project: commitOf(CONVENTIONS), production: commitOf(PRODUCTION) } });
+    const commits = { project: commitOf(CONVENTIONS), production: commitOf(PRODUCTION) };
+    let made;
+    try {
+      made = extractSection({ dir, loc, name, records, followed: exact, top, owners, commits });
+    } catch (error) {
+      made = { error: `It couldn't be taken out: ${error instanceof Error ? error.message : "it stopped."}` };
+    }
+    // Whatever stops it being taken as code (it uses values only the code around it has, it has no place in this project's code, its file has changed), what the page is drawing is
+    // still there: it is taken as that. The reason it couldn't be code is only said if the snapshot can't be made either.
+    if (markup && (made.error || made.level === "C")) {
+      const snapshot = snapshotSection({ dir, loc, name, markup, records, commits });
+      if (!snapshot.error) made = snapshot;
+    }
     if (made.error) return say({ error: made.error });
     if (made.level === "C") return say({ error: `${made.reason} Ask Claude to make it stand on its own first.` });
     records[made.id] = made.record;
@@ -525,7 +539,7 @@ async function extractElement(ws, { slug, loc, name, exact, top, owners }) {
     writeFileSync(recordFile, JSON.stringify(records, null, 2));
     writeRegistry(dir, records);
     ensureTagging(dir);
-    say({ done: { slug, id: made.id, label: records[made.id].label } });
+    say({ done: { slug, id: made.id, label: records[made.id].label, ...(made.snapshot ? { snapshot: true } : {}) } });
   } catch (error) {
     say({ error: `It couldn't be taken out: ${error instanceof Error ? error.message : "it stopped."}` });
   }
@@ -556,6 +570,96 @@ async function forkNestedFor(ws, { slug, id, name }) {
   }
 }
 
+const PUSH = join(homedir(), ".claude", "skills", "push", "push.mjs");
+
+/**
+ * The notes for a push, drafted by Claude from the prototype's own session: a one-shot `claude -p` that continues the
+ * folder's latest conversation as a fork (so the open session is never touched) and has no tools, only words. Settles with
+ * empty notes when there is no conversation to read or Claude fails: the dialog then just has blank fields.
+ */
+function draftNotes(folder, abort) {
+  const prompt =
+    'Write the notes for saving this prototype as a new version in the studio, from what happened in this session. ' +
+    'Reply with only a JSON object: {"title": string, "changes": string}. ' +
+    'title: a short headline for this version, a handful of words ("Tighter results layout", not "Update"). ' +
+    'changes: what is new or different, in two or three sentences or a few short lines, and where it is not obvious what it was trying to fix. ' +
+    "Write only from what actually happened here; don't invent a rationale you weren't given, don't pad, never write \"various improvements\". " +
+    'If nothing was changed in this session, return empty strings.';
+  return new Promise((resolve) => {
+    const child = run(process.env.SHELL || "/bin/zsh", ["-ilc", 'exec claude -p "$NOTES_PROMPT" --continue --fork-session --tools ""'], {
+      cwd: folder,
+      env: { ...env, NOTES_PROMPT: prompt },
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let output = "";
+    child.stdout.on("data", (data) => output.length < 20000 && (output += data));
+    const timer = setTimeout(() => child.kill(), 90_000);
+    abort.addEventListener("abort", () => child.kill());
+    child.on("close", () => {
+      clearTimeout(timer);
+      try {
+        const found = JSON.parse(output.slice(output.indexOf("{"), output.lastIndexOf("}") + 1));
+        resolve({ title: String(found.title ?? "").trim().slice(0, 120), changes: String(found.changes ?? "").trim().slice(0, 2000) });
+      } catch {
+        resolve({ title: "", changes: "" });
+      }
+    });
+  });
+}
+
+/**
+ * Runs /push's script for a prototype's folder with the notes the dialog sends as its first message, telling the dialog
+ * which step it is on (read off what the script prints) and, at the end, the version it became. Closing the dialog doesn't
+ * stop it: the version just turns up.
+ */
+function pushPrototype(ws, slug) {
+  const say = (message) => {
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+  };
+  ws.once("message", (data) => {
+    let asked;
+    try {
+      asked = JSON.parse(String(data));
+    } catch {
+      return ws.close();
+    }
+    const text = (key, max) => (typeof asked[key] === "string" ? asked[key].trim().slice(0, max) : "");
+    const [name, team, version, title, changes] = [text("name", 80), text("team", 60), text("version", 16), text("title", 120), text("changes", 2000)];
+    if (!name || (team && !SLUG.test(team)) || !/^v\d+\.\d+(\.\d+)?$/.test(version)) return say({ error: "That version number isn't one the studio can use. They look like v0.8." });
+    if (!existsSync(PUSH)) return say({ error: "The /push skill isn't installed on this machine." });
+
+    // Interactive and login, like the terminal, so pnpm and node are on the PATH. The notes are arguments, never shell text.
+    const args = ["--dir", folderOf(slug), "--slug", slug, "--name", name, "--version", version, ...(team ? ["--team", team] : []), ...(title ? ["--title", title] : []), ...(changes ? ["--changes", changes] : [])];
+    const child = run(process.env.SHELL || "/bin/zsh", ["-ilc", 'exec node "$@"', "push", PUSH, ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    let errors = "";
+    let step = "";
+    const tell = (next) => {
+      if (next !== step) say({ step: (step = next) });
+    };
+    // A Next app is built first (the script says so, and its `out/` folder turns up when the build is done); a folder of files goes straight up.
+    const folder = folderOf(slug);
+    tell(existsSync(join(folder, "package.json")) && !existsSync(join(folder, "index.html")) ? "Preparing" : "Uploading");
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+      if (/Installing dependencies/.test(String(chunk))) tell("Installing");
+      else if (/Checking the code/.test(String(chunk))) tell("Checking");
+      else if (/Building for/.test(String(chunk))) tell("Building");
+    });
+    child.stderr.on("data", (chunk) => (errors += chunk));
+    const later = setInterval(() => step === "Building" && existsSync(join(folder, "out", "index.html")) && tell("Uploading"), 500);
+    child.on("close", (code) => {
+      clearInterval(later);
+      const pushed = /^Pushed (\S+) (v[\d.]+)/m.exec(output);
+      // What lint and the type check left (see push.mjs), told after the push; nothing when clean.
+      const left = /^Checks: (.+)$/m.exec(output)?.[1];
+      if (code === 0 && pushed) return say({ done: { slug: pushed[1], version: pushed[2], ...(left && left !== "clean" ? { checks: left } : {}) } });
+      const reason = errors.split("\n").map((line) => line.trim()).filter(Boolean).slice(-3).join(" ");
+      say({ error: reason.slice(0, 400) || "The push stopped before it finished." });
+    });
+  });
+}
+
 // A plain GET is the studio asking whether this prototype can have a terminal: 204 if so, 404 if not. The button is shown on that.
 // `/templates` is the same question for the New prototype button, and answers with what it can start from.
 const server = createServer((request, response) => {
@@ -567,6 +671,15 @@ const server = createServer((request, response) => {
     return;
   }
   const slug = url.searchParams.get("slug") ?? "";
+  // The notes for a push, drafted by Claude: a few seconds to a minute, and abandoned if the dialog goes away.
+  if (ours && url.pathname === "/draft" && SLUG.test(slug) && existsSync(folderOf(slug))) {
+    const abort = new AbortController();
+    response.on("close", () => abort.abort());
+    void draftNotes(folderOf(slug), abort.signal).then((notes) => {
+      if (!response.writableEnded) response.writeHead(200, { "Access-Control-Allow-Origin": origin, "Content-Type": "application/json" }).end(JSON.stringify(notes));
+    });
+    return;
+  }
   // The studio says what is selected in the prototype (a line of words, or nothing to let it go). Plain text, so it is no preflighted request.
   if (ours && request.method === "POST" && url.pathname === "/selection" && SLUG.test(slug)) {
     let body = "";
@@ -652,7 +765,9 @@ server.on("upgrade", (request, socket, head) => {
         const top = asked.top && typeof asked.top.name === "string" && /^[A-Z]\w*$/.test(asked.top.name) ? { name: asked.top.name, props: asked.top.props, usedAt: typeof asked.top.usedAt === "string" ? asked.top.usedAt : undefined } : null;
         const owners = Array.isArray(asked.owners) ? asked.owners.filter((one) => one && typeof one.name === "string").slice(0, 8) : [];
         if (loc && !/^[\w./()[\]@-]+\.tsx:\d+:\d+$/.test(loc)) return ws.close();
-        void extractElement(ws, { slug, loc, name, exact: asked.exact === true, top, owners });
+        // What the page draws, as JSX: up to what is worth writing to a file.
+        const markup = typeof asked.markup === "string" && asked.markup.length > 0 && asked.markup.length < 600_000 ? asked.markup : "";
+        void extractElement(ws, { slug, loc, name, exact: asked.exact === true, top, owners, markup });
       });
     });
   }
@@ -660,6 +775,11 @@ server.on("upgrade", (request, socket, head) => {
     const [slug, id] = [url.searchParams.get("slug") ?? "", url.searchParams.get("id") ?? ""];
     if (!SLUG.test(slug) || !/^[a-z0-9-]+$/.test(id)) return refuse();
     return wss.handleUpgrade(request, socket, head, (ws) => void forkComponent(ws, { slug, id }));
+  }
+  if (url.pathname === "/push") {
+    const slug = url.searchParams.get("slug") ?? "";
+    if (!SLUG.test(slug) || !existsSync(folderOf(slug))) return refuse();
+    return wss.handleUpgrade(request, socket, head, (ws) => pushPrototype(ws, slug));
   }
   if (url.pathname === "/new") {
     const wanted = checkNew(url.searchParams);

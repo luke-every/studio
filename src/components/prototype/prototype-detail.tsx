@@ -1,10 +1,9 @@
 "use client";
 
 import { useAddTemplate } from "@/components/prototype/add-template";
-import { HandoffSheet } from "@/components/prototype/handoff-sheet";
 import { useEditComponent } from "@/components/prototype/use-fork";
+import { CanvasNameMenu } from "@/components/prototype/canvas-name-menu";
 import { CopyDocsMenu } from "@/components/prototype/copy-docs-menu";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -17,7 +16,6 @@ import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
 import { PrototypeMenu } from "@/components/prototype/prototype-menu";
 import { VersionMenu } from "@/components/prototype/version-menu";
 import { hintFullscreen } from "@/lib/fullscreen-hint";
-import type { Tone } from "@/components/ui/chip";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
 import { applyControls, controlParams, controlsInWords, defaultValues, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
@@ -28,7 +26,7 @@ import { DEFAULT_DEVICE } from "@/lib/phone";
 import { useDevice, useFit, useInApp, useZoom } from "@/lib/use-device";
 import { SelectionPanel } from "@/components/handoff/part-panel";
 import { useHandoffData } from "@/components/handoff/use-handoff-data";
-import { useHandoffStatus, type HandoffStatus } from "@/components/handoff/use-handoff-status";
+import { useHandoffStatus } from "@/components/handoff/use-handoff-status";
 import type { Selection } from "@/lib/handoff-selection";
 import { markHandoffComponent, reviewToken, unmarkHandoffComponent } from "@/lib/registry/actions";
 import { useUser } from "@/lib/use-user";
@@ -36,7 +34,6 @@ import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
 
 // The review and what it draws its previews with are only loaded once it is opened.
 const EMPTY_FLOW: Flow = { screens: [], edges: [] };
-const HandoffModal = dynamic(() => import("@/components/handoff/handoff-modal").then((module) => module.HandoffModal), { ssr: false });
 
 /**
  * A prototype.
@@ -222,10 +219,8 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     return () => document.documentElement.removeAttribute("data-fullscreen");
   }, [focus]);
 
-  // A version's handoff, reviewed over the page: `#handoff` in the address, so a link (the one /handoff prints) opens it.
-  const handoffOpen = useUrlHash() === "handoff";
-  // Asked again when the review is closed, and every few seconds on a running prototype (see the hook).
-  const handoffStatus = useHandoffStatus(prototype.slug, selected.key, handoffOpen);
+  // Asked every few seconds on a running prototype (see the hook).
+  const handoffStatus = useHandoffStatus(prototype.slug, selected.key, false);
   // With a handoff, whatever is picked on the canvas (a design, or a section of its code) gets a link and a brief for an agent, in the side panel.
   // Components marked here show at once, without waiting for the next time the handoff is asked for.
   const [markedAt, setMarkedAt] = useState(0);
@@ -247,12 +242,10 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     : undefined;
   const [pickedSection, setPickedSection] = useState<Selection | null>(null);
   const folder = (selected.url ?? "").split("/").pop() ?? "";
-  const openHandoff = useCallback(() => setUrlHash("handoff"), []);
-  const closeHandoff = useCallback(() => setUrlHash(""), []);
 
   const githubUrl = repoUrl && selected.url ? `${repoUrl}/p/${selected.url.replace(/^\/p\//, "")}${selected.source ? "/_source" : ""}` : undefined;
 
-  // The name is in the nav (see `Breadcrumbs`); the version list and the menu sit beside it, in the slots the nav leaves for them.
+  // The name is in the nav (see `Breadcrumbs`); the menu sits beside it, in the slot the nav leaves for it.
   const [slots, setSlots] = useState<Element[]>([]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the nav is outside this page; its slots can only be found once the page is on screen
   useEffect(() => setSlots([...document.querySelectorAll("[data-nav-slot]")]), []);
@@ -261,7 +254,6 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       prototype={prototype}
       version={selected.live ? "Live" : selected.version}
       githubUrl={githubUrl}
-      onHandoff={openHandoff}
       onEdit={selected.url && !showingFlow ? () => (setListing(false), setMode("edit")) : undefined}
     />
   );
@@ -303,7 +295,6 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       {slots.map((slot, index) =>
         createPortal(
           <>
-            {versionMenu}
             {menu}
           </>,
           slot,
@@ -312,14 +303,14 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
       )}
       <div className="stagger-in [--i:0] min-w-0 flex-1 lg:min-h-0">
         <PrototypeFrame
-          // The version list is in the nav, beside the name.
-          leading={null}
+          // The version list is the first thing on the bar, then the canvas and the docs.
+          leading={versionMenu}
           url={frameUrl}
           openUrl={address}
           docs={!prototype.slug.startsWith("qa-") ? <CopyDocsMenu slug={prototype.slug} name={prototype.name} figmaUrl={prototype.figmaUrl} githubUrl={githubUrl} notionUrl={prototype.notionUrl} /> : undefined}
           // The same menu, its links and its documents, in the canvas bar.
-          canvasHandoff={!prototype.slug.startsWith("qa-") ? <HandoffSheet slug={prototype.slug} name={prototype.name} github={githubUrl} variant="ghost" /> : undefined}
-          canvasDocs={!prototype.slug.startsWith("qa-") ? <CopyDocsMenu slug={prototype.slug} name={prototype.name} figmaUrl={prototype.figmaUrl} githubUrl={githubUrl} notionUrl={prototype.notionUrl} variant="ghost" /> : undefined}
+          canvasName={<CanvasNameMenu prototype={prototype} selected={selected} onSelect={choose} />}
+          canvasDocs={!prototype.slug.startsWith("qa-") ? (docs) => <CopyDocsMenu slug={prototype.slug} name={prototype.name} figmaUrl={prototype.figmaUrl} githubUrl={githubUrl} notionUrl={prototype.notionUrl} variant="ghost" {...docs} /> : undefined}
           device={device}
           onDevice={chooseDevice}
           zoom={zoom}
@@ -342,7 +333,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           onPlace={followPlace}
           flow={flow}
           variants={variantsCanvas}
-          readyForDev={handoffStatus?.signedBy ? handoffStatus.variants : null}
+          readyForDev={!!selected.readyForDev}
           handoffInspect={handoffData ? { elements: handoffData.elements, onSelect: setPickedSection, selection: pickedSection } : undefined}
           handoffSheet={handoffData?.marks.length ? { marks: handoffData.marks } : undefined}
           inspecting={!!pickedSection}
@@ -367,10 +358,10 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           }
           flowOpen={flowOpen || canvasOnly}
           forkBase={prototype.versions.find((one) => one.live)?.liveUrl}
-          agentLink={async (loc) => {
+          agentLink={async (loc, notes) => {
             const minted = await reviewToken(prototype.slug, folder, true);
             if (!minted.ok) throw new Error(minted.error);
-            return `${window.location.origin}/api/handoff/element?${new URLSearchParams({ slug: prototype.slug, version: folder, token: minted.value, loc, ...(githubUrl ? { github: githubUrl.replace(/\/p\/.*$/, "") } : {}) })}`;
+            return `${window.location.origin}/api/handoff/element?${new URLSearchParams({ slug: prototype.slug, version: folder, token: minted.value, loc, ...(notes?.length ? { notes: notes.join(",") } : {}), ...(githubUrl ? { github: githubUrl.replace(/\/p\/.*$/, "") } : {}) })}`;
           }}
           addTemplate={addTemplate}
           editComponent={editComponent}
@@ -401,21 +392,11 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           side={
             side && !focus && options ? <div className="flex flex-col gap-6 rounded-[var(--r-control)] border border-border p-4">{options}</div> : undefined
           }
-          handoff={handoffStatus ? { ...handoffChip(handoffStatus), onOpen: openHandoff } : undefined}
           bottom={options ? <VariantsDropdown label={variantsLabel}>{options}</VariantsDropdown> : undefined}
         />
       </div>
-      {handoffOpen ? <HandoffModal prototype={prototype} version={selected} controls={offered} onClose={closeHandoff} /> : null}
     </div>
   );
-}
-
-/** What the handoff button says and which dot it wears, by how far the review has got. */
-function handoffChip(status: HandoffStatus): { label: string; tone: Tone; hollow?: boolean } {
-  const decided = status.total - status.left;
-  if (status.signedBy) return { label: `Handoff: ready for dev, signed off by ${status.signedBy}`, tone: "match" };
-  if (decided === 0) return { label: `Handoff: ${status.total} to decide`, tone: "quiet", hollow: true };
-  return { label: `Handoff: ${decided} of ${status.total} decided`, tone: "near" };
 }
 
 const listenToHash = (listener: () => void) => {

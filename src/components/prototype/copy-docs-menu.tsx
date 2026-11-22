@@ -11,6 +11,7 @@ import {
   DocumentIcon,
   ExternalIcon,
   FigmaIcon,
+  ImageIcon,
   ImportIcon,
   LinkIcon,
   PlusIcon,
@@ -57,6 +58,8 @@ type Props = {
   notionUrl?: string;
   /** On the canvas it is drawn as the buttons beside it are: ghost, with its label below. */
   variant?: "ghost";
+  /** Opens the export of the prototype's images, a row at the foot of the menu. */
+  onExport?: () => void;
 };
 
 /** Only where documents can be made (on this machine, in development): there it is always in the bar, from the first paint; elsewhere it isn't built in. */
@@ -69,7 +72,7 @@ export function CopyDocsMenu(props: Props) {
  * The prototype's copy documents, beside the canvas button: a Claude doc and a Notion copy, each made, linked (one made already, somewhere),
  * opened and taken away on its own, and the links the prototype has (its design, its source, its write-up).
  */
-function Menu({ slug, name, figmaUrl, githubUrl, notionUrl, variant }: Props) {
+function Menu({ slug, name, figmaUrl, githubUrl, notionUrl, variant, onExport }: Props) {
   const [docs, setDocs] = useState<CopyDocs | null>(null);
   const [here, setHere] = useState(true);
   const [open, setOpen] = useState(false);
@@ -466,9 +469,7 @@ function Menu({ slug, name, figmaUrl, githubUrl, notionUrl, variant }: Props) {
           <IconButton
             label="Docs"
             variant={variant}
-            tooltip={variant ? undefined : false}
-            tooltipSide={variant ? "below" : undefined}
-            tooltipAlign={variant ? "start" : undefined}
+            tooltip={false}
             loading={busy}
             aria-haspopup="menu"
             aria-expanded={open}
@@ -511,18 +512,35 @@ function Menu({ slug, name, figmaUrl, githubUrl, notionUrl, variant }: Props) {
               Update copy
             </button>
           </div>
-          {githubUrl ? (
+          {githubUrl || onExport ? (
             <div className="mt-1 flex flex-col border-t border-divider pt-1">
-              <a
-                href={githubUrl}
-                target="_blank"
-                rel="noreferrer"
-                role="menuitem"
-                className={row}
-              >
-                GitHub source
-                <ExternalIcon className="ml-auto text-foreground-subtle" />
-              </a>
+              {githubUrl ? (
+                <a
+                  href={githubUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  role="menuitem"
+                  className={row}
+                >
+                  GitHub source
+                  <ExternalIcon className="ml-auto text-foreground-subtle" />
+                </a>
+              ) : null}
+              {onExport ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-haspopup="dialog"
+                  className={row}
+                  onClick={() => {
+                    setOpen(false);
+                    onExport();
+                  }}
+                >
+                  <ImageIcon />
+                  Export images
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>

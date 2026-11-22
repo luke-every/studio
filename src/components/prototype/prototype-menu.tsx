@@ -8,7 +8,8 @@ import { ArchiveIcon, CheckIcon, EllipsisIcon, GithubIcon, PencilIcon, SendIcon,
 import { IconButton } from "@/components/ui/button";
 import { DialogForm, fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
-import type { Prototype } from "@/lib/registry/types";
+import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
+import { useUser } from "@/lib/use-user";
 
 import { RemixDialog } from "./remix-dialog";
 import { menuItem } from "@/components/ui/menu-item";
@@ -18,7 +19,29 @@ type Dialog = "rename" | "move" | "remix" | "archive" | "delete" | "delete-proto
 const item = menuItem;
 
 /** The ellipsis beside a prototype's title: remix the version on screen, rename it, move it, open its files on GitHub, hand it off, archive it. Edit and Remix, the two ways of making something from it, sit together. */
-export function PrototypeMenu({ prototype, version, githubUrl, onHandoff, onEdit }: { prototype: Prototype; version: string; githubUrl?: string; onHandoff?: () => void; onEdit?: () => void }) {
+/** Marks a version as ready for engineering, or takes the mark back. A version running on this machine isn't one yet: it has to be pushed first. */
+export function ReadyForDevItem({ prototype, version, className, onDone }: { prototype: Prototype; version: PrototypeVersion | undefined; className: string; onDone: () => void }) {
+  const { setReadyForDev } = useStudio();
+  const { name } = useUser();
+  if (!version || version.live || version.blank) return null;
+  const ready = !!version.readyForDev;
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={() => {
+        onDone();
+        setReadyForDev({ slug: prototype.slug, versionId: version.id, ready: !ready, by: name }, ["prototype"], ready ? "Taken back" : "Ready for dev");
+      }}
+      className={className}
+    >
+      <CheckIcon />
+      {ready ? `${version.version} is ready for dev · Take back` : `Mark ${version.version} ready for dev`}
+    </button>
+  );
+}
+
+export function PrototypeMenu({ prototype, version, githubUrl, onEdit }: { prototype: Prototype; version: string; githubUrl?: string; onEdit?: () => void }) {
   const { isSaving, updatePrototype } = useStudio();
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -100,21 +123,7 @@ export function PrototypeMenu({ prototype, version, githubUrl, onHandoff, onEdit
                   Open in GitHub
                 </a>
               ) : null}
-              {onHandoff ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  aria-haspopup="dialog"
-                  onClick={() => {
-                    setOpen(false);
-                    onHandoff();
-                  }}
-                  className={`${item} text-foreground`}
-                >
-                  <CheckIcon />
-                  Hand off {version}
-                </button>
-              ) : null}
+              <ReadyForDevItem prototype={prototype} version={prototype.versions.find((one) => !one.live && one.version === version)} className={`${item} text-foreground`} onDone={() => setOpen(false)} />
               <div role="separator" className="my-1 h-px bg-border" />
               {prototype.versions.length > 1 ? (
                 <button type="button" role="menuitem" onClick={() => choose("delete")} className={`${item} text-destructive`}>
@@ -150,7 +159,7 @@ export function PrototypeMenu({ prototype, version, githubUrl, onHandoff, onEdit
   );
 }
 
-function RenameDialog({ prototype, onClose }: { prototype: Prototype; onClose: () => void }) {
+export function RenameDialog({ prototype, onClose }: { prototype: Prototype; onClose: () => void }) {
   const { updatePrototype } = useStudio();
   const [name, setName] = useState(prototype.name);
 
@@ -226,7 +235,7 @@ function MoveDialog({ prototype, onClose }: { prototype: Prototype; onClose: () 
   );
 }
 
-function DeleteVersionDialog({ prototype, version, onClose }: { prototype: Prototype; version: string; onClose: () => void }) {
+export function DeleteVersionDialog({ prototype, version, onClose }: { prototype: Prototype; version: string; onClose: () => void }) {
   const { deleteVersion } = useStudio();
   const target = prototype.versions.find((item) => item.version === version);
   if (!target) return null;
@@ -252,7 +261,7 @@ const WORKING_COPY = "v0.0";
  * Deletes the prototype, and says what that takes with it: the versions on GitHub (which can't be got back) and its
  * folder on this Mac (which goes to the Trash). Archive is the way to put one out of sight without losing anything.
  */
-function DeletePrototypeDialog({ prototype, onClose }: { prototype: Prototype; onClose: () => void }) {
+export function DeletePrototypeDialog({ prototype, onClose }: { prototype: Prototype; onClose: () => void }) {
   const router = useRouter();
   const { deletePrototype } = useStudio();
   const pushed = prototype.versions.filter((item) => item.version !== WORKING_COPY).length;
@@ -280,7 +289,7 @@ function DeletePrototypeDialog({ prototype, onClose }: { prototype: Prototype; o
   );
 }
 
-function ArchiveDialog({ prototype, onClose }: { prototype: Prototype; onClose: () => void }) {
+export function ArchiveDialog({ prototype, onClose }: { prototype: Prototype; onClose: () => void }) {
   const router = useRouter();
   const { updatePrototype } = useStudio();
 

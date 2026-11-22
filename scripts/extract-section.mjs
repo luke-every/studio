@@ -366,8 +366,37 @@ function ownProps({ element, uses, owners }) {
   } else return { why: [...uses.locals] };
   if (whole) return { whole, baseline: given, types: `type Props = ${typeOfPlain(given)};` };
   const baseline = Object.fromEntries(params.filter((one) => one.value !== undefined).map((one) => [one.key, one.value]));
-  const fields = params.map((one) => `  ${/^[A-Za-z_]\w*$/.test(one.key) ? one.key : JSON.stringify(one.key)}?: ${one.value === undefined ? "unknown" : typeOfPlain(one.value)};`);
+  const fields = params.map((one) => `  ${/^[A-Za-z_]\w*$/.test(one.key) ? one.key : JSON.stringify(one.key)}${one.value === undefined ? "?" : ""}: ${one.value === undefined ? "unknown" : typeOfPlain(one.value)};`);
   return { signature: `{ ${params.map((one) => one.text).join(", ")} }: Props`, baseline, types: `type Props = {\n${fields.join("\n")}\n};` };
+}
+
+/**
+ * The last resort, for an element that can't be taken as code: one whose code uses values only the code around it has (state, a value worked out from it, a handler), or that has no
+ * place in this project's code at all. What the page draws is still there, so the component made is of that: the markup of the element as the page draws it now (`jsxOf`), as a component
+ * with no props, in the folder the others go to. It looks as it does on the page and doesn't run. Returns the record as `extractSection` does (with `snapshot: true`), or `{ error }`.
+ */
+export function snapshotSection({ dir, loc, name, markup, records = {}, commits = {} }) {
+  const found = /^(.+):(\d+):(\d+)$/.exec(loc ?? "");
+  const place = found ? `${found[1]}:${found[2]}` : null;
+  const label = pascal(name ?? "") || (found ? `${pascal(basename(found[1]).replace(/\.tsx?$/, ""))}Snapshot` : "Snapshot");
+  const folder = freshFolder(dir, records, label);
+  const fn = folder.replace(/-(\d+)$/, "$1");
+  const target = join(dir, "src", "components", "forks", folder);
+  const existed = existsSync(target);
+  mkdirSync(target, { recursive: true });
+  const body = `// Markup taken out of ${place ?? "the page"} as it was drawn (a snapshot) for this project. It stands on its own and doesn't run. The original is not touched: what is changed here is what is proposed.\n\nexport function ${fn}() {\n  return (\n${markup.split("\n").map((row) => `    ${row}`).join("\n")}\n  );\n}\n`;
+  const file = join(target, `${fn}.tsx`);
+  writeFileSync(file, body);
+  const problem = problemIn(file);
+  if (problem) {
+    if (!existed) rmSync(target, { recursive: true, force: true });
+    return { error: `It couldn't be taken out cleanly (${problem}), so nothing was added to the project.` };
+  }
+  return {
+    id: idOf(folder),
+    snapshot: true,
+    record: { label, folder, file: fn, exportName: fn, baseline: "{}", imports: [], elementTypes: [], from: { source: place ? `project:${place}` : "snapshot", commit: commits.project ?? "" }, at: new Date().toISOString() },
+  };
 }
 
 export function extractSection({ dir, loc, name, commits = {}, records = {}, followed = false, top = null, owners = [] }) {

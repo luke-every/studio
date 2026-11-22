@@ -36,6 +36,10 @@ export function briefOf(set: ChangeSet, ctx: BriefContext = {}) {
   lines.push("2. Apply the diff's changes to the production component. If production has changed since the commit shown, merge the two and keep both.");
   lines.push("3. New components go where production's CLAUDE.md puts them (named export, a `Props` type at the top, Tailwind classes only).");
   lines.push("4. Work through *Still to do*, then run `pnpm lint` and `pnpm tsc --noEmit`. Add the tests production asks for.");
+  if (set.newFiles?.length) {
+    lines.push("", `## New in the prototype (${set.newFiles.length})`, "", "Components with no file at their path in production, and none by that name elsewhere in it.", "");
+    lines.push(...set.newFiles.map((file) => `- \`${file.path}\` (${file.lines} lines)`));
+  }
   lines.push("", `## Changes (${forks.length})`, "");
   if (!forks.length) lines.push("Nothing has been changed against production's components yet.", "");
   for (const fork of forks) {

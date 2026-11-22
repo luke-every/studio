@@ -8,6 +8,7 @@ import { basename, dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
 import { workingFolder } from "./local-prototypes";
+import { counterpartOf } from "./production";
 
 /**
  * What a prototype changes, as an engineer or their agent would want it: each fork against the file it was copied from, what is new, what is left to do, and whether
@@ -46,7 +47,9 @@ export type ForkChange = {
 };
 export type Lift = { file: string; line: number; text: string };
 export type Check = { rule: string; file: string; line: number; text: string; why: string };
-export type ChangeSet = { slug: string; name: string; generatedAt: string; forks: ForkChange[]; lifts: Lift[]; checks: Check[] };
+/** A file that is only in the prototype: nothing at its path in production, nor under its name anywhere else there. */
+export type NewFile = { path: string; lines: number };
+export type ChangeSet = { slug: string; name: string; generatedAt: string; forks: ForkChange[]; lifts: Lift[]; checks: Check[]; newFiles?: NewFile[] };
 
 type Record_ = { label: string; folder: string; from?: { source?: string; commit?: string } };
 
@@ -177,5 +180,13 @@ export async function buildChangeSet(slug: string, name: string): Promise<Change
       if (row.includes("TODO(lift)")) lifts.push({ file: relative(folder, path), line: index + 1, text: row.replace(/^[\s/{*]+|[\s*/}]+$/g, "").replace(/^TODO\(lift\):?\s*/, "").slice(0, 200) });
     });
   }
-  return { slug, name, generatedAt: new Date().toISOString(), forks, lifts: lifts.slice(0, 200), checks: checks.slice(0, 100) };
+  // What is only in the prototype: its components (not the forks, which are compared above) that production has nothing to match. Only where production is on this machine.
+  const newFiles: NewFile[] = [];
+  for (const path of await walk(join(folder, "src", "components"))) {
+    const relativePath = relative(folder, path);
+    if (relativePath.startsWith(join("src", "components", "forks")) || !/\.tsx?$/.test(relativePath)) continue;
+    const counterpart = await counterpartOf(relativePath);
+    if (counterpart?.status === "none") newFiles.push({ path: relativePath, lines: (await readFile(path, "utf8")).split("\n").length });
+  }
+  return { slug, name, generatedAt: new Date().toISOString(), forks, lifts: lifts.slice(0, 200), checks: checks.slice(0, 100), newFiles: newFiles.slice(0, 100) };
 }

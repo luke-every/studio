@@ -245,6 +245,7 @@ export async function readRegistry(): Promise<RegistrySnapshot> {
         live: version.live,
         liveUrl: version.liveUrl,
         blank: version.blank,
+        readyForDev: version.readyForDev,
       }));
 
     const current = versions.find((version) => version.id === record.currentVersion) ?? versions[0];

@@ -1,18 +1,14 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 
 import { MotionPopover } from "@/components/motion";
-import { ExternalIcon, LinkIcon, ShareIcon } from "@/components/shell/nav-icons";
+import { CodeIcon, ExternalIcon, LinkIcon, ShareIcon, UploadIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { useStudio } from "@/lib/data/studio-store";
 import { shareLink } from "@/lib/registry/actions";
 
-import { QrSkeleton } from "./qr-skeleton";
 import { menuItem } from "@/components/ui/menu-item";
-
-const PhoneQr = dynamic(() => import("./phone-qr").then((m) => m.PhoneQr), { ssr: false });
 
 const item = `${menuItem} text-foreground`;
 
@@ -20,8 +16,8 @@ const item = `${menuItem} text-foreground`;
  * Copies a link that opens without the password: the latest version, or the one `key` names, on its canvas when asked.
  * The link is made on the server, so the copy is handed a promise of it: Safari only lets a page write the clipboard straight from a tap.
  */
-export function copyShareLink(slug: string, notify: (message: string, error?: boolean) => void, done: string, { key, canvas }: { key?: string; canvas?: boolean } = {}) {
-  const link = shareLink(slug, key).then((result) => {
+export function copyShareLink(slug: string, notify: (message: string, error?: boolean) => void, done: string, { key, canvas, dev }: { key?: string; canvas?: boolean; dev?: boolean } = {}) {
+  const link = shareLink(slug, key, dev).then((result) => {
     if (!result.ok) throw new Error(result.error);
     return `${window.location.origin}${result.value}${canvas ? "#canvas" : ""}`;
   });
@@ -37,18 +33,20 @@ export function copyShareLink(slug: string, notify: (message: string, error?: bo
 
 /**
  * Everything for getting this prototype in front of somebody else: copy a link
- * (to the prototype or to its canvas, both the latest version) that opens without the password, open it in a tab, or scan its code from a
- * phone. A link pinned to one version is the version menu's. Opens on hover with a mouse, on a tap otherwise.
+ * (to the prototype or to its canvas, both the latest version) that opens without the password, or open it in a tab. A link pinned to one version is the version menu's. Opens on hover with a mouse, on a tap otherwise.
  */
 export function ShareMenu({
   slug,
-  stage,
   newTab,
   onOpenNew,
+  prominent,
+  onPush,
 }: {
   slug: string;
-  /** Where the prototype is drawn, so the code can follow what is open in it. */
-  stage: RefObject<HTMLElement | null>;
+  /** Push a version from this folder, the menu's first row. Only the canvas passes it: that is where a version is made. */
+  onPush?: () => void;
+  /** The one thing the bar is for: a labelled, solid button instead of an icon. */
+  prominent?: boolean;
   /** Where "Open prototype" goes. */
   newTab?: string;
   /** Opens it another way, where a plain link won't do (a phone, which carries the comment link along). */
@@ -57,11 +55,6 @@ export function ShareMenu({
   const { notify } = useStudio();
   const [open, setOpen] = useState(false);
   const leaving = useRef<number>(undefined);
-
-  // Fetched ahead, so the code's placeholder is there the moment the menu opens.
-  useEffect(() => {
-    void import("./phone-qr");
-  }, []);
 
   const enter = (event: PointerEvent) => {
     if (event.pointerType !== "mouse") return;
@@ -74,9 +67,10 @@ export function ShareMenu({
     leaving.current = window.setTimeout(() => setOpen(false), 200);
   };
 
-  const copy = (canvas: boolean) => {
+  const copy = (kind: "prototype" | "canvas" | "dev") => {
     setOpen(false);
-    copyShareLink(slug, notify, canvas ? "Copied a link to the canvas" : "Copied a link to the prototype", { canvas });
+    const done = { prototype: "Copied a link to the prototype", canvas: "Copied a link to the canvas", dev: "Copied the dev link" }[kind];
+    copyShareLink(slug, notify, done, { canvas: kind === "canvas", dev: kind === "dev" });
   };
 
   return (
@@ -86,19 +80,32 @@ export function ShareMenu({
         onClose={() => setOpen(false)}
         className="w-60"
         trigger={
-          <IconButton tooltipAlign="end" onClick={() => setOpen((value) => !value)} aria-label="Share" aria-haspopup="menu" aria-expanded={open}>
-            <ShareIcon />
+          <IconButton variant={prominent ? "primary" : undefined} tooltipAlign="end" onClick={() => setOpen((value) => !value)} aria-label="Share" aria-haspopup="menu" aria-expanded={open}>
+            {prominent ? "Share" : <ShareIcon />}
           </IconButton>
         }
       >
         <div role="menu" className="flex flex-col">
-          <button type="button" role="menuitem" onClick={() => copy(false)} className={item}>
+          {onPush ? (
+            <>
+              <button type="button" role="menuitem" aria-haspopup="dialog" onClick={() => (setOpen(false), onPush())} className={`${item} font-medium`}>
+                <UploadIcon />
+                Push
+              </button>
+              <div role="separator" className="my-1 h-px bg-border" />
+            </>
+          ) : null}
+          <button type="button" role="menuitem" onClick={() => copy("prototype")} className={item}>
             <LinkIcon />
             Copy prototype link
           </button>
-          <button type="button" role="menuitem" onClick={() => copy(true)} className={item}>
+          <button type="button" role="menuitem" onClick={() => copy("canvas")} className={item}>
             <LinkIcon />
             Copy canvas link
+          </button>
+          <button type="button" role="menuitem" onClick={() => copy("dev")} className={item}>
+            <CodeIcon />
+            Copy dev link
           </button>
           {newTab ? (
             onOpenNew ? (
@@ -113,17 +120,6 @@ export function ShareMenu({
               </a>
             )
           ) : null}
-          {/* Hidden on a phone, which is what would be scanning it. */}
-          <div className="mt-1 flex flex-col items-center gap-2 border-t border-border px-2.5 pb-2 pt-3 max-sm:hidden">
-            {/* A fixed size, so the menu is the same height with the placeholder as with the code. */}
-            <div className="size-40 rounded-[var(--r-control)] bg-[var(--qr-bg)] p-2">
-              <div className="relative size-36">
-                <QrSkeleton />
-                <PhoneQr stage={stage} className="absolute inset-0 size-full" />
-              </div>
-            </div>
-            <p className="text-xs text-foreground-subtle">Scan to open on a phone</p>
-          </div>
         </div>
       </MotionPopover>
     </div>

@@ -19,7 +19,7 @@ async function shared(token: string) {
   if (!named) return null;
   const prototype = await getPrototype(named.slug);
   const version = prototype?.versions.find((item) => item.key === named.key);
-  return prototype && version?.url ? { prototype, version } : null;
+  return prototype && version?.url ? { prototype, version, dev: named.dev } : null;
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
@@ -43,7 +43,7 @@ async function docLinks(prototype: NonNullable<Awaited<ReturnType<typeof shared>
 export default async function SharePage({ params }: { params: Promise<{ token: string }> }) {
   const found = await shared((await params).token);
   if (!found) notFound();
-  const { prototype, version } = found;
+  const { prototype, version, dev } = found;
 
   return (
     <SharedPrototype
@@ -51,11 +51,12 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
       description={prototype.description}
       people={collaborators(prototype)}
       updatedAt={prototype.updatedAt}
-      version={{ label: version.version, url: version.url! }}
+      version={{ label: version.version, url: version.url!, readyForDev: !!version.readyForDev }}
       slug={prototype.slug}
       versionKey={version.key}
       docs={await docLinks(prototype, version)}
       token={(await params).token}
+      dev={dev}
       // What lets somebody with the link leave a comment on this version, and nothing else.
       review={mintReviewToken(prototype.slug, versionSegment(version.key), { forever: true })}
     />

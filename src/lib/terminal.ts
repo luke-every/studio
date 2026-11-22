@@ -79,7 +79,9 @@ export function useTerminal(slug: string | null) {
     set(null);
     if (slug) fetch(`http://${TERMINAL_HOST}/end?slug=${slug}`, { method: "POST" }).catch(() => {});
   }, [slug]);
-  return { available, open: available && !!slug && current === slug, toggle, stop };
+  // `ready`: the helper answered and has the folder, which is what pushing needs (`available` also holds while the helper is down, for the panel to start it).
+  const ready = !!slug && probe?.slug === slug && probe.status === "ready";
+  return { available, ready, open: available && !!slug && current === slug, toggle, stop };
 }
 
 /** Tells the helper what is chosen in the prototype (or nothing, with null), for Claude to be told as the next prompt is sent. */

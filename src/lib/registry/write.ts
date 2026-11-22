@@ -670,6 +670,16 @@ export async function renameVersion(input: { slug: string; versionId: string; la
  * do its files and comments in the content repository, so the same number can
  * be pushed again. If it was the current version, the newest one left takes over.
  */
+/** Marks a version as ready for engineering, or takes the mark back. */
+export async function setReadyForDev(input: { slug: string; versionId: string; ready: boolean; by: string }) {
+  return mutate((document) => {
+    const target = document.versions.find((version) => version.id === input.versionId && version.prototypeSlug === input.slug);
+    if (!target) throw new StoreError("No such version.");
+    target.readyForDev = input.ready ? { by: input.by.trim().slice(0, 80) || "Someone", at: new Date().toISOString() } : undefined;
+    versionSchema.parse(target);
+  });
+}
+
 export async function deleteVersion(input: { slug: string; versionId: string }) {
   // Checked against the record first, so nothing is removed for a version that can't be.
   const document = await load();

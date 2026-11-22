@@ -18,7 +18,7 @@ const LiveDot = ({ running = true }: { running?: boolean }) => (
 );
 
 /** Where the dev server is: running, or one of the things it is being made to do (the menu says which), or stopped. */
-type Server = "running" | "stopped" | "starting" | "restarting" | "stopping";
+export type Server = "running" | "stopped" | "starting" | "restarting" | "stopping";
 
 const miniButton = "shrink-0 rounded-[var(--r-full)] bg-surface-inset px-1.5 py-0.5 text-xs font-medium text-foreground-muted hover:text-foreground disabled:text-foreground-subtle disabled:hover:text-foreground-subtle";
 
@@ -97,6 +97,90 @@ function LiveRow({ slug, version, on, onSelect, server, setServer, onProblem }: 
   );
 }
 
+/** The versions to choose from, newest first, with Live's dev server controls: the list the version menu opens, and the canvas's name menu drills into. */
+export function VersionList({
+  slug,
+  versions,
+  selectedId,
+  onPick,
+  server,
+  setServer,
+}: {
+  slug: string;
+  versions: PrototypeVersion[];
+  selectedId: string;
+  onPick: (version: PrototypeVersion) => void;
+  server: Server;
+  setServer: (server: Server) => void;
+}) {
+  const { notify } = useStudio();
+  return (
+    <ul role="listbox" aria-label="Versions" className="flex max-h-96 flex-col overflow-y-auto">
+      {versions.map((version) => {
+        const on = version.id === selectedId;
+        if (version.live) {
+          return (
+            <li key={version.id}>
+              <LiveRow
+                slug={slug}
+                version={version}
+                on={on}
+                server={server}
+                setServer={setServer}
+                onProblem={(message) => notify(message, true)}
+                onSelect={() => {
+                  onPick(version);
+                }}
+              />
+            </li>
+          );
+        }
+        return (
+          <li key={version.id}>
+            {/* A row is the whole of what it selects; the copy button inside it is its own tap. */}
+            <div
+              role="option"
+              tabIndex={0}
+              aria-selected={on}
+              onClick={() => {
+                onPick(version);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                onPick(version);
+              }}
+              className={`${menuItem} cursor-pointer justify-between text-foreground ${on ? "bg-menu-hover" : ""}`}
+            >
+              <span className="flex min-w-0 items-baseline gap-1.5">
+                <span>{version.version}</span>
+                <button
+                  type="button"
+                  title={`Copy link to ${version.version}`}
+                  aria-label={`Copy link to ${version.version}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    copyShareLink(slug, notify, `Copied a link to ${version.version}`, { key: version.key });
+                  }}
+                  className="flex shrink-0 translate-y-0.5 text-foreground-subtle hover:text-foreground"
+                >
+                  <CopyIcon className="size-3.5" />
+                </button>
+                <span className="truncate text-sm text-foreground-subtle">
+                  <Stamp iso={version.createdAt} />
+                </span>
+              </span>
+              {on ? (
+                <span className="shrink-0 rounded-[var(--r-full)] bg-surface-inset px-1.5 py-0.5 text-xs font-medium text-foreground-muted">Current</span>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /**
  * The version, and when it was made. With more than one it is a button that
  * opens the list; with one there is nothing to choose, so it is plain text, except Live,
@@ -113,7 +197,6 @@ export function VersionMenu({
   selectedId: string;
   onSelect: (version: PrototypeVersion) => void;
 }) {
-  const { notify } = useStudio();
   const [open, setOpen] = useState(false);
   const [server, setServer] = useState<Server>("running");
   const selected = versions.find((version) => version.id === selectedId) ?? versions[0];
@@ -142,72 +225,7 @@ export function VersionMenu({
         </IconButton>
       }
     >
-      <ul role="listbox" aria-label="Versions" className="flex max-h-96 flex-col overflow-y-auto">
-        {versions.map((version) => {
-          const on = version.id === selectedId;
-          if (version.live) {
-            return (
-              <li key={version.id}>
-                <LiveRow
-                  slug={slug}
-                  version={version}
-                  on={on}
-                  server={server}
-                  setServer={setServer}
-                  onProblem={(message) => notify(message, true)}
-                  onSelect={() => {
-                    onSelect(version);
-                    setOpen(false);
-                  }}
-                />
-              </li>
-            );
-          }
-          return (
-            <li key={version.id}>
-              {/* A row is the whole of what it selects; the copy button inside it is its own tap. */}
-              <div
-                role="option"
-                tabIndex={0}
-                aria-selected={on}
-                onClick={() => {
-                  onSelect(version);
-                  setOpen(false);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  onSelect(version);
-                  setOpen(false);
-                }}
-                className={`${menuItem} cursor-pointer justify-between text-foreground ${on ? "bg-menu-hover" : ""}`}
-              >
-                <span className="flex min-w-0 items-baseline gap-1.5">
-                  <span>{version.version}</span>
-                  <button
-                    type="button"
-                    title={`Copy link to ${version.version}`}
-                    aria-label={`Copy link to ${version.version}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      copyShareLink(slug, notify, `Copied a link to ${version.version}`, { key: version.key });
-                    }}
-                    className="flex shrink-0 translate-y-0.5 text-foreground-subtle hover:text-foreground"
-                  >
-                    <CopyIcon className="size-3.5" />
-                  </button>
-                  <span className="truncate text-sm text-foreground-subtle">
-                    <Stamp iso={version.createdAt} />
-                  </span>
-                </span>
-                {on ? (
-                  <span className="shrink-0 rounded-[var(--r-full)] bg-surface-inset px-1.5 py-0.5 text-xs font-medium text-foreground-muted">Current</span>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <VersionList slug={slug} versions={versions} selectedId={selectedId} onPick={(version) => (onSelect(version), setOpen(false))} server={server} setServer={setServer} />
     </MotionPopover>
   );
 }
