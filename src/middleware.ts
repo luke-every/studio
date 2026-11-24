@@ -65,6 +65,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/remix/") ||
     // A share link carries its own signature: one version, for somebody without the password.
     pathname.startsWith("/s/") ||
+    // A review link carries a key of its own, for one person on one request: they need no password either.
+    pathname.startsWith("/r/") ||
     pathname === "/favicon.ico";
 
   if (exempt) return NextResponse.next();

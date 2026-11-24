@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/shell/user-avatar";
 import { Button } from "@/components/ui/button";
 import { fieldClass } from "@/components/ui/dialog-form";
 import { Toggle } from "@/components/ui/toggle";
-import { requestReview, slackState } from "@/lib/registry/actions";
+import { requestReview, slackMembers, slackState } from "@/lib/registry/actions";
 import { dueOptions, type DueBy } from "@/lib/reviews";
 import type { Prototype } from "@/lib/registry/types";
 import { useUser } from "@/lib/use-user";
@@ -47,7 +47,11 @@ export function RequestReviewDialog({ prototype, version, onClose }: { prototype
   // The setups chosen to look at, by their query (empty is the baseline).
   const [chosen, setChosen] = useState<string[]>([]);
   const [message, setMessage] = useState("");
-  const [reviewers, setReviewers] = useState<string[]>([]);
+  // Who is being asked: from the Slack workspace when it can be read (they are told by who they are there), else from the names the studio knows.
+  const [reviewers, setReviewers] = useState<{ name: string; slackId?: string }[]>([]);
+  const [members, setMembers] = useState<{ id: string; name: string; image?: string }[] | null>(null);
+  const [membersProblem, setMembersProblem] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   // Everyone who has said who they are on Slack, on any browser. Those are reachable; the rest only see the request in the studio.
@@ -69,6 +73,19 @@ export function RequestReviewDialog({ prototype, version, onClose }: { prototype
 
   useEffect(() => {
     let current = true;
+    void slackMembers().then((result) => {
+      if (!current) return;
+      if (result.ok) setMembers(result.value);
+      // Slack not being connected is not a problem to report; the permission missing is.
+      else if (!/isn't connected/.test(result.error)) setMembersProblem(result.error);
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let current = true;
     void slackState(name ?? "").then((result) => {
       if (current && result.ok) setOnSlack({ connected: result.value.connected, names: result.value.people });
     });
@@ -77,14 +94,21 @@ export function RequestReviewDialog({ prototype, version, onClose }: { prototype
     };
   }, [name]);
 
-  // This browser's people, then anybody else the studio knows from Slack: a teammate nobody here has added is still somebody to ask.
+  // The workspace's people when it can be read; else this browser's people, then anybody else the studio knows from Slack.
+  type Row = { key: string; name: string; slackId?: string; image?: string; profile?: (typeof people)[number] };
   const known = new Set(people.map((person) => person.name.toLowerCase()));
-  const everyone: { name: string; profile?: (typeof people)[number] }[] = [
-    ...people.map((person) => ({ name: person.name, profile: person })),
-    ...(onSlack?.names.filter((who) => !known.has(who.toLowerCase())).map((who) => ({ name: who })) ?? []),
+  const fallback: Row[] = [
+    ...people.map((person) => ({ key: person.name, name: person.name, profile: person })),
+    ...(onSlack?.names.filter((who) => !known.has(who.toLowerCase())).map((who) => ({ key: who, name: who })) ?? []),
   ];
-  const reachable = onSlack?.connected ? onSlack.names.map((who) => who.toLowerCase()) : null;
-  const toggle = (who: string) => setReviewers((now) => (now.includes(who) ? now.filter((one) => one !== who) : [...now, who]));
+  const rows: Row[] = members ? members.map((member) => ({ key: member.id, name: member.name, slackId: member.id, image: member.image })) : fallback;
+  const reachable = !members && onSlack?.connected ? onSlack.names.map((who) => who.toLowerCase()) : null;
+  const shown = search.trim() ? rows.filter((row) => row.name.toLowerCase().includes(search.trim().toLowerCase())) : rows;
+  const isChosen = (row: Row) => reviewers.some((one) => (row.slackId ? one.slackId === row.slackId : one.name === row.name));
+  const toggle = (row: Row) => setReviewers((now) => (isChosen(row) ? now.filter((one) => !(row.slackId ? one.slackId === row.slackId : one.name === row.name)) : [...now, { name: row.name, slackId: row.slackId }]));
+  // The person asking, among the rows: their full name, or the first name they use here.
+  const mine = (name ?? "").trim().toLowerCase();
+  const isYou = (row: Row) => !!mine && (row.name.toLowerCase() === mine || row.name.toLowerCase().split(/\s+/)[0] === mine);
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
@@ -180,18 +204,27 @@ export function RequestReviewDialog({ prototype, version, onClose }: { prototype
       }
     >
       <div className="flex flex-col gap-5">
-        <fieldset className="flex flex-col gap-1">
+        <fieldset className="flex flex-col gap-2">
           <legend className="sr-only">Reviewers</legend>
-          {everyone.map((person) => (
-              <label key={person.name} className={rowClass}>
-                <input type="checkbox" checked={reviewers.includes(person.name)} onChange={() => toggle(person.name)} className="size-4 accent-[var(--accent)]" />
-                <UserAvatar name={person.name} profile={person.profile} className="size-6" />
-                <span className="min-w-0 flex-1 truncate">{person.name}</span>
-                {person.name.toLowerCase() === (name ?? "").toLowerCase() ? <span className="shrink-0 text-xs text-foreground-muted">You</span> : null}
-                {reachable && !reachable.includes(person.name.toLowerCase()) ? <span className="shrink-0 text-xs text-foreground-muted">Not on Slack</span> : null}
+          {rows.length > 8 ? <input type="search" aria-label="Search people" placeholder="Search people" value={search} onChange={(event) => setSearch(event.target.value)} className={`${fieldClass} font-normal`} /> : null}
+          <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
+            {shown.map((row) => (
+              <label key={row.key} className={rowClass}>
+                <input type="checkbox" checked={isChosen(row)} onChange={() => toggle(row)} className="size-4 accent-[var(--accent)]" />
+                {row.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={row.image} alt="" className="size-6 shrink-0 rounded-[var(--r-full)] object-cover" />
+                ) : (
+                  <UserAvatar name={row.name} profile={row.profile} className="size-6" />
+                )}
+                <span className="min-w-0 flex-1 truncate">{row.name}</span>
+                {isYou(row) ? <span className="shrink-0 text-xs text-foreground-muted">You</span> : null}
+                {reachable && !reachable.includes(row.name.toLowerCase()) ? <span className="shrink-0 text-xs text-foreground-muted">Not on Slack</span> : null}
               </label>
             ))}
-          {everyone.length < 2 ? <p className="px-2.5 text-sm text-foreground-muted">Add a teammate from the user menu to ask them.</p> : null}
+            {!shown.length ? <p className="px-2.5 text-sm text-foreground-muted">{rows.length ? "Nobody by that name." : "Add a teammate from the user menu to ask them."}</p> : null}
+          </div>
+          {membersProblem ? <p className="px-2.5 text-xs text-destructive">{membersProblem}</p> : null}
         </fieldset>
 
         <fieldset className="flex flex-col gap-2">

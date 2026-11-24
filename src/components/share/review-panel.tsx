@@ -8,12 +8,8 @@ import { UserAvatar } from "@/components/shell/user-avatar";
 import { Button } from "@/components/ui/button";
 import { DialogForm, fieldClass } from "@/components/ui/dialog-form";
 import { Stamp } from "@/components/ui/stamp";
-import { defaultProfile } from "@/lib/avatars";
-import { finishReview, listReviews, openReview } from "@/lib/registry/actions";
+import { finishReviewAs, openReviewAs, reviewStateAs } from "@/lib/registry/actions";
 import { dueLabel, pastDue, variantOf, VERDICTS, type Review, type ReviewRequest } from "@/lib/reviews";
-import { useUser } from "@/lib/use-user";
-
-const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /** The overall answer is kept on this device as it is written, so a closed tab or a slow decision doesn't lose it. Comments are saved as they are left. */
 type Draft = { response: string; verdict: keyof typeof VERDICTS | null };
@@ -36,38 +32,33 @@ function writeDraft(key: string, draft: Draft | null) {
   }
 }
 
+/** Where the person the link is for has got to: theirs alone, never anybody else's. */
+type Mine = Pick<Review["reviewers"][number], "openedAt" | "doneAt" | "verdict" | "response">;
+
 /**
  * Everything a reviewer needs beside the prototype, and nothing else: what they were asked and by when, the variations they were
- * asked to look at, and a way to send the review. Opening it as one of the people asked is what marks the request opened.
+ * asked to look at, and a way to send the review. Nobody signs in: the link's key says who this is, and opening it is what marks
+ * the request opened.
  */
-export function ReviewPanel({ slug, title, versionLabel, request, current, onSetup }: { slug: string; title: string; versionLabel: string; request: ReviewRequest; /** The query of the prototype as it is shown now. */ current: string; /** Shows the prototype in a setup (its query; empty for the baseline). */ onSetup: (setup: string) => void }) {
-  const { ready, name, people, choose, add } = useUser();
-  const [review, setReview] = useState<Review | null | undefined>(undefined);
+export function ReviewPanel({ slug, title, versionLabel, request, reviewer, current, onSetup }: { slug: string; title: string; versionLabel: string; request: ReviewRequest; /** Who the link is for, and the key that is theirs alone. */ reviewer: { name: string; key: string }; /** The query of the prototype as it is shown now. */ current: string; /** Shows the prototype in a setup (its query; empty for the baseline). */ onSetup: (setup: string) => void }) {
+  const [mine, setMine] = useState<Mine | null | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
-    const result = await listReviews(slug);
-    if (result.ok) setReview(result.value.find((item) => item.id === request.id) ?? null);
-  }, [slug, request.id]);
+    const result = await reviewStateAs(slug, request.id, reviewer.key);
+    setMine(result.ok ? result.value : null);
+  }, [slug, request.id, reviewer.key]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the first look, from the store
     void load();
   }, [load]);
 
-  const mine = review && name ? review.reviewers.find((one) => same(one.name, name)) : undefined;
-  const needsOpening = !!mine && !mine.openedAt;
+  const needsOpening = mine !== undefined && mine !== null && !mine.openedAt;
   useEffect(() => {
-    if (!name || !needsOpening) return;
-    void openReview({ slug, id: request.id, name }).then(() => load());
-  }, [name, needsOpening, slug, request.id, load]);
-
-  // Nobody signs in, so who is reviewing is picked from the people who were asked.
-  const pick = (who: string) => {
-    const existing = people.find((person) => same(person.name, who));
-    if (existing) choose(existing.name);
-    else add(defaultProfile(who));
-  };
+    if (!needsOpening) return;
+    void openReviewAs(slug, request.id, reviewer.key).then(() => load());
+  }, [needsOpening, slug, request.id, reviewer.key, load]);
 
   const variants = request.variants ?? [];
   const onNow = variantOf(variants, current);
@@ -115,49 +106,39 @@ export function ReviewPanel({ slug, title, versionLabel, request, current, onSet
         </div>
       ) : null}
 
-      {!ready || review === undefined ? null : review === null ? (
+      {mine === undefined ? null : mine === null ? (
         <p role="alert" className="text-sm text-destructive">
           This review isn&rsquo;t here any more.
         </p>
-      ) : mine?.doneAt ? (
+      ) : mine.doneAt && mine.verdict ? (
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
-            <ReviewState person={mine} />
+            <ReviewState person={{ name: reviewer.name, ...mine }} />
             <span className="text-sm text-foreground-muted">
               Submitted <Stamp iso={mine.doneAt} relative />
             </span>
           </div>
           {mine.response ? <p className="whitespace-pre-wrap text-base">{mine.response}</p> : null}
         </div>
-      ) : mine && name ? (
+      ) : (
         <div className="flex flex-col gap-2">
           <Button variant="primary" className="w-full" onClick={() => setSubmitting(true)}>
             Submit review
           </Button>
           <p className="text-sm text-foreground-muted">Comments you leave are saved as you go.</p>
         </div>
-      ) : (
-        <div className="flex flex-col gap-1">
-          <p className="mb-1 text-sm font-medium">Who are you?</p>
-          {request.reviewers.map((who) => (
-            <button key={who} type="button" onClick={() => pick(who)} className="flex items-center gap-2.5 rounded-[var(--r-control)] px-2.5 py-1.5 text-left text-nav hover:bg-surface-hover">
-              <UserAvatar name={who} className="size-6" />
-              {who}
-            </button>
-          ))}
-        </div>
       )}
 
-      {submitting && name
+      {submitting
         ? createPortal(
             <SubmitDialog
               id={request.id}
-              name={name}
+              name={reviewer.name}
               onClose={() => setSubmitting(false)}
               onSend={async (response, verdict) => {
-                const result = await finishReview({ slug, id: request.id, name, response, verdict });
+                const result = await finishReviewAs(slug, request.id, reviewer.key, response, verdict);
                 if (!result.ok) return result.error;
-                writeDraft(draftKey(request.id, name), null);
+                writeDraft(draftKey(request.id, reviewer.name), null);
                 await load();
                 return null;
               }}

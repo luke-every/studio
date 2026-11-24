@@ -53,7 +53,7 @@ export function SharedPrototype(props: Parameters<typeof Shared>[0]) {
   return (
     <MotionProvider>
       <StudioProvider snapshot={NOTHING}>
-        <SharedCommentsContext.Provider value={{ token: props.token }}>
+        <SharedCommentsContext.Provider value={{ token: props.token, as: props.reviewer?.name }}>
           <Shared {...props} />
         </SharedCommentsContext.Provider>
       </StudioProvider>
@@ -74,6 +74,7 @@ function Shared({
   token,
   dev = false,
   request,
+  reviewer,
 }: {
   name: string;
   description: string;
@@ -93,6 +94,8 @@ function Shared({
   dev?: boolean;
   /** Opened for a review request: the side column is the review (what was asked, the variations to look at, sending it) and the rest of the page's extras are left out. */
   request?: ReviewRequest;
+  /** On a review link: who it is for, and the key that is theirs alone. They are that person here whoever this browser has chosen to be. */
+  reviewer?: { name: string; key: string };
 }) {
   const offered = usePrototypeControls(version.url);
   const variants = useVersionVariants(version.url);
@@ -180,7 +183,7 @@ function Shared({
   const columnOpen = !((hidden || full || flowOpen) && wide);
   // Somebody has to say who they are before commenting, once, on this browser.
   const changeMode = (next: "view" | "dev" | "edit" | "comment") => {
-    if (next === "comment" && !user.name) {
+    if (next === "comment" && !user.name && !reviewer) {
       setNaming(true);
       return;
     }
@@ -216,8 +219,8 @@ function Shared({
     </>
   );
 
-  const info = request ? (
-    <ReviewPanel slug={slug} title={name} versionLabel={version.label} request={request} current={chosenAddress.split("?")[1] ?? ""} onSetup={showSetup} />
+  const info = request && reviewer ? (
+    <ReviewPanel slug={slug} title={name} versionLabel={version.label} request={request} reviewer={reviewer} current={chosenAddress.split("?")[1] ?? ""} onSetup={showSetup} />
   ) : (
     about
   );

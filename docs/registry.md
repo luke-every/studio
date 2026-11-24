@@ -21,7 +21,7 @@ GitHub   registry.json                  teams, projects, prototypes, versions
          p/<slug>/<version>/index.html  the version's entry point
          p/<slug>/<version>/<...>       every other file in the folder pushed
          comments/<slug>/<version>.json comments and replies left on that version
-         reviews/<slug>.json            review requests for that prototype: version, message, due date, and each reviewer's opened / done / verdict / response
+         reviews/<slug>.json            review requests for that prototype: version, message, due date, and each reviewer's Slack id, personal key (the link's, never shown on the studio's pages), opened / done / verdict / response
          people/slack.json              each person's Slack member id and display name, by lower-case name
          handoff/<slug>/<version>.json  that version's handoff: findings, decisions, sign-off
          canvas/<slug>/<version>.json   where that version's screens, frames and layers were put on the canvas

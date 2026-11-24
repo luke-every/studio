@@ -155,7 +155,7 @@ not a partition of it, so the team page always lists everything.
 - `/prototypes/[slug]` — one prototype: the thing itself, what it is, and
   its history. `?v=v0.2` opens a particular version.
 - `/p/<slug>/<version>` — the prototype's own files, outside the door.
-- `/r/<slug>/<request>` — a review request, for the person asked: the share view in review mode, no nav, behind the door.
+- `/r/<slug>/<request>?k=<key>` — a review request, for the person asked: the share view in review mode, no nav. The key is theirs alone and says who they are; no password, no sign-in.
 
 The top bar is the Every Studio logo (a square with an E), then Home (a menu of teams) or breadcrumbs, and on the right search, notifications and the user menu. There is no settings page.
 

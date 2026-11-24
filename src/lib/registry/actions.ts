@@ -409,24 +409,35 @@ export async function testSlack(name: string) {
   return attempt(() => slack.sendSlackTest(name), []);
 }
 
-/** A prototype's review requests, newest first. */
+/** A prototype's review requests, newest first, without anybody's personal key. */
 export async function listReviews(slug: string) {
-  return attempt(() => reviews.readReviews(slug), []);
+  return attempt(async () => reviews.publicReviews(await reviews.readReviews(slug)), []);
 }
+
+/** Everyone in the Slack workspace who can be asked to review. */
+export async function slackMembers() {
+  return attempt(() => slack.slackMembers(), []);
+}
+
+/**
+ * What the person a review link is for may do: see where they have got to, open it, send their review. The link's key says who
+ * they are and is looked for in the stored request, so none of these needs the door, and none reaches anybody else's part.
+ */
+async function asReviewer<T>(work: () => Promise<T>): Promise<WriteResult<{ value: T }>> {
+  try {
+    return { ok: true, value: await work() };
+  } catch (error) {
+    return { ok: false, error: userMessage(error) };
+  }
+}
+
+export const reviewStateAs = async (slug: string, id: string, key: string) => asReviewer(() => reviews.reviewerState(slug, id, key));
+export const openReviewAs = async (slug: string, id: string, key: string) => asReviewer(() => reviews.openReviewAs(slug, id, key));
+export const finishReviewAs = async (slug: string, id: string, key: string, response: string, verdict: string) => asReviewer(() => reviews.finishReviewAs(slug, id, key, response, verdict));
 
 /** Asks people to review a version. Saved first; Slack tells them after. */
 export async function requestReview(input: Parameters<typeof reviews.requestReview>[0]) {
   return attempt(() => reviews.requestReview(input), []);
-}
-
-/** A reviewer opened their review. */
-export async function openReview(input: Parameters<typeof reviews.openReview>[0]) {
-  return attempt(() => reviews.openReview(input), []);
-}
-
-/** A reviewer sent their review. */
-export async function finishReview(input: Parameters<typeof reviews.finishReview>[0]) {
-  return attempt(() => reviews.finishReview(input), []);
 }
 
 /** Design QA, on this machine only (see `design-qa.ts`). */

@@ -115,9 +115,11 @@ export function useOtherComments(slug: string | undefined, keys: string[], activ
  * boring way, and it stops while the tab is hidden.) A list grows, and
  * comments get resolved or deleted.
  */
-export function useComments(slug: string | undefined, version: string | undefined, by: string, variant?: string, active = true) {
+export function useComments(slug: string | undefined, version: string | undefined, chosenBy: string, variant?: string, active = true) {
   const { profileOf } = useUser();
   const sharedAs = useSharedComments();
+  // On a review link, comments are left as the person it is for, whoever this browser has chosen to be.
+  const by = sharedAs?.as ?? chosenBy;
   const avatar = by ? profileOf(by).avatar : undefined;
   const target = slug && version ? { slug, version } : undefined;
   const key = target ? `${slug}/${version}` : "";

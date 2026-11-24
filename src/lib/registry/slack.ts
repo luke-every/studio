@@ -31,6 +31,55 @@ const parse = (text: string | null): Record<string, Entry> =>
 /** Everyone who has said who they are on Slack, by lower-case name. */
 export const slackPeople = async () => parse(await readStoreFile(PATH));
 
+export type SlackMember = { id: string; name: string; image?: string };
+
+let remembered: { at: number; members: SlackMember[] } | null = null;
+const REMEMBER_MS = 5 * 60_000;
+
+/** Everyone in the workspace who can be asked: not bots, not people who have left. Needs the app to have `users:read`. Kept for a few minutes. */
+export async function slackMembers(): Promise<SlackMember[]> {
+  if (!token()) throw new Error("Slack isn't connected.");
+  if (remembered && Date.now() - remembered.at < REMEMBER_MS) return remembered.members;
+  type Listed = { ok?: boolean; error?: string; members?: { id: string; name?: string; real_name?: string; deleted?: boolean; is_bot?: boolean; profile?: { real_name?: string; display_name?: string; image_72?: string } }[]; response_metadata?: { next_cursor?: string } };
+  const members: SlackMember[] = [];
+  let cursor = "";
+  do {
+    const url = new URL("https://slack.com/api/users.list");
+    url.searchParams.set("limit", "200");
+    if (cursor) url.searchParams.set("cursor", cursor);
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
+    const result = (await response.json().catch(() => null)) as Listed | null;
+    if (!result?.ok) {
+      throw new Error(result?.error === "missing_scope" ? "Slack needs the users:read permission. Add it to the app and reinstall it." : `Slack refused it: ${result?.error ?? `no answer (${response.status})`}.`);
+    }
+    for (const member of result.members ?? []) {
+      if (member.deleted || member.is_bot || member.id === "USLACKBOT") continue;
+      const name = member.profile?.real_name?.trim() || member.real_name?.trim() || member.profile?.display_name?.trim() || member.name || member.id;
+      members.push({ id: member.id, name, image: member.profile?.image_72 });
+    }
+    cursor = result.response_metadata?.next_cursor ?? "";
+  } while (cursor);
+  members.sort((a, b) => a.name.localeCompare(b.name));
+  remembered = { at: Date.now(), members };
+  return members;
+}
+
+/** Who a studio name is on Slack: the full name, or a first name that only one person has. */
+export function matchMember(name: string, members: SlackMember[]) {
+  const wanted = keyOf(name);
+  const exact = members.filter((member) => keyOf(member.name) === wanted);
+  if (exact.length === 1) return exact[0];
+  const first = members.filter((member) => keyOf(member.name).split(/\s+/)[0] === wanted);
+  return first.length === 1 ? first[0] : undefined;
+}
+
+/** A person's Slack id: the one they saved, else who they are in the workspace. */
+async function slackIdFor(name: string) {
+  const saved = (await slackPeople())[keyOf(name)]?.id;
+  if (saved) return saved;
+  return matchMember(name, await slackMembers().catch(() => []))?.id;
+}
+
 /** Sets a person's Slack member id, or takes it away when it is empty. */
 export async function setSlackId(name: string, id: string) {
   const key = keyOf(name);
@@ -70,8 +119,17 @@ export async function sendSlackTest(name: string) {
 export async function tellOnSlack(name: string, text: string) {
   try {
     if (!slackConnected()) return;
-    const id = (await slackPeople())[keyOf(name)]?.id;
+    const id = await slackIdFor(name);
     if (id) await post(id, text);
+  } catch (error) {
+    console.error("slack failed", error instanceof InfraError ? error.message : error);
+  }
+}
+
+/** Tells somebody on Slack by their id, when it was picked from the workspace. Never throws, like `tellOnSlack`. */
+export async function tellSlackId(id: string, text: string) {
+  try {
+    if (slackConnected()) await post(id, text);
   } catch (error) {
     console.error("slack failed", error instanceof InfraError ? error.message : error);
   }

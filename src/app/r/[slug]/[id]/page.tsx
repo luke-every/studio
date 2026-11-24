@@ -10,33 +10,37 @@ import { mintShareToken } from "@/lib/share";
 
 /**
  * A review request, for the person asked: the version it was made on, with what they were asked and a way to answer, and none of
- * the studio around it. It is the share view in review mode, so it is behind the studio's door like the rest but has no nav.
- * Made when it is asked for, since requests are made after the build.
+ * the studio around it. It is the share view in review mode. The link carries a key that is theirs alone, which says who they are:
+ * nobody signs in and there is no password. Made when it is asked for, since requests are made after the build.
  */
 export const dynamic = "force-dynamic";
 
-async function find(slug: string, id: string) {
+async function find(slug: string, id: string, key: string | undefined) {
   try {
     const prototype = await getPrototype(slug);
     const review = (await readReviews(slug)).find((item) => item.id === id);
+    const reviewer = key ? review?.reviewers.find((one) => one.key === key) : undefined;
     const version = review && prototype?.versions.find((item) => !item.live && !item.blank && item.version === review.version);
-    return prototype && review && version?.url ? { prototype, review, version } : null;
+    return prototype && review && reviewer && version?.url ? { prototype, review, reviewer, version } : null;
   } catch {
     return null;
   }
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string; id: string }> }) {
+type Props = { params: Promise<{ slug: string; id: string }>; searchParams: Promise<{ k?: string }> };
+
+export async function generateMetadata({ params, searchParams }: Props) {
   const { slug, id } = await params;
-  const found = await find(slug, id);
+  const found = await find(slug, id, (await searchParams).k);
   return { title: found ? `Review · ${found.prototype.name} ${found.version.version}` : "Studio", robots: { index: false } };
 }
 
-export default async function ReviewPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
+export default async function ReviewPage({ params, searchParams }: Props) {
   const { slug, id } = await params;
-  const found = await find(slug, id);
-  if (!found) notFound();
-  const { prototype, review, version } = found;
+  const key = (await searchParams).k;
+  const found = await find(slug, id, key);
+  if (!found || !key) notFound();
+  const { prototype, review, reviewer, version } = found;
 
   return (
     <SharedPrototype
@@ -51,7 +55,8 @@ export default async function ReviewPage({ params }: { params: Promise<{ slug: s
       // What lets comments be read and written on this one version, and nothing else.
       token={mintShareToken(prototype.slug, version.key)}
       review={mintReviewToken(prototype.slug, versionSegment(version.key), { forever: true })}
-      request={{ id: review.id, by: review.by, message: review.message, due: review.due, dueBy: review.dueBy, variants: review.variants, reviewers: review.reviewers.map((one) => one.name) }}
+      request={{ id: review.id, by: review.by, message: review.message, due: review.due, dueBy: review.dueBy, variants: review.variants }}
+      reviewer={{ name: reviewer.name, key }}
     />
   );
 }

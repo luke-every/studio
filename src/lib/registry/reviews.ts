@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { isStoreConfigured, readStoreFileShared, updateStoreFile } from "./store";
 import { getPrototype } from "./index";
-import { linkLine, tellOnSlack } from "./slack";
+import { linkLine, tellOnSlack, tellSlackId } from "./slack";
 import { versionSegment } from "./version";
 import { named } from "./write";
 
@@ -23,7 +23,7 @@ export async function readReviews(slug: string): Promise<Review[]> {
   return text ? reviewsFileSchema.parse(JSON.parse(text)) : [];
 }
 
-type Request = { slug: string; version: string; message: string; due?: string; dueBy?: "lunch" | "eod"; reviewers: string[]; by?: string; variants?: { setup: string; label: string }[] };
+type Request = { slug: string; version: string; message: string; due?: string; dueBy?: "lunch" | "eod"; reviewers: { name: string; slackId?: string }[]; by?: string; variants?: { setup: string; label: string }[] };
 
 export async function requestReview(input: Request): Promise<Review> {
   const prototype = await getPrototype(input.slug);
@@ -32,9 +32,18 @@ export async function requestReview(input: Request): Promise<Review> {
   if (!version) throw new Error("Choose a version that has been pushed.");
 
   const by = named(input.by);
-  const names = [...new Set(input.reviewers.map((name) => name.trim()).filter(Boolean))];
-  if (!names.length) throw new Error("Choose who should review it.");
-  if (input.due && !/^\d{4}-\d{2}-\d{2}$/.test(input.due)) throw new Error("That isn't a date.");
+  // Each person once, by who they are on Slack when that is known, else by name.
+  const seen = new Set<string>();
+  const people = input.reviewers.flatMap((one) => {
+    const name = one.name.trim();
+    const slackId = one.slackId?.trim() || undefined;
+    if (slackId && !/^[UW][A-Z0-9]{6,}$/.test(slackId)) throw new Error("One of the people chosen isn't on Slack as that. Choose them again.");
+    const id = slackId ?? name.toLowerCase();
+    if (!name || seen.has(id)) return [];
+    seen.add(id);
+    return [{ name, slackId }];
+  });
+  if (!people.length) throw new Error("Choose who should review it.");
   const asked = z.array(variantSchema).max(20).safeParse(input.variants ?? []);
   if (!asked.success) throw new Error("Those variations couldn't be read. Choose them again.");
   if (!isStoreConfigured()) throw new Error("No content repository is connected, so nothing can be saved.");
@@ -48,20 +57,22 @@ export async function requestReview(input: Request): Promise<Review> {
     dueBy: input.due ? (input.dueBy === "lunch" ? "lunch" : "eod") : undefined,
     by: by.name,
     at: new Date().toISOString(),
-    reviewers: names.map((name) => ({ name })),
+    // Each has a key of their own: their link is how the review page knows who is looking, so nobody signs in.
+    reviewers: people.map((one) => ({ ...one, key: crypto.randomUUID() })),
   };
   await updateStoreFile(pathFor(input.slug), (text) => ({
     content: JSON.stringify([review, ...(text ? reviewsFileSchema.parse(JSON.parse(text)) : [])]),
-    message: `Review of ${input.slug} ${review.version} requested of ${names.join(", ")}`,
+    message: `Review of ${input.slug} ${review.version} requested of ${people.map((one) => one.name).join(", ")}`,
   }));
 
   // Saved first: whether anybody hears about it is a separate matter.
-  const link = linkLine(`/r/${input.slug}/${review.id}`, "Open the review");
   const due = review.due ? ` by ${dueLabel(review.due, review.dueBy)}` : "";
   await Promise.all(
-    names.map((name) =>
-      tellOnSlack(name, `*${by.name}* asked you to review *${prototype.name}* ${review.version}${due}.${review.message ? `\n>${review.message.replace(/\n/g, "\n>")}` : ""}${review.variants ? `\nLook at: ${review.variants.map((one) => one.label).join(", ")}` : ""}${link}`),
-    ),
+    review.reviewers.map((one) => {
+      const link = linkLine(`/r/${input.slug}/${review.id}?k=${one.key}`, "Open the review");
+      const text = `*${by.name}* asked you to review *${prototype.name}* ${review.version}${due}.${review.message ? `\n>${review.message.replace(/\n/g, "\n>")}` : ""}${review.variants ? `\nLook at: ${review.variants.map((one) => one.label).join(", ")}` : ""}${link}`;
+      return one.slackId ? tellSlackId(one.slackId, text) : tellOnSlack(one.name, text);
+    }),
   );
   return review;
 }
@@ -128,4 +139,33 @@ export async function reviewFor(input: { slug: string; version: string; by: stri
   const found = (await readReviews(input.slug)).find((item) => item.id === input.review);
   if (!found || versionSegment(found.version) !== versionSegment(input.version)) return undefined;
   return found.reviewers.some((one) => same(one.name, input.by)) ? found.id : undefined;
+}
+
+/** A request without anybody's personal keys, for the studio's own pages: a key is for the one link it is in. */
+export const publicReviews = (all: Review[]): Review[] =>
+  all.map((review) => ({ ...review, reviewers: review.reviewers.map(({ name, slackId, openedAt, doneAt, verdict, response }) => ({ name, slackId, openedAt, doneAt, verdict, response })) }));
+
+/** The person a personal link is for, and the request, or an error that can be read. The key is theirs alone and is looked for in the stored request. */
+export async function reviewerFor(slug: string, id: string, key: string) {
+  const review = (await readReviews(slug)).find((item) => item.id === id);
+  const one = key ? review?.reviewers.find((person) => person.key === key) : undefined;
+  if (!review || !one) throw new Error("This link isn't valid.");
+  return { review, name: one.name };
+}
+
+/** Where the person a link is for has got to, and nobody else's. */
+export async function reviewerState(slug: string, id: string, key: string) {
+  const { review, name } = await reviewerFor(slug, id, key);
+  const one = mine(review, name);
+  return { name: one.name, openedAt: one.openedAt, doneAt: one.doneAt, verdict: one.verdict, response: one.response };
+}
+
+export async function openReviewAs(slug: string, id: string, key: string) {
+  const { name } = await reviewerFor(slug, id, key);
+  await openReview({ slug, id, name });
+}
+
+export async function finishReviewAs(slug: string, id: string, key: string, response: string, verdict: string) {
+  const { name } = await reviewerFor(slug, id, key);
+  await finishReview({ slug, id, name, response, verdict });
 }

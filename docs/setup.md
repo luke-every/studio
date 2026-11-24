@@ -32,7 +32,7 @@ here.
      `luke-every/prototype-studio-content`.
    - `STUDIO_CONTENT_BRANCH` — optional, defaults to `main`.
 5. Optional, for Slack messages: create a Slack app in your workspace, give it
-   the `chat:write` bot scope, install it, and add `SLACK_BOT_TOKEN` (the bot
+   the `chat:write` and `users:read` bot scopes (the second lets the review picker list the workspace's people), install it, and add `SLACK_BOT_TOKEN` (the bot
    token, starting `xoxb-`). Without it nothing is sent to Slack and nothing
    else changes. Each person then adds their own member ID in Settings.
 6. Redeploy so all of it takes effect.

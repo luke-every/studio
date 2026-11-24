@@ -30,7 +30,11 @@ export const reviewSchema = z.object({
   reviewers: z
     .array(
       z.object({
-        name: z.string().min(1).max(40),
+        name: z.string().min(1).max(80),
+        /** Who they are on Slack, when they were picked from there: they are told by it. */
+        slackId: z.string().optional(),
+        /** Theirs alone, in the link they are sent: it is how the review page knows who is looking, with no sign-in. Never shown to anybody else. */
+        key: z.string().optional(),
         /** The first time they opened it. */
         openedAt: z.string().optional(),
         /** When they sent their review. Once set, it is theirs to leave and no longer to change. */
@@ -53,7 +57,7 @@ export type Review = z.infer<typeof reviewSchema>;
 export type DueBy = NonNullable<Review["dueBy"]>;
 
 /** What a review page knows from the start: the request as it was made, which never changes. Where each person has got to is read fresh. */
-export type ReviewRequest = Pick<Review, "id" | "by" | "message" | "due" | "dueBy" | "variants"> & { reviewers: string[] };
+export type ReviewRequest = Pick<Review, "id" | "by" | "message" | "due" | "dueBy" | "variants">;
 
 /** The hour (in the reader's own time) that lunch and the end of the day stand for. */
 const DUE_HOUR: Record<DueBy, number> = { lunch: 12, eod: 17 };
