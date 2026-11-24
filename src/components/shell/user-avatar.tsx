@@ -48,7 +48,18 @@ export function UserAvatar({
     );
   }
 
-  const { avatar, color } = profile ?? profileOf(name);
+  const { avatar, color, image } = profile ?? profileOf(name);
+
+  // Their own photo, where they have one: the studio's face is for everybody else.
+  if (image) {
+    const photo = (
+      <span aria-hidden className={`grid shrink-0 overflow-hidden rounded-[var(--r-full)] bg-surface-inset ${className}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={image} alt="" draggable={false} className="size-full object-cover" />
+      </span>
+    );
+    return tip ? <WithTip label={name}>{photo}</WithTip> : photo;
+  }
   // The face fills the circle, kept in from the edge by the same share however big it is: 16px in a 124px circle.
   const circle = (
     <span

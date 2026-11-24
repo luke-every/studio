@@ -7,7 +7,7 @@ import { readStudioFile, updateStudioFile, workingCopiesOn, WORKING_VERSION } fr
 import { isStoreConfigured, readStoreFileShared, updateStoreFile } from "./store";
 import { VERSION_PATTERN, versionSegment } from "./version";
 import { announceComment, announceLike } from "./push";
-import { reviewFor } from "./reviews";
+import { reviewFor, tellReviewReply } from "./reviews";
 import { named } from "./write";
 
 /**
@@ -106,7 +106,7 @@ async function post(input: CommentInput) {
   const at = new Date().toISOString();
   const review = input.parentId ? undefined : await reviewFor({ slug: input.slug, version: input.version, by: named(input.by).name, review: input.review });
 
-  const comment = await update(input.slug, input.version, (comments) => {
+  const { comment, parent } = await update(input.slug, input.version, (comments) => {
     const parent = input.parentId ? comments.find((item) => item.id === input.parentId) : undefined;
     if (input.parentId && (!parent || parent.parentId)) throw new Error("That comment isn't there to reply to.");
     const anchor = parent?.anchor ?? (input.anchor ? anchorSchema.parse(input.anchor) : null);
@@ -125,19 +125,23 @@ async function post(input: CommentInput) {
       device: parent ? parent.device : input.device,
       parentId: parent?.id,
       note: input.note || undefined,
-      review,
+      // A reply is part of its comment's thread, so of its review.
+      review: parent ? parent.review : review,
     };
     return {
       comments: [...comments, comment],
       message: `${parent ? "Reply to" : comment.note ? "Note" : "Comment"} #${comment.n} on ${input.slug} ${input.version}`,
-      result: comment,
+      result: { comment, parent },
     };
   });
   if (comment.note) return comment;
   if (working(input.version)) {
     // A comment for Claude starts it in the background; whatever happens to that, the comment itself is saved.
     await claude.ask(input.slug, comment).catch(() => {});
-  } else await announceComment({ slug: input.slug, version: input.version, comment, avatar: input.avatar });
+  } else {
+    await announceComment({ slug: input.slug, version: input.version, comment, avatar: input.avatar });
+    if (parent) await tellReviewReply({ slug: input.slug, version: input.version, parent, reply: comment });
+  }
   return comment;
 }
 

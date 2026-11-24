@@ -15,6 +15,8 @@ export type Profile = {
   avatar: number;
   /** Which colour, from 0, in `AVATAR_COLORS`. */
   color: number;
+  /** Their own photo (from Slack), shown instead of a face when they have one. */
+  image?: string;
 };
 
 export const avatarSrc = (avatar: number) => `/avatars/${avatar + 1}.png`;

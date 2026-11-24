@@ -194,7 +194,7 @@ Full detail in `docs/registry.md`. The rules that must not be violated:
    tags appear nowhere in the interface.
 8. **Per-person state stays client-side.** Recently opened, view mode.
 9. **Nobody signs in.** One shared password opens the studio and authorises
-   the API. Authorship is a name, not an account. Do not add authentication.
+   the API. Authorship is a name; the studio's people are a small shared list (`people/directory.json`: a name, and a Slack photo when they have one), joined by asking or being asked for a review, and a review link carries a key of its own. Still no login. Do not add authentication.
 10. **Setup is three environment variables** — a content repository token and
     name, and a password. Do not add a fourth without asking.
 11. **Prefer boring infrastructure.** Complexity is earned by a requirement.

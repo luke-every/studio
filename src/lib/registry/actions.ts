@@ -18,6 +18,7 @@ import * as handoff from "./handoff";
 import * as changeSet from "./change-set";
 import * as liveEdits from "./live-edits";
 import * as push from "./push";
+import * as directory from "./directory";
 import * as reviews from "./reviews";
 import * as slack from "./slack";
 import * as registry from "./write";
@@ -412,6 +413,11 @@ export async function testSlack(name: string) {
 /** A prototype's review requests, newest first, without anybody's personal key. */
 export async function listReviews(slug: string) {
   return attempt(async () => reviews.publicReviews(await reviews.readReviews(slug)), []);
+}
+
+/** The studio's people: names, and a Slack photo for those who have one. */
+export async function listPeople() {
+  return attempt(async () => (await directory.readDirectory()).map(({ name, image }) => ({ name, image })), []);
 }
 
 /** Everyone in the Slack workspace who can be asked to review. */

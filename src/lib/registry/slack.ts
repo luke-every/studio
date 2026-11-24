@@ -40,7 +40,7 @@ const REMEMBER_MS = 5 * 60_000;
 export async function slackMembers(): Promise<SlackMember[]> {
   if (!token()) throw new Error("Slack isn't connected.");
   if (remembered && Date.now() - remembered.at < REMEMBER_MS) return remembered.members;
-  type Listed = { ok?: boolean; error?: string; members?: { id: string; name?: string; real_name?: string; deleted?: boolean; is_bot?: boolean; profile?: { real_name?: string; display_name?: string; image_72?: string } }[]; response_metadata?: { next_cursor?: string } };
+  type Listed = { ok?: boolean; error?: string; members?: { id: string; name?: string; real_name?: string; deleted?: boolean; is_bot?: boolean; profile?: { real_name?: string; display_name?: string; image_72?: string; is_custom_image?: boolean } }[]; response_metadata?: { next_cursor?: string } };
   const members: SlackMember[] = [];
   let cursor = "";
   do {
@@ -55,7 +55,8 @@ export async function slackMembers(): Promise<SlackMember[]> {
     for (const member of result.members ?? []) {
       if (member.deleted || member.is_bot || member.id === "USLACKBOT") continue;
       const name = member.profile?.real_name?.trim() || member.real_name?.trim() || member.profile?.display_name?.trim() || member.name || member.id;
-      members.push({ id: member.id, name, image: member.profile?.image_72 });
+      // Only a photo they chose: Slack's stand-in is a letter on a colour, which the studio's own default does better.
+      members.push({ id: member.id, name, image: member.profile?.is_custom_image ? member.profile.image_72 : undefined });
     }
     cursor = result.response_metadata?.next_cursor ?? "";
   } while (cursor);

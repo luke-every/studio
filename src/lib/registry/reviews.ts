@@ -1,11 +1,13 @@
 import "server-only";
 
+import type { Comment } from "@/lib/comments";
 import { dueLabel, reviewsFileSchema, variantSchema, VERDICTS, type Review } from "@/lib/reviews";
 import { z } from "zod";
 
 import { isStoreConfigured, readStoreFileShared, updateStoreFile } from "./store";
 import { getPrototype } from "./index";
-import { linkLine, tellOnSlack, tellSlackId } from "./slack";
+import { rememberPeople } from "./directory";
+import { linkLine, matchMember, slackMembers, tellOnSlack, tellSlackId } from "./slack";
 import { versionSegment } from "./version";
 import { named } from "./write";
 
@@ -64,6 +66,16 @@ export async function requestReview(input: Request): Promise<Review> {
     content: JSON.stringify([review, ...(text ? reviewsFileSchema.parse(JSON.parse(text)) : [])]),
     message: `Review of ${input.slug} ${review.version} requested of ${people.map((one) => one.name).join(", ")}`,
   }));
+
+  // Everybody on it joins the studio's people, with their Slack photo if they have one. Like the messages, never the reason a request fails.
+  try {
+    const workspace = await slackMembers().catch(() => []);
+    const photo = (id?: string) => workspace.find((member) => member.id === id)?.image;
+    const asking = matchMember(by.name, workspace);
+    await rememberPeople([...review.reviewers.map((one) => ({ name: one.name, slackId: one.slackId, image: photo(one.slackId) })), { name: by.name, slackId: asking?.id, image: asking?.image }]);
+  } catch (error) {
+    console.error("remembering people failed", error);
+  }
 
   // Saved first: whether anybody hears about it is a separate matter.
   const due = review.due ? ` by ${dueLabel(review.due, review.dueBy)}` : "";
@@ -168,4 +180,37 @@ export async function openReviewAs(slug: string, id: string, key: string) {
 export async function finishReviewAs(slug: string, id: string, key: string, response: string, verdict: string) {
   const { name } = await reviewerFor(slug, id, key);
   await finishReview({ slug, id, name, response, verdict });
+}
+
+/**
+ * A reply in a review's thread is told on Slack to the other side: to the person whose comment it answers, by their own link, when
+ * somebody else replied (the person who asked, say); to the person who asked, when a reviewer is the one replying. Never throws.
+ */
+export async function tellReviewReply(input: { slug: string; version: string; parent: Comment; reply: Comment }) {
+  try {
+    const { parent, reply } = input;
+    if (!parent.review || same(parent.author.name, reply.author.name)) return;
+    const review = (await readReviews(input.slug)).find((item) => item.id === parent.review);
+    if (!review) return;
+    const prototype = await getPrototype(input.slug);
+    const where = `*${prototype?.name ?? input.slug}* ${review.version}`;
+    const quote = `>${reply.text.trim().replace(/\n/g, "\n>")}`;
+
+    const replier = review.reviewers.find((one) => same(one.name, reply.author.name));
+    if (replier) {
+      // A reviewer answering: the person who asked hears, at the comment in the studio.
+      if (same(review.by, replier.name)) return;
+      const link = linkLine(`/prototypes/${input.slug}?${new URLSearchParams({ v: review.version, comment: parent.id })}`, "See the thread");
+      await tellOnSlack(review.by, `*${replier.name}* replied on ${where}:\n${quote}${link}`);
+      return;
+    }
+    // Somebody else answering a reviewer's comment: that reviewer hears, at the comment in their review.
+    const asked = review.reviewers.find((one) => same(one.name, parent.author.name));
+    if (!asked?.key) return;
+    const link = linkLine(`/r/${input.slug}/${review.id}?${new URLSearchParams({ k: asked.key, comment: parent.id })}`, "See the reply");
+    const text = `*${reply.author.name}* replied to your comment on ${where}:\n${quote}${link}`;
+    await (asked.slackId ? tellSlackId(asked.slackId, text) : tellOnSlack(asked.name, text));
+  } catch (error) {
+    console.error("telling about a reply failed", error);
+  }
 }

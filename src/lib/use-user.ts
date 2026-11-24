@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+
+import { listPeople } from "@/lib/registry/actions";
 
 import { AVATAR_COLORS, AVATAR_COUNT, defaultProfile, type Profile } from "./avatars";
 
@@ -24,11 +26,29 @@ export type UserState = {
   people: Profile[];
   /** The chosen name, GUEST for a guest, null if nobody has chosen yet. */
   current: string | null;
+  /** The studio's shared people (see `registry/directory.ts`), read once: those asked to review, with their Slack photo if they have one. */
+  directory: Shared[];
 };
 
-const SERVER: UserState = { ready: false, people: SEEDED.map(defaultProfile), current: null };
+type Shared = { name: string; image?: string };
+
+const SERVER: UserState = { ready: false, people: SEEDED.map(defaultProfile), current: null, directory: [] };
 const listeners = new Set<() => void>();
 let cache: UserState | null = null;
+let directory: Shared[] = [];
+let asked = false;
+
+/** The studio's people are read once, the first time anything here is listening; not being able to is not an error, the browser's own people are still there. */
+function loadDirectory() {
+  if (asked) return;
+  asked = true;
+  void listPeople().then((result) => {
+    if (!result.ok) return;
+    directory = result.value;
+    cache = cache ? { ...cache, directory } : cache;
+    listeners.forEach((listener) => listener());
+  });
+}
 
 function isProfile(value: unknown): value is Profile {
   const profile = value as Profile;
@@ -62,6 +82,7 @@ function load(): UserState {
     ready: true,
     people: people ?? [...SEEDED, ...legacy.filter((name) => !SEEDED.includes(name))].map(defaultProfile),
     current,
+    directory,
   };
 }
 
@@ -88,6 +109,7 @@ function commit(next: { current?: string | null; people?: Profile[] }) {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
+  loadDirectory();
   // Another tab changing the user changes it here too.
   const onStorage = (event: StorageEvent) => {
     if (event.key === CURRENT_KEY || event.key === PEOPLE_KEY) {
@@ -104,9 +126,21 @@ function subscribe(listener: () => void) {
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/** This browser's people with the studio's among them: a shared person has their photo wherever they are, and is on offer on every device. */
+function withShared(local: Profile[], shared: Shared[]): Profile[] {
+  const photo = new Map(shared.flatMap((one) => (one.image ? [[one.name.toLowerCase(), one.image] as const] : [])));
+  const have = new Set(local.map((one) => one.name.toLowerCase()));
+  return [
+    ...local.map((one) => (photo.has(one.name.toLowerCase()) ? { ...one, image: photo.get(one.name.toLowerCase()) } : one)),
+    ...shared.filter((one) => !have.has(one.name.toLowerCase())).map((one) => ({ ...defaultProfile(one.name), image: one.image })),
+  ];
+}
+
 /** The user, and the ways to change them. */
 export function useUser() {
-  const state = useSyncExternalStore(subscribe, snapshot, () => SERVER);
+  const own = useSyncExternalStore(subscribe, snapshot, () => SERVER);
+  const people = useMemo(() => withShared(own.people, own.directory), [own.people, own.directory]);
+  const state = { ...own, people };
   const choose = useCallback((name: string) => commit({ current: name }), []);
 
   /** Add somebody and become them. Returns what is wrong with it, or null. */
