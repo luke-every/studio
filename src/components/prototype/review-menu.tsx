@@ -64,7 +64,7 @@ export function ReviewMenu({ prototype, version }: { prototype: Prototype; versi
                 return (
                   <div key={review.id} role="group" aria-label={review.version}>
                     {index ? <div role="separator" className="my-1 h-px bg-border" /> : null}
-                    <Link role="menuitem" href={`/prototypes/${prototype.slug}/reviews`} onClick={() => setOpen(false)} className={`${rowClass} !flex-col !items-stretch !gap-1`}>
+                    <Link role="menuitem" href={`/prototypes/${prototype.slug}?${new URLSearchParams({ v: review.version, comments: "1" })}`} onClick={() => setOpen(false)} className={`${rowClass} !flex-col !items-stretch !gap-1`}>
                       {/* Who first, each with where they have got to; the version and its count are the quiet line over them. */}
                       <span className="flex items-center justify-between gap-3 text-sm text-foreground-muted">
                         <span>

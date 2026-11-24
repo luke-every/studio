@@ -187,6 +187,15 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
     openedByLink.current = true;
     setFlowOpen(true);
   }, [canvasParam, address]);
+  // A link to a review's feedback (`?comments=1`): it opens the prototype with its comments, the list beside it, once.
+  const commentsParam = useUrlParam("comments");
+  const commentsOpened = useRef(false);
+  useEffect(() => {
+    if (commentsParam === null || commentsOpened.current) return;
+    commentsOpened.current = true;
+    setMode("comment");
+    setListing(true);
+  }, [commentsParam]);
   // The canvas is in the address while it is open, so a refresh opens it again. Nothing is taken out of the address before it has been open:
   // a link carrying `?canvas=1` is still waiting to be read.
   const wasOpen = useRef(false);

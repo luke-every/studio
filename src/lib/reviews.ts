@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import type { Comment } from "@/lib/comments";
-
 /**
  * Review requests: a deliberate ask for one person (or several) to look at one
  * version and answer. Kept one file per prototype, beside the comments. A
@@ -96,16 +94,6 @@ export function dueOptions(now = new Date()) {
     { date: day(first), label: `${day(first) === day(tomorrow) ? "Tomorrow" : weekday(first)} EOD` },
     { date: day(second), label: `${weekday(second)} EOD` },
   ];
-}
-
-/**
- * The comments that belong to one review of a version, out of everything said on it: those left for that request, and the replies in
- * those threads. Nothing else on the version comes with them, whoever wrote it (a name is not a reason: the person asking may have the
- * same one, and comments of their own on the version are not part of this review).
- */
-export function mineOf(all: Comment[], review: string) {
-  const threads = new Set(all.filter((comment) => !comment.parentId && comment.review === review).map((comment) => comment.id));
-  return all.filter((comment) => (comment.parentId ? threads.has(comment.parentId) : comment.review === review));
 }
 
 /**

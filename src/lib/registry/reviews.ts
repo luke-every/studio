@@ -139,7 +139,7 @@ export async function finishReview(input: { slug: string; id: string; name: stri
   const done = after.reviewers.filter((one) => one.doneAt).length;
   await tellOnSlack(
     after.by,
-    `*${mine(after, input.name).name}* finished their review of *${prototype?.name ?? input.slug}* ${after.version} (${done} of ${after.reviewers.length} in).${response ? `\n>${response.replace(/\n/g, "\n>")}` : ""}${linkLine(`/prototypes/${input.slug}/reviews`, "See the reviews")}`,
+    `*${mine(after, input.name).name}* finished their review of *${prototype?.name ?? input.slug}* ${after.version} (${done} of ${after.reviewers.length} in).${response ? `\n>${response.replace(/\n/g, "\n>")}` : ""}${linkLine(`/prototypes/${input.slug}?${new URLSearchParams({ v: after.version, comments: "1" })}`, "See the feedback")}`,
   );
 }
 

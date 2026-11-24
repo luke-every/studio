@@ -62,7 +62,7 @@ export function ReviewCards({ slug, reviews, left }: { slug: string; reviews: Re
           <li key={review.id} className="flex flex-col gap-3 rounded-[var(--r-md)] border border-border p-4">
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center justify-between gap-3 text-base">
-                <Link href={`/prototypes/${slug}?v=${review.version}`} className="font-medium hover:underline">
+                <Link href={`/prototypes/${slug}?v=${review.version}&comments=1`} className="font-medium hover:underline">
                   {review.version}
                 </Link>
                 <span className="text-sm text-foreground-muted">

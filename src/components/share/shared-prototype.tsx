@@ -59,7 +59,7 @@ export function SharedPrototype(props: Parameters<typeof Shared>[0]) {
   return (
     <MotionProvider>
       <StudioProvider snapshot={NOTHING}>
-        <SharedCommentsContext.Provider value={{ token: props.token, as: props.reviewer?.name, review: props.request?.id }}>
+        <SharedCommentsContext.Provider value={{ token: props.token, as: props.reviewer?.name }}>
           <Shared {...props} />
         </SharedCommentsContext.Provider>
       </StudioProvider>

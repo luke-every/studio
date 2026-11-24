@@ -141,7 +141,7 @@ export function useComments(slug: string | undefined, version: string | undefine
     const read = () => {
       if (document.visibilityState === "hidden") return;
       const before = started;
-      void (sharedAs ? listSharedComments(sharedAs.token, sharedAs.as ? sharedAs.review : undefined) : listComments(slug, version)).then((result) => {
+      void (sharedAs ? listSharedComments(sharedAs.token) : listComments(slug, version)).then((result) => {
         // One that overlapped a save of ours would put back what the save has just changed; the next one will be right.
         if (!current || inflight || started !== before) return;
         if (result.ok) {
