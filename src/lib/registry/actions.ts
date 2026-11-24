@@ -23,6 +23,7 @@ import * as reviews from "./reviews";
 import * as slack from "./slack";
 import * as registry from "./write";
 import { IMAGE_MAX_BYTES } from "@/lib/image";
+import { mineOf } from "@/lib/reviews";
 import { userMessage } from "./errors";
 import * as imageExport from "./export-images";
 
@@ -200,8 +201,12 @@ async function shared<T>(token: string, work: (at: { slug: string; version: stri
   }
 }
 
-export async function listSharedComments(token: string) {
-  return shared(token, (at) => comments.readComments(at.slug, at.version));
+/** `review` is a personal review link's request: it is given only that review's comments, and the replies to them. */
+export async function listSharedComments(token: string, review?: string) {
+  return shared(token, async (at) => {
+    const all = await comments.readComments(at.slug, at.version);
+    return review ? mineOf(all, review) : all;
+  });
 }
 
 export async function addSharedComment(token: string, input: Omit<Parameters<typeof comments.addComment>[0], "slug" | "version">) {
@@ -439,7 +444,7 @@ async function asReviewer<T>(work: () => Promise<T>): Promise<WriteResult<{ valu
 
 export const reviewStateAs = async (slug: string, id: string, key: string) => asReviewer(() => reviews.reviewerState(slug, id, key));
 export const openReviewAs = async (slug: string, id: string, key: string) => asReviewer(() => reviews.openReviewAs(slug, id, key));
-export const finishReviewAs = async (slug: string, id: string, key: string, response: string, verdict: string) => asReviewer(() => reviews.finishReviewAs(slug, id, key, response, verdict));
+export const finishReviewAs = async (slug: string, id: string, key: string, response: string) => asReviewer(() => reviews.finishReviewAs(slug, id, key, response));
 
 /** Asks people to review a version. Saved first; Slack tells them after. */
 export async function requestReview(input: Parameters<typeof reviews.requestReview>[0]) {

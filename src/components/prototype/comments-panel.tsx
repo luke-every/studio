@@ -12,6 +12,7 @@ import type { Comment } from "@/lib/comments";
 import { DEVICES } from "@/lib/phone";
 
 import { CommentMenu, ResolveToggle, WhileWorking } from "./comment-parts";
+import { KindChip } from "./comment-kind";
 import { useSharedComments } from "./shared-comments";
 import { PanelEmpty } from "./panel-empty";
 import { menuItem } from "@/components/ui/menu-item";
@@ -198,6 +199,7 @@ export function CommentsPanel({
                     <div className="flex items-center gap-2 pb-1 text-ui text-foreground-subtle">
                       <UserAvatar name={comment.author.name} className="size-5" />
                       <span className="min-w-0 truncate text-foreground-muted">{comment.author.name}</span>
+                      <KindChip kind={comment.kind} />
                       <span className="shrink-0 text-sm">
                         <Stamp iso={comment.at} relative />
                       </span>

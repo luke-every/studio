@@ -85,6 +85,8 @@
   /* Words highlighted in a text box over a prototype: strong enough to read on the page's own colours. */
   --selection-highlight: color-mix(in oklab, var(--blue-500) 30%, transparent);
   --pin-target-edge: var(--selection);
+  /* A hairline round a comment's pin and the pill it opens into: a dark shadow does not show on a dark page, so in dark it is an edge of light. */
+  --pin-stroke: transparent;
   /* Dev (the canvas to look at the code of): green where Design is blue, the same in every theme. */
   --dev: var(--green-500);
   --dev-muted: color-mix(in oklab, var(--green-500) 8%, transparent);
@@ -169,6 +171,7 @@
 
     --surface: var(--ink-800);
     --surface-elevated: var(--ink-700);
+    --pin-stroke: var(--alpha-paper-10);
     --surface-inset: #100e0a;
     --surface-hover: var(--alpha-paper-06);
     --menu-hover: var(--ink-650);
@@ -233,6 +236,7 @@
 
   --surface: var(--ink-800);
   --surface-elevated: var(--ink-700);
+  --pin-stroke: var(--alpha-paper-10);
   --surface-inset: #100e0a;
   --surface-hover: var(--alpha-paper-06);
   --menu-hover: var(--ink-650);

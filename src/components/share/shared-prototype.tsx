@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { SelectionPanel } from "@/components/handoff/part-panel";
 import { useUrlParam } from "@/components/prototype/prototype-detail";
@@ -10,33 +10,36 @@ import type { Selection } from "@/lib/handoff-selection";
 import { SharedCommentsContext } from "@/components/prototype/shared-comments";
 import { ColumnHandle, RevealTab } from "@/components/prototype/column-handle";
 import { ViewMenu } from "@/components/prototype/view-menu";
-import { NewUserModal } from "@/components/shell/profile-modal";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { StudioProvider, useStudio } from "@/lib/data/studio-store";
 import { hintFullscreen } from "@/lib/fullscreen-hint";
-import { useAboutCorner, useDevice, useFit, useInApp, useZoom } from "@/lib/use-device";
-import { Toggle } from "@/components/ui/toggle";
+import { useDevice, useFit, useInApp, useZoom } from "@/lib/use-device";
 import { useUser } from "@/lib/use-user";
 
+import { AboutSheet } from "./about-sheet";
+import { FindYourself } from "./find-yourself";
 import { ShareQr } from "./share-qr";
+import { HoldMenu, PhoneComposer } from "./phone-comment";
+import { ReviewTip, ReviewWelcome } from "./review-welcome";
 import { ReviewPanel } from "./review-panel";
 import { SharedDocsMenu, type DocLinks } from "./shared-docs-menu";
 
-import { MotionProvider, useOverlayBehaviour } from "@/lib/motion";
-import { MotionScrim } from "@/components/motion";
+import { MotionProvider } from "@/lib/motion";
 import { ControlsPanel, VariantPicker } from "@/components/prototype/controls-panel";
 import { useVersionVariants } from "@/components/prototype/use-version-variants";
 import { usePrototypeFlow } from "@/components/prototype/use-prototype-flow";
 import { usePrototypeControls } from "@/components/prototype/use-prototype-controls";
 import { AvatarStack } from "@/components/shell/user-avatar";
-import { IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Stamp } from "@/components/ui/stamp";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
 import { applyControls, controlParams, defaultValues, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
 import { VARIANT_PARAM } from "@/lib/edits";
 import { withParams, type Flow } from "@/lib/flow";
 import type { Person } from "@/lib/registry/types";
-import type { ReviewRequest } from "@/lib/reviews";
+import type { Anchor } from "@/lib/comments";
+import { addSharedComment } from "@/lib/registry/actions";
+import { variantOf, type ReviewRequest } from "@/lib/reviews";
 import { useMediaQuery } from "@/lib/use-media-query";
 
 /**
@@ -47,13 +50,16 @@ import { useMediaQuery } from "@/lib/use-media-query";
  * rest behind an About button.
  */
 /** Nothing of the registry goes to somebody with only a share link: the studio's context is there, and empty. */
+/** A press and hold on a phone: the script's id for it, where the finger is on the screen, and what is under it. */
+type Held = { id: string; at: { x: number; y: number }; anchor: Anchor; variant?: string };
+
 const NOTHING = { repoUrl: null, people: [], teams: [], projects: [], prototypes: [] };
 
 export function SharedPrototype(props: Parameters<typeof Shared>[0]) {
   return (
     <MotionProvider>
       <StudioProvider snapshot={NOTHING}>
-        <SharedCommentsContext.Provider value={{ token: props.token, as: props.reviewer?.name }}>
+        <SharedCommentsContext.Provider value={{ token: props.token, as: props.reviewer?.name, review: props.request?.id }}>
           <Shared {...props} />
         </SharedCommentsContext.Provider>
       </StudioProvider>
@@ -75,6 +81,7 @@ function Shared({
   dev = false,
   request,
   reviewer,
+  start,
 }: {
   name: string;
   description: string;
@@ -96,12 +103,14 @@ function Shared({
   request?: ReviewRequest;
   /** On a review link: who it is for, and the key that is theirs alone. They are that person here whoever this browser has chosen to be. */
   reviewer?: { name: string; key: string };
+  /** On a review link opened from the QR code: the screen to open on (the prototype's own query), instead of the first variation asked about. */
+  start?: string;
 }) {
   const offered = usePrototypeControls(version.url);
   const variants = useVersionVariants(version.url);
   const [picked, setPicked] = useState<ControlValues>({});
   // A review opens on the first variation it asked about: its studio variant, and anything else its setup says, as the prototype's own place.
-  const firstAsked = new URLSearchParams(request?.variants?.[0]?.setup ?? "");
+  const firstAsked = new URLSearchParams(start ?? request?.variants?.[0]?.setup ?? "");
   const [chosen, setChosen] = useState<string | null>(() => firstAsked.get(VARIANT_PARAM));
   const values = { ...defaultValues(offered), ...picked };
   const variant = variants.find((item) => item.id === chosen)?.id ?? null;
@@ -162,10 +171,120 @@ function Shared({
   })();
   const wide = useMediaQuery("(min-width: 64rem)");
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [corner, chooseCorner] = useAboutCorner();
+  // Said once per device, a moment after the prototype is there (its script says the same for a prototype opened on its own).
+  const [introOpen, setIntroOpen] = useState(false);
+  useEffect(() => {
+    // On a review it follows the welcome instead (see `continueFromWelcome`).
+    if (!phone || request) return undefined;
+    try {
+      if (localStorage.getItem("studio.review.intro")) return undefined;
+    } catch {
+      return undefined;
+    }
+    // Marked as seen when it shows, not before: a development build runs this twice, and the first must not use it up.
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem("studio.review.intro", "1");
+      } catch {
+        // Shown again next time without storage.
+      }
+      setIntroOpen(true);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [phone, request]);
+  // A review opens with a welcome, once per request on this device; then, on a computer, a tip beside the prototype (how to leave feedback
+  // with the keyboard), and on a phone the instruction for press and hold.
+  const requestId = request?.id;
+  // Whether this is somebody's first time on this review, as the page loads: the welcome is theirs to take in, so the canvas card (a second
+  // thing to read, and one that isn't for a first look) is held back for the whole of that visit, and comes on a later one.
+  const [firstVisit] = useState(() => {
+    if (!requestId) return false;
+    try {
+      return typeof window === "undefined" || !localStorage.getItem(`studio.review.welcome.${requestId}`);
+    } catch {
+      return true;
+    }
+  });
+  const tile = useRef<HTMLDivElement>(null);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [tipOpen, setTipOpen] = useState(false);
+  useEffect(() => {
+    if (!requestId) return undefined;
+    try {
+      if (localStorage.getItem(`studio.review.welcome.${requestId}`)) return undefined;
+    } catch {
+      return undefined;
+    }
+    // Marked as seen when it is let go of, not when it shows: a development build runs this twice.
+    const timer = window.setTimeout(() => setWelcomeOpen(true), 500);
+    return () => window.clearTimeout(timer);
+  }, [requestId]);
+  const continueFromWelcome = () => {
+    setWelcomeOpen(false);
+    try {
+      localStorage.setItem(`studio.review.welcome.${requestId}`, "1");
+    } catch {
+      // Shown again next time without storage.
+    }
+    // A beat after the dialog has gone, so the next thing arrives on its own.
+    window.setTimeout(() => {
+      if (!phone) return setTipOpen(true);
+      try {
+        if (localStorage.getItem("studio.review.intro")) return;
+        localStorage.setItem("studio.review.intro", "1");
+      } catch {
+        return;
+      }
+      setIntroOpen(true);
+    }, 400);
+  };
+  // A press and hold goes on past the moment the menu appears over the finger, onto this page: which must not start selecting text any more
+  // than the prototype's own does (public/studio-review.js). Fields excepted, so typing still works.
+  useEffect(() => {
+    if (!phone) return undefined;
+    const style = document.createElement("style");
+    style.textContent = "html,html *:not(input):not(textarea):not([contenteditable]){-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}";
+    document.head.appendChild(style);
+    const keep = (event: Event) => {
+      const target = event.target as Node | null;
+      const element = target?.nodeType === Node.TEXT_NODE ? target.parentElement : (target as Element | null);
+      if (!element?.closest?.("input,textarea,[contenteditable]")) event.preventDefault();
+    };
+    document.addEventListener("selectstart", keep, true);
+    return () => {
+      style.remove();
+      document.removeEventListener("selectstart", keep, true);
+    };
+  }, [phone]);
+  // A press and hold in the prototype (public/studio-review.js) says where, and what is there. The menu and the comment box are drawn here, in
+  // the screen: the prototype's own page is as tall as the prototype, so it can't say where the screen is. The script draws the pin.
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [held, setHeld] = useState<Held | null>(null);
+  const [composing, setComposing] = useState<Held | null>(null);
+  useEffect(() => {
+    if (!phone) return undefined;
+    const asked = (event: MessageEvent) => {
+      const data = event.data;
+      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow || data?.type !== "studio:review:hold" || typeof data.id !== "string") return;
+      // The finger's place is in the frame's own pixels; the frame is as wide as the screen and as tall as the page.
+      const box = frameRef.current.getBoundingClientRect();
+      setHeld({ id: data.id, at: { x: box.left + Number(data.x), y: box.top + Number(data.y) }, anchor: data.anchor as Anchor, variant: typeof data.variant === "string" && data.variant ? data.variant : undefined });
+    };
+    window.addEventListener("message", asked);
+    return () => window.removeEventListener("message", asked);
+  }, [phone]);
+  /** Tells the script what to do with the pin it keeps for a hold: show it (for whom), pulse it while saving, keep it, or take it away. */
+  const pin = (id: string, state: "show" | "saving" | "saved" | "remove", who?: string) => frameRef.current?.contentWindow?.postMessage({ type: "studio:review:pin", id, state, name: who }, window.location.origin);
 
   // Comments are the studio's own; nothing else of its toolbar comes with them.
   const user = useUser();
+  // On a personal review link they are who the link is for; otherwise who this browser chose (asked for by search, as a share link does).
+  const author = reviewer?.name ?? user.name;
+  // The pin goes down once the comment has somebody to be from (a share link asks first), with their face.
+  const composingId = composing?.id;
+  useEffect(() => {
+    if (composingId && author) frameRef.current?.contentWindow?.postMessage({ type: "studio:review:pin", id: composingId, state: "show", name: author }, window.location.origin);
+  }, [composingId, author]);
   // Which phone it is shown on and how big: the one control of the toolbar kept besides comments.
   const [device, chooseDevice] = useDevice();
   const [zoom, chooseZoom] = useZoom();
@@ -183,6 +302,7 @@ function Shared({
   const columnOpen = !((hidden || full || flowOpen) && wide);
   // Somebody has to say who they are before commenting, once, on this browser.
   const changeMode = (next: "view" | "dev" | "edit" | "comment") => {
+    if (next === "comment") setTipOpen(false);
     if (next === "comment" && !user.name && !reviewer) {
       setNaming(true);
       return;
@@ -229,37 +349,64 @@ function Shared({
   if (phone) {
     return (
       <>
-        <GrowingFrame src={frameUrl ?? address} title={`${name} ${version.label}`} />
-        <IconButton onClick={() => setAboutOpen(true)} className={`fixed z-[var(--z-raised)] shadow-floating ${corner.side === "left" ? "left-3" : "right-3"} ${corner.edge === "bottom" ? "bottom-[max(0.75rem,env(safe-area-inset-bottom))]" : "top-[max(0.75rem,env(safe-area-inset-top))]"}`}>
-          {request ? "Review" : "About"}
-        </IconButton>
+        <GrowingFrame src={frameUrl ?? address} title={`${name} ${version.label}`} frameRef={frameRef} />
+        {held ? (
+          <HoldMenu
+            at={held.at}
+            onClose={() => setHeld(null)}
+            onControls={() => {
+              setHeld(null);
+              setAboutOpen(true);
+            }}
+            // The same tap that chose Comment opens the box, which is what lets the keyboard come up with it.
+            onComment={() => {
+              setComposing(held);
+              setHeld(null);
+            }}
+          />
+        ) : null}
+        <PhoneComposer
+          open={!!composing && !!author}
+          author={author}
+          onCancel={() => {
+            if (composing) pin(composing.id, "remove");
+            setComposing(null);
+          }}
+          onPost={async (text) => {
+            if (!composing) return null;
+            pin(composing.id, "saving");
+            const result = await addSharedComment(token, { text, anchor: composing.anchor, variant: composing.variant, by: author, avatar: user.profileOf(author).avatar, review: request?.id });
+            if (!result.ok) {
+              pin(composing.id, "show", author);
+              return result.error;
+            }
+            pin(composing.id, "saved");
+            setComposing(null);
+            return null;
+          }}
+        />
+        {/* Opened from the prototype's press-and-hold menu (Controls), not from a button over it. */}
         <AboutSheet open={aboutOpen} onClose={() => setAboutOpen(false)} label={`${request ? "Review of" : "About"} ${name}`}>
-          <div className="flex flex-col gap-6">
-            {info}
-            <p className="text-ui text-foreground-subtle">Press and hold anywhere on the prototype to leave a comment.</p>
-            <div className="flex flex-col gap-2">
-              <p className="text-sm text-foreground-muted">Where this button sits, if it covers the prototype&rsquo;s own menu</p>
-              <div className="flex gap-2">
-                <Toggle
-                  label="Top or bottom"
-                  value={corner.edge}
-                  onChange={(edge) => chooseCorner({ ...corner, edge })}
-                  options={[
-                    { id: "top", label: "Top", showLabel: true },
-                    { id: "bottom", label: "Bottom", showLabel: true },
-                  ]}
-                />
-                <Toggle
-                  label="Left or right"
-                  value={corner.side}
-                  onChange={(side) => chooseCorner({ ...corner, side })}
-                  options={[
-                    { id: "left", label: "Left", showLabel: true },
-                    { id: "right", label: "Right", showLabel: true },
-                  ]}
-                />
-              </div>
+          <div className="flex flex-col gap-6">{info}</div>
+        </AboutSheet>
+        {request ? <ReviewWelcome open={welcomeOpen} request={request} onContinue={continueFromWelcome} /> : null}
+        {/* How to use it, said once, in the screen: the prototype's own page is as tall as the prototype, so it can't say it there. */}
+        <AboutSheet open={introOpen} onClose={() => setIntroOpen(false)} label="How to comment">
+          <div className="flex flex-col items-center gap-6 pb-2 text-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="size-[4.5rem] text-foreground">
+              <path d="M22 14a8 8 0 0 1-8 8" />
+              <path d="M18 11v-1a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
+              <path d="M14 10V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1" />
+              <path d="M10 9.5V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v10" />
+              <path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+            </svg>
+            <div className="flex flex-col gap-1">
+              <h2 className="text-2xl font-medium tracking-[var(--tracking-tight)]">Press and hold anywhere</h2>
+              <p className="text-base text-foreground-muted">to comment or open controls</p>
             </div>
+            <Button variant="primary" className="w-full" onClick={() => setIntroOpen(false)}>
+              Done
+            </Button>
           </div>
         </AboutSheet>
       </>
@@ -291,7 +438,7 @@ function Shared({
         </div>
       </aside>
 
-      <div className="stagger-in [--i:1] min-w-0 flex-1 lg:min-h-0">
+      <div ref={tile} className="stagger-in [--i:1] min-w-0 flex-1 lg:min-h-0">
         <PrototypeFrame
           url={frameUrl}
           title={`${name} ${version.label}`}
@@ -304,7 +451,20 @@ function Shared({
           zoom={zoom}
           fit={fit}
           inApp={inApp}
-          comments={full ? undefined : { slug, version: versionKey, variant: chosenAddress.split("?")[1] || undefined }}
+          comments={
+            full
+              ? undefined
+              : {
+                  slug,
+                  version: versionKey,
+                  // The one version there is: the list is built from the versions it is given, so without it the button counts comments the list never shows.
+                  versions: [{ key: versionKey, version: version.label }],
+                  variant: chosenAddress.split("?")[1] || undefined,
+                  // Choosing a comment in the list takes the prototype to the variation it was left on, named in the list on a review.
+                  onSetup: showSetup,
+                  setupLabel: request ? (setup) => variantOf(request.variants, setup)?.label ?? null : undefined,
+                }
+          }
           onPlace={followPlace}
           flow={request ? null : flow}
           variants={request ? null : variantsCanvas}
@@ -324,6 +484,7 @@ function Shared({
             ) : undefined
           }
           flowOpen={flowOpen}
+          introQuiet={firstVisit}
           onFlowOpen={setFlowOpen}
           focusFind={focusFind}
           mode={mode}
@@ -350,20 +511,34 @@ function Shared({
           shareToken={dev ? token : undefined}
           // The engineer's door gives the same link for an element as the studio does: the share link's own token is what opens it, as it opens the handoff.
           agentLink={dev ? async (loc, notes) => `${window.location.origin}/api/handoff/element?${new URLSearchParams({ slug, version: version.url.split("/").pop() ?? "", token, loc, ...(notes?.length ? { notes: notes.join(",") } : {}), ...(docs.github ? { github: docs.github.replace(/\/p\/.*$/, "") } : {}) })}` : undefined}
-          corner={full || dev || request ? undefined : <ShareQr />}
+          // A review's code says which screen they are on, so the phone opens the same review at the same place.
+          corner={full || dev ? undefined : <ShareQr setup={request ? (chosenAddress.split("?")[1] ?? "") : undefined} />}
         />
       </div>
 
-      <NewUserModal
-        open={naming}
-        standalone
-        title="Who's commenting?"
-        submitLabel="Continue"
-        onClose={() => setNaming(false)}
-        onCreated={() => {
+      {request ? (
+        <>
+          <ReviewWelcome open={welcomeOpen} request={request} onContinue={continueFromWelcome} />
+          <ReviewTip open={tipOpen} anchor={tile} onClose={() => setTipOpen(false)} />
+        </>
+      ) : null}
+
+      <FindYourself
+        open={naming || (!!composing && !author)}
+        slug={slug}
+        version={version.url.split("/").pop() ?? ""}
+        token={review}
+        onClose={() => {
           setNaming(false);
-          setMode("comment");
-          setListing(true);
+          setComposing(null);
+        }}
+        onChosen={() => {
+          setNaming(false);
+          // A comment held on a phone carries on into its box; on a computer, comment mode opens.
+          if (!composing) {
+            setMode("comment");
+            setListing(true);
+          }
         }}
       />
     </div>
@@ -375,18 +550,34 @@ function Shared({
  * the frame. Safari only slides its bars away and draws the page beneath them
  * when the document scrolls, as it does when a prototype is opened directly.
  */
-function GrowingFrame({ src, title }: { src: string; title: string }) {
-  const frame = useRef<HTMLIFrameElement>(null);
+function GrowingFrame({ src, title, frameRef }: { src: string; title: string; frameRef: RefObject<HTMLIFrameElement | null> }) {
+  const frame = frameRef;
   const [height, setHeight] = useState<number>();
 
   useEffect(() => {
     const el = frame.current;
     let watch: ResizeObserver | undefined;
+    const rootStyle = document.documentElement.style;
+    const wasBehind = rootStyle.backgroundColor;
+    // Scrolled faster than iOS can draw it, a very tall frame shows what is behind it where it hasn't painted yet. That is the studio's own
+    // background, which in the dark theme is near black, against a prototype that is usually light. So what is behind it is the prototype's
+    // own background, read from it (it is the same origin), and white, as a browser's default is, if it sets none.
+    const tint = (doc: Document) => {
+      const win = el?.contentWindow;
+      if (!el || !win || !doc.body) return;
+      const drawn = (value: string) => !!value && value !== "transparent" && !/,\s*0\)$/.test(value);
+      const color = [win.getComputedStyle(doc.body).backgroundColor, win.getComputedStyle(doc.documentElement).backgroundColor].find(drawn) ?? "white";
+      el.style.backgroundColor = color;
+      rootStyle.backgroundColor = color;
+    };
     const attach = () => {
       const doc = el?.contentDocument;
       if (!doc?.documentElement) return;
       watch?.disconnect();
-      const measure = () => setHeight(Math.max(doc.documentElement.scrollHeight, window.innerHeight));
+      const measure = () => {
+        setHeight(Math.max(doc.documentElement.scrollHeight, window.innerHeight));
+        tint(doc);
+      };
       watch = new ResizeObserver(measure);
       watch.observe(doc.documentElement);
       watch.observe(doc.body);
@@ -397,6 +588,7 @@ function GrowingFrame({ src, title }: { src: string; title: string }) {
     return () => {
       el?.removeEventListener("load", attach);
       watch?.disconnect();
+      rootStyle.backgroundColor = wasBehind;
     };
   }, [src]);
 
@@ -409,30 +601,5 @@ function GrowingFrame({ src, title }: { src: string; title: string }) {
       style={{ height: height ?? "100dvh" }}
       className="block w-full border-0 bg-surface"
     />
-  );
-}
-
-/** The info for a phone: slides up from the bottom over the prototype, and back down when it is let go of. */
-function AboutSheet({ open, onClose, label, children }: { open: boolean; onClose: () => void; label: string; children: ReactNode }) {
-  const container = useOverlayBehaviour({ open, onClose });
-  // Kept on screen while it slides back down.
-  const [mounted, setMounted] = useState(open);
-  if (open && !mounted) setMounted(true);
-  if (!mounted) return null;
-  return (
-    <div className="fixed inset-0" style={{ zIndex: "var(--z-drawer)" }}>
-      <MotionScrim onClick={onClose} leaving={!open} />
-      <div
-        ref={container}
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        tabIndex={-1}
-        onAnimationEnd={() => !open && setMounted(false)}
-        className={`${open ? "sheet-up" : "sheet-down pointer-events-none"} absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-[var(--r-xl)] border-t border-border bg-surface-elevated p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-8 shadow-[var(--elev-overlay)] outline-none`}
-      >
-        {children}
-      </div>
-    </div>
   );
 }

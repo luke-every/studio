@@ -1,6 +1,7 @@
 import "server-only";
 
 import { anchorSchema, commentsFileSchema, type Anchor, type Comment } from "@/lib/comments";
+import type { CommentKind } from "@/lib/comments";
 
 import * as claude from "./claude-runs";
 import { readStudioFile, updateStudioFile, workingCopiesOn, WORKING_VERSION } from "./local-prototypes";
@@ -94,6 +95,8 @@ type CommentInput = {
   by?: string;
   /** The commenter's chosen face, for the notification only; it is not kept. */
   avatar?: number;
+  /** What sort of comment it is (see `COMMENT_KINDS`); feedback, the usual one, is not kept. */
+  kind?: CommentKind;
   /** The review request the commenter was in when they left it; kept only if it is theirs and for this version (see `reviewFor`). */
   review?: string;
 };
@@ -125,6 +128,7 @@ async function post(input: CommentInput) {
       device: parent ? parent.device : input.device,
       parentId: parent?.id,
       note: input.note || undefined,
+      kind: parent || input.note ? undefined : input.kind === "thought" || input.kind === "bug" || input.kind === "critical" ? input.kind : undefined,
       // A reply is part of its comment's thread, so of its review.
       review: parent ? parent.review : review,
     };

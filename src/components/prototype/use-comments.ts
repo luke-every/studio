@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-import { setupOf, type Anchor, type Comment } from "@/lib/comments";
+import { setupOf, type Anchor, type Comment, type CommentKind } from "@/lib/comments";
 import { useUser } from "@/lib/use-user";
 import { addComment, addSharedComment, deleteComment, editNote, likeComment, likeSharedComment, listComments, listSharedComments, resolveComment, undoClaudeChange } from "@/lib/registry/actions";
 
@@ -141,7 +141,7 @@ export function useComments(slug: string | undefined, version: string | undefine
     const read = () => {
       if (document.visibilityState === "hidden") return;
       const before = started;
-      void (sharedAs ? listSharedComments(sharedAs.token) : listComments(slug, version)).then((result) => {
+      void (sharedAs ? listSharedComments(sharedAs.token, sharedAs.as ? sharedAs.review : undefined) : listComments(slug, version)).then((result) => {
         // One that overlapped a save of ours would put back what the save has just changed; the next one will be right.
         if (!current || inflight || started !== before) return;
         if (result.ok) {
@@ -176,18 +176,18 @@ export function useComments(slug: string | undefined, version: string | undefine
    * Posts a comment; the comment, or null if it couldn't be saved. It is on the list at once, as a comment still being saved
    * (which breathes), and is swapped for the saved one when that lands or taken away again if it fails.
    */
-  const add = async (text: string, anchor: Anchor, setup?: string, device?: string, note?: boolean) => {
+  const add = async (text: string, anchor: Anchor, setup?: string, device?: string, note?: boolean, kind?: CommentKind) => {
     if (!target) return null;
     const pendingId = `pending-${crypto.randomUUID()}`;
     const kept = setupOf(setup === undefined ? variant : setup);
     setLoaded((now) => {
       const list = now && now.key === key ? now.list : [];
       const n = Math.max(0, ...list.filter((item) => setupOf(item.variant) === kept && !item.note === !note).map((item) => item.n)) + 1;
-      const pending: Comment = { id: pendingId, n, author: { login: "pending", name: by || "Someone" }, at: new Date().toISOString(), text: text.trim(), anchor, variant: kept, device, note: note || undefined };
+      const pending: Comment = { id: pendingId, n, author: { login: "pending", name: by || "Someone" }, at: new Date().toISOString(), text: text.trim(), anchor, variant: kept, device, note: note || undefined, kind: kind && kind !== "feedback" ? kind : undefined };
       return { key, list: [...list, pending] };
     });
     setWorking(pendingId, true);
-    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: kept, device, note, by, avatar, review: reviewOpened() }) : addComment({ ...target, text, anchor, variant: kept, device, note, by, avatar, review: reviewOpened() })).finally(() => setWorking(pendingId, false));
+    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: kept, device, note, kind, by, avatar, review: reviewOpened() }) : addComment({ ...target, text, anchor, variant: kept, device, note, kind, by, avatar, review: reviewOpened() })).finally(() => setWorking(pendingId, false));
     if (!result.ok) {
       setLoaded((now) => (now && now.key === key ? { key, list: now.list.filter((item) => item.id !== pendingId) } : now));
       setError(result.error);

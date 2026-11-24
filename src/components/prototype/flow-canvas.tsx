@@ -4983,12 +4983,13 @@ export function FlowCanvas({
             }}
             initialText={retry.text}
             placeholder={comments.noting ? "Add a note" : undefined}
-            onPost={(text) => {
+            withKind={!comments.noting}
+            onPost={(text, kind) => {
               // Closed at once; the comment is on the canvas, breathing, until it is saved. If it isn't, what was written comes back.
               const placed = draft;
               setDraft(null);
               setRetry({ text: "" });
-              void comments.onAdd(text, placed.anchor, setups?.[screenOfCopy(placed.copyId)], copyOf.get(placed.copyId)?.device.id, comments.noting).then((saved) => {
+              void comments.onAdd(text, placed.anchor, setups?.[screenOfCopy(placed.copyId)], copyOf.get(placed.copyId)?.device.id, comments.noting, kind).then((saved) => {
                 if (saved) return;
                 setRetry({ text });
                 setDraft(placed);

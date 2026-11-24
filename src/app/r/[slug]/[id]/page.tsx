@@ -27,7 +27,7 @@ async function find(slug: string, id: string, key: string | undefined) {
   }
 }
 
-type Props = { params: Promise<{ slug: string; id: string }>; searchParams: Promise<{ k?: string }> };
+type Props = { params: Promise<{ slug: string; id: string }>; searchParams: Promise<{ k?: string; s?: string }> };
 
 export async function generateMetadata({ params, searchParams }: Props) {
   const { slug, id } = await params;
@@ -37,7 +37,7 @@ export async function generateMetadata({ params, searchParams }: Props) {
 
 export default async function ReviewPage({ params, searchParams }: Props) {
   const { slug, id } = await params;
-  const key = (await searchParams).k;
+  const { k: key, s: start } = await searchParams;
   const found = await find(slug, id, key);
   if (!found || !key) notFound();
   const { prototype, review, reviewer, version } = found;
@@ -57,6 +57,8 @@ export default async function ReviewPage({ params, searchParams }: Props) {
       review={mintReviewToken(prototype.slug, versionSegment(version.key), { forever: true })}
       request={{ id: review.id, by: review.by, message: review.message, due: review.due, dueBy: review.dueBy, variants: review.variants }}
       reviewer={{ name: reviewer.name, key }}
+      // Opened from the QR code on a computer: the screen it was on, as the prototype's own query.
+      start={typeof start === "string" ? start.slice(0, 500) : undefined}
     />
   );
 }

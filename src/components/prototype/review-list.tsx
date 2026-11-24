@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { UserAvatar } from "@/components/shell/user-avatar";
 import { Stamp } from "@/components/ui/stamp";
-import type { Comment } from "@/lib/comments";
+import { KIND_LABEL, type Comment } from "@/lib/comments";
 import { listComments, listReviews } from "@/lib/registry/actions";
 import { dueLabel, pastDue, variantOf, VERDICTS, type Review } from "@/lib/reviews";
 
@@ -88,9 +88,9 @@ export function ReviewCards({ slug, reviews, left }: { slug: string; reviews: Re
                         <span className="truncate text-base">{person.name}</span>
                       </span>
                       <span className="shrink-0 text-sm text-foreground-muted">
-                        {person.doneAt && person.verdict ? (
+                        {person.doneAt ? (
                           <>
-                            {VERDICTS[person.verdict]} · <Stamp iso={person.doneAt} relative />
+                            {person.verdict ? VERDICTS[person.verdict] : "Submitted"} · <Stamp iso={person.doneAt} relative />
                           </>
                         ) : (
                           <>
@@ -112,7 +112,7 @@ export function ReviewCards({ slug, reviews, left }: { slug: string; reviews: Re
                         {comments.map((comment) => (
                           <li key={comment.id}>
                             <Link href={`/prototypes/${slug}?v=${review.version}&comment=${comment.id}`} className="line-clamp-2 text-sm text-foreground-muted hover:text-foreground">
-                              #{comment.n} {review.variants?.length ? `${variantOf(review.variants, comment.variant)?.label ?? "Baseline"} · ` : ""}
+                              #{comment.n} {comment.kind ? `${KIND_LABEL[comment.kind]} · ` : ""}{review.variants?.length ? `${variantOf(review.variants, comment.variant)?.label ?? "Baseline"} · ` : ""}
                               {comment.text}
                             </Link>
                           </li>

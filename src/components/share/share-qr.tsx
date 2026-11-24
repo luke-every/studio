@@ -5,11 +5,25 @@ import { useMemo, useSyncExternalStore } from "react";
 
 import { QrSkeleton } from "@/components/prototype/qr-skeleton";
 
-/** A QR code for this very page, so a phone that scans it opens the shared prototype. Themed with the `--qr-*` tokens. */
-export function ShareQr() {
+/**
+ * A QR code for this very page, so a phone that scans it opens the shared prototype. Themed with the `--qr-*` tokens.
+ * `setup` (a review's) is the screen the prototype is on, as its query: the code carries it, so the phone opens on that screen.
+ */
+export function ShareQr({ setup }: { setup?: string }) {
   const href = useSyncExternalStore(
     () => () => {},
-    () => window.location.href.split("#")[0],
+    () => {
+      const url = new URL(window.location.href);
+      url.hash = "";
+      // A phone can't reach "localhost": on this machine's own address, the Mac's network name stands in (NEXT_PUBLIC_LOCAL_HOSTNAME, in .env.local only).
+      const network = process.env.NEXT_PUBLIC_LOCAL_HOSTNAME;
+      if (network && url.hostname === "localhost") url.hostname = network;
+      if (setup !== undefined) {
+        if (setup) url.searchParams.set("s", setup);
+        else url.searchParams.delete("s");
+      }
+      return url.href;
+    },
     () => "",
   );
   const { size, path } = useMemo(() => {

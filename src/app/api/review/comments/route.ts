@@ -30,7 +30,9 @@ export async function POST(request: NextRequest) {
       anchor: anchor.data,
       variant: typeof body.variant === "string" && body.variant ? body.variant : undefined,
       device: typeof body.device === "string" && body.device ? body.device : undefined,
-      by: typeof body.by === "string" ? body.by.slice(0, 40) : undefined,
+      by: typeof body.by === "string" ? body.by.slice(0, 80) : undefined,
+      // The request it is for, when the person was asked to review: kept only if it is theirs, on this version (see `reviewFor`).
+      review: typeof body.review === "string" ? body.review : undefined,
       avatar: typeof body.avatar === "number" ? body.avatar : undefined,
     });
     return NextResponse.json({ ok: true, n: comment.n });

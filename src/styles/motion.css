@@ -596,6 +596,62 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * tip — a small note that comes out of the side of the thing it is about: it
+ * slides in from that side, growing a little out of a soft blur, and goes back
+ * the way it came. The component says which side with `origin-*`. Reduced
+ * motion keeps the fade and drops the travel.
+ * ------------------------------------------------------------------------- */
+:root {
+  --tip-travel: var(--motion-travel-lg);
+  --tip-scale: 0.96;
+  --tip-blur: 6px;
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--tip-travel))) scale(var(--tip-scale));
+    filter: blur(var(--tip-blur));
+  }
+}
+
+@keyframes tip-out {
+  to {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--tip-travel))) scale(var(--tip-scale));
+    filter: blur(var(--tip-blur));
+  }
+}
+
+@keyframes tip-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@utility tip-in {
+  animation: tip-in var(--dur-immersive) var(--curve-spatial) backwards;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: tip-fade var(--dur-fast) var(--curve-standard) backwards;
+  }
+}
+
+@utility tip-out {
+  animation: tip-out var(--dur-deliberate) var(--curve-exit) both;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: tip-out-fade var(--dur-fast) var(--curve-exit) both;
+  }
+}
+
+@keyframes tip-out-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * splash — the ring of phones above the door. The front phone arrives with
  * the welcome while the rest fan out left and right from behind it
  * (`splash-fan`), and the ring turns from the start, easing up to speed. Twelve phones stand 30° apart, so five

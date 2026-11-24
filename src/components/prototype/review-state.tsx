@@ -6,7 +6,9 @@ import type { Review } from "@/lib/reviews";
 export function ReviewState({ person }: { person: Review["reviewers"][number] }) {
   const icon = "!size-3";
   if (person.doneAt && person.verdict === "approved") return <Chip tone="match" icon={<CheckIcon className={icon} />}>Approved</Chip>;
-  if (person.doneAt) return <Chip tone="exception" icon={<AlertIcon className={icon} />}>Changes needed</Chip>;
+  if (person.doneAt && person.verdict === "changes") return <Chip tone="exception" icon={<AlertIcon className={icon} />}>Changes needed</Chip>;
+  // Reviews are sent without a verdict now: done is done.
+  if (person.doneAt) return <Chip tone="match" icon={<CheckIcon className={icon} />}>Submitted</Chip>;
   if (person.openedAt) return <Chip tone="near" icon={<EyeIcon className={icon} />}>Opened</Chip>;
   return <Chip tone="quiet" icon={<ClockIcon className={icon} />}>Sent</Chip>;
 }

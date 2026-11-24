@@ -8,7 +8,7 @@ import type { EditComponent } from "@/components/prototype/use-fork";
 import { AddTemplateButton, type AddTemplate } from "@/components/prototype/add-template";
 import type { CommentsUi } from "@/components/prototype/comment-parts";
 import { useCommentFocus } from "@/components/prototype/use-comment-focus";
-import { CLAUDE_AUTHOR, reviewPrompt, setupOf, type Anchor, type Comment } from "@/lib/comments";
+import { CLAUDE_AUTHOR, reviewPrompt, setupOf, type Anchor, type Comment, type CommentKind } from "@/lib/comments";
 import { useStudio } from "@/lib/data/studio-store";
 import { setPrototypeFrame } from "@/lib/prototype-frame-ref";
 import { useEditSession } from "@/components/prototype/use-edit-session";
@@ -146,6 +146,7 @@ export function PrototypeFrame({
   canvasName,
   canvasDocs,
   minimal = false,
+  introQuiet = false,
   devLink = false,
   shareToken,
   onPlace,
@@ -252,6 +253,8 @@ export function PrototypeFrame({
   canvasDocs?: (docs: { onExport?: () => void }) => ReactNode;
   /** A share page: the version, the viewport, the comment buttons and full screen on the bar, and no look toggle, canvas, restart or share. */
   minimal?: boolean;
+  /** Holds the canvas card back: somebody has something else to take in first (a first review's welcome), and is told about the canvas another time. */
+  introQuiet?: boolean;
   /** A dev link: the canvas starts in Dev, whatever this browser last chose. */
   devLink?: boolean;
   /** The share link's token, which lets a dev link read the design system's component names. */
@@ -550,7 +553,7 @@ export function PrototypeFrame({
     setPeeking(!wasPlacing);
     ask(note.id);
   };
-  const addComment = async (text: string, anchor: Anchor, setup?: string, onDevice?: string, note?: boolean) => !!(await postComment(text, anchor, setup, onDevice ?? device.id, note));
+  const addComment = async (text: string, anchor: Anchor, setup?: string, onDevice?: string, note?: boolean, kind?: CommentKind) => !!(await postComment(text, anchor, setup, onDevice ?? device.id, note, kind));
   // The comment asked for is shown wherever it was left: its own setup may say less than the place it puts back.
   const asked = focus && !comments.some((item) => item.id === focus.id) ? everything.find((item) => item.id === focus.id) : undefined;
   const withAsked = asked ? [...comments, asked] : comments;
@@ -924,7 +927,9 @@ export function PrototypeFrame({
         ) : (
           <IconButton label="Comment (C)" onClick={() => { changeMode("comment"); setListing(true); setNoting(false); }}>
             <CommentIcon />
-            {openCount ? openCount : null}
+            {/* On a share or review page the controls say what they are: there are few of them, and nobody has been shown the studio. */}
+            {minimal ? <span>Comments</span> : null}
+            {openCount ? <span>{openCount}</span> : null}
           </IconButton>
         )}
       </>
@@ -1014,7 +1019,7 @@ export function PrototypeFrame({
         </div>
       ) : null}
       {/* Once per person: the canvas is new, and a card from the corner says so. */}
-      {url && addressed && !bare ? <CanvasIntro quiet={showingFlow} always={minimal && ALWAYS_ON_SHARE_LINKS} onOpen={() => { if (!(minimal && ALWAYS_ON_SHARE_LINKS)) markCanvasHintSeen(); onFlowOpen(true); }} /> : null}
+      {url && addressed && !bare ? <CanvasIntro quiet={showingFlow || introQuiet} always={minimal && ALWAYS_ON_SHARE_LINKS} onOpen={() => { if (!(minimal && ALWAYS_ON_SHARE_LINKS)) markCanvasHintSeen(); onFlowOpen(true); }} /> : null}
       {/* The bar lies over the top of the canvas: only its controls take a press, so a screen or button under the gaps between them can still be used. */}
       <div key={modeBar ? "mode" : "view"} inert={uiHidden && showingFlow} style={bare ? { display: "none" } : undefined} className={`${uiHidden && showingFlow ? "!opacity-0 " : ""}transition-opacity duration-[var(--dur-standard)] ease-[var(--curve-standard)] bar-in pointer-events-none relative z-[var(--z-raised)] grid *:pointer-events-auto min-h-16 items-center gap-3 max-sm:mb-2 max-sm:grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] sm:px-8 sm:py-8`}>
         {modeBar ? (
@@ -1055,7 +1060,8 @@ export function PrototypeFrame({
                   <span className={`hidden ${showingFlow ? "" : "sm:block"}`}>
                     <IconButton label={listing ? "Hide the list" : "Show the list"} aria-pressed={listing} onClick={() => setListing(!listing)} className={listing ? controlOn : ""}>
                       <CommentIcon />
-                      {openCount ? openCount : null}
+                      {minimal ? <span>Comments</span> : null}
+                      {openCount ? <span>{openCount}</span> : null}
                     </IconButton>
                   </span>
                 </>
@@ -1087,6 +1093,7 @@ export function PrototypeFrame({
                       }}
                     >
                       <FlowIcon />
+                      {minimal ? "Canvas" : null}
                     </IconButton>
                   </div>
                 )

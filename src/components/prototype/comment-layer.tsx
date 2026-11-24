@@ -202,12 +202,13 @@ export function CommentLayer({
                 setRetry({ text: "" });
               }}
               initialText={retry.text}
-              onPost={(text) => {
+              withKind
+              onPost={(text, kind) => {
                 // Closed at once; the comment is on the page, breathing, until it is saved. If it isn't, what was written comes back.
                 const anchor = shownDraft;
                 setDraft(null);
                 setRetry({ text: "" });
-                void onAdd(text, anchor).then((saved) => {
+                void onAdd(text, anchor, undefined, undefined, undefined, kind).then((saved) => {
                   if (saved) return;
                   setRetry({ text });
                   setDraft(anchor);

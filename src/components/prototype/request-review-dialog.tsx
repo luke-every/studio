@@ -7,6 +7,7 @@ import { LivePreview } from "@/components/home/live-preview";
 import { ModalStep, MotionStepModal } from "@/components/motion";
 import { UserAvatar } from "@/components/shell/user-avatar";
 import { Button } from "@/components/ui/button";
+import { CheckMark } from "@/components/ui/check-mark";
 import { fieldClass } from "@/components/ui/dialog-form";
 import { Toggle } from "@/components/ui/toggle";
 import { requestReview, slackMembers, slackState } from "@/lib/registry/actions";
@@ -15,21 +16,6 @@ import type { Prototype } from "@/lib/registry/types";
 import { useUser } from "@/lib/use-user";
 
 import { useReviewChoices } from "./use-review-choices";
-
-/**
- * A choice's mark: a ring, and once chosen a disc with a tick drawn in it (`tick-draw`, which plays as it appears). `solid` is for
- * a mark over a picture, where the disc is the accent and the tick is light; otherwise it is the reverse, for a filled button.
- */
-function Check({ on, solid = false, className = "size-4" }: { on: boolean; solid?: boolean; className?: string }) {
-  if (!on) return <span aria-hidden className={`shrink-0 rounded-[var(--r-full)] border border-border-strong ${solid ? "bg-surface" : ""} ${className}`} />;
-  return (
-    <span aria-hidden className={`grid shrink-0 place-items-center rounded-[var(--r-full)] ${solid ? "bg-accent text-accent-foreground" : "bg-accent-foreground text-accent"} ${className}`}>
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="size-3/4">
-        <path d="M4.5 8.25 7 10.75l4.5-5" pathLength={1} className="tick-draw" />
-      </svg>
-    </span>
-  );
-}
 
 const rowClass = "flex cursor-pointer items-center gap-2.5 rounded-[var(--r-control)] px-2.5 py-1.5 text-nav hover:bg-surface-hover";
 
@@ -174,7 +160,7 @@ export function RequestReviewDialog({ prototype, version, onClose }: { prototype
               >
                 <span className="relative block aspect-[3/4] w-full overflow-hidden border-b border-border bg-surface-inset">
                   {url ? <LivePreview src={`${url}${one.setup ? `?${one.setup}` : ""}`} title={one.label} /> : null}
-                  {several ? <Check on={on} solid className="absolute right-2 top-2 size-5" /> : null}
+                  {several ? <CheckMark on={on} solid className="absolute right-2 top-2 size-5" /> : null}
                 </span>
                 <span className="truncate px-2.5 py-2 text-nav">{one.label}</span>
               </button>
@@ -246,7 +232,7 @@ export function RequestReviewDialog({ prototype, version, onClose }: { prototype
                 onClick={() => setDueChoice((now) => (now === option.id ? null : option.id))}
                 className={`inline-flex items-center gap-1.5 rounded-[var(--r-full)] border py-1.5 pl-2 pr-3 text-sm transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] focus-visible:border-border-strong focus-visible:outline-none ${dueChoice === option.id ? "border-transparent bg-accent text-accent-foreground hover:bg-accent-hover" : "border-border text-foreground-muted hover:bg-[var(--control-hover)]"}`}
               >
-                <Check on={dueChoice === option.id} />
+                <CheckMark on={dueChoice === option.id} />
                 {option.label}
               </button>
             ))}

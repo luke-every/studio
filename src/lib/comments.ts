@@ -53,6 +53,8 @@ export const commentSchema = z.object({
   variant: z.string().optional(),
   /** The id of the device (see `DEVICES`) it was left on; none on older comments, which show on every device. */
   device: z.string().optional(),
+  /** What sort of comment it is when it is not plain feedback: a passing thought, a bug, something critical. None is feedback. */
+  kind: z.enum(["thought", "bug", "critical"]).optional(),
   /** A note for the developers, drawn beside the screen on a dotted line: kept with the comments, but not one of them. It is never sent to Claude or announced. */
   note: z.boolean().optional(),
   /** The names of the people who liked it. */
@@ -68,6 +70,11 @@ export const commentSchema = z.object({
 });
 
 export { CLAUDE_AUTHOR } from "@/lib/claude-author";
+
+/** The sorts of comment somebody can leave, in the order they are offered. Feedback is what a comment is unless it says otherwise. */
+export const COMMENT_KINDS = ["feedback", "thought", "bug", "critical"] as const;
+export type CommentKind = (typeof COMMENT_KINDS)[number];
+export const KIND_LABEL: Record<CommentKind, string> = { feedback: "Feedback", thought: "Thought", bug: "Bug", critical: "Critical" };
 
 export const commentsFileSchema = z.array(commentSchema);
 

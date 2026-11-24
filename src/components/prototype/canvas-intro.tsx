@@ -29,6 +29,9 @@ export function CanvasIntro({ onOpen, quiet, always = false }: { onOpen: () => v
 
   const leave = (open: boolean) => {
     if (open) onOpen();
+    // Remembered the moment it is answered, not once its exit has played: a page left, or reloaded, or an animation that never reports back
+    // must not bring it round again.
+    if (!always) markSeen();
     setLeaving(true);
   };
 
@@ -38,7 +41,6 @@ export function CanvasIntro({ onOpen, quiet, always = false }: { onOpen: () => v
       inert={leaving}
       onAnimationEnd={(event) => {
         if (!leaving || event.target !== event.currentTarget) return;
-        if (!always) markSeen();
         setLeaving(false);
         // Said once per visit when it is always shown, so it does not come back at once.
         if (always) setGone(true);

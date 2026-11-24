@@ -1,5 +1,6 @@
 "use client";
 
+import { KindChip, KindPicker } from "./comment-kind";
 import { LikeButton } from "./comment-like";
 import { useSharedComments } from "./shared-comments";
 import { useWorking } from "./use-comments";
@@ -20,7 +21,7 @@ import { controlOn, IconButton } from "@/components/ui/button";
 import { ConfirmPopover } from "@/components/ui/confirm-popover";
 import { LinkedText } from "@/components/ui/linked-text";
 import { Stamp } from "@/components/ui/stamp";
-import type { Anchor, Comment } from "@/lib/comments";
+import type { Anchor, Comment, CommentKind } from "@/lib/comments";
 import { menuItem } from "@/components/ui/menu-item";
 
 /** The pieces of commenting that the prototype frame and the flow canvas share. */
@@ -46,7 +47,7 @@ export type CommentsUi = {
   /** What has been said back to each comment, oldest first. */
   replies: Record<string, Comment[]>;
   /** `setup` puts it on a particular setup of the prototype (see `Comment`); an empty one is the version as it is, and none is the setup on screen. */
-  onAdd: (text: string, anchor: Anchor, setup?: string, device?: string, note?: boolean) => Promise<boolean>;
+  onAdd: (text: string, anchor: Anchor, setup?: string, device?: string, note?: boolean, kind?: CommentKind) => Promise<boolean>;
   onReply: (parent: Comment, text: string) => Promise<boolean>;
   onResolve: (comment: Comment, resolved: boolean) => void;
   onLike: (comment: Comment, liked: boolean) => void;
@@ -208,8 +209,8 @@ function PinPill({
       }}
       className={`fixed block overflow-hidden rounded-2xl ${corner.square} bg-surface transition-[width,height,box-shadow] duration-[var(--dur-standard)] ease-[var(--curve-standard)] ${
         expanded
-          ? "shadow-[0_1px_3px_var(--alpha-ink-12),0_6px_16px_var(--alpha-ink-12)]"
-          : "shadow-[0_1px_3px_var(--alpha-ink-08),0_4px_10px_var(--alpha-ink-08)]"
+          ? "shadow-[0_0_0_1px_var(--pin-stroke),0_1px_3px_var(--alpha-ink-12),0_6px_16px_var(--alpha-ink-12)]"
+          : "shadow-[0_0_0_1px_var(--pin-stroke),0_1px_3px_var(--alpha-ink-08),0_4px_10px_var(--alpha-ink-08)]"
       }`}
     >
       {/* Set in from the corner as the box opens, by the same padding as the text, so the padding is around all of it. */}
@@ -248,7 +249,7 @@ function PinPill({
 function PinFace({ name, selected }: { name: string; selected?: boolean }) {
   return (
     <span
-      className={`block rounded-full rounded-bl-none bg-surface p-0.5 shadow-[0_1px_3px_var(--alpha-ink-08),0_4px_10px_var(--alpha-ink-08)] ${
+      className={`block rounded-full rounded-bl-none bg-surface p-0.5 shadow-[0_0_0_1px_var(--pin-stroke),0_1px_3px_var(--alpha-ink-08),0_4px_10px_var(--alpha-ink-08)] ${
         selected ? "ring-2 ring-[var(--focus-ring)]" : ""
       }`}
     >
@@ -686,6 +687,7 @@ export function CommentCard({
             <span className="shrink-0 text-foreground-subtle">
               <Stamp iso={comment.at} relative />
             </span>
+            <KindChip kind={comment.kind} />
           </p>
           <p className="whitespace-pre-wrap text-base leading-[var(--leading-relaxed)] text-foreground"><LinkedText text={comment.text} /></p>
           <div className="pt-1">
@@ -703,18 +705,22 @@ export function Composer({
   onCancel,
   initialText = "",
   placeholder = "Add a comment",
+  withKind = false,
 }: {
-  /** Called at once, and the composer is closed by it; saving carries on without it. */
-  onPost: (text: string) => void;
+  /** Called at once, and the composer is closed by it; saving carries on without it. `kind` is the sort chosen, when it offers them. */
+  onPost: (text: string, kind?: CommentKind) => void;
+  /** Offers the sorts of comment (feedback, a passing thought, a bug, critical) in a tag at the corner. Not for a note. */
+  withKind?: boolean;
   onCancel: () => void;
   /** What was written before, when a post didn't save and it is opened again. */
   initialText?: string;
   placeholder?: string;
 }) {
   const [text, setText] = useState(initialText);
+  const [kind, setKind] = useState<CommentKind>("feedback");
 
   const post = () => {
-    if (text.trim()) onPost(text);
+    if (text.trim()) onPost(text, withKind ? kind : undefined);
   };
 
   return (
@@ -738,11 +744,14 @@ export function Composer({
         aria-label={placeholder}
         className="w-full resize-none rounded-[var(--r-md)] bg-surface-inset p-2 text-sm text-foreground outline-none placeholder:text-foreground-subtle focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
       />
-      <div className="flex justify-end gap-2">
-        <IconButton onClick={onCancel}>Cancel</IconButton>
-        <IconButton variant="primary" disabled={!text.trim()} onClick={post}>
-          Post
-        </IconButton>
+      <div className="flex items-center justify-between gap-2">
+        <div>{withKind ? <KindPicker value={kind} onChange={setKind} /> : null}</div>
+        <div className="flex gap-2">
+          <IconButton onClick={onCancel}>Cancel</IconButton>
+          <IconButton variant="primary" disabled={!text.trim()} onClick={post}>
+            Post
+          </IconButton>
+        </div>
       </div>
     </>
   );

@@ -3,7 +3,9 @@
  *
  * Added to a prototype's page by the studio only when the address carries a
  * review token (the QR code on the prototype's page in the studio). Press and
- * hold anywhere to leave a comment there. The comment is posted to the studio
+ * hold anywhere: framed by a shared or review page on a phone, the page around
+ * it offers Comment or Controls and draws the comment box; on its own it goes
+ * straight to the comment. The comment is posted to the studio
  * with the token, which is good for one version and nothing else.
  *
  * Plain JavaScript in a shadow root, because it runs inside someone else's
@@ -22,6 +24,27 @@
   var HOLD_MS = 450;
   var MOVE_TOLERANCE = 10;
   var NAME_KEY = "studio.review.name";
+
+  // In a shared or review page on a phone this script only notices the hold: the page around it draws the menu and the comment box, in the screen
+  // (this page is as tall as the prototype and can't see where the screen is), and says what to do with the pin that marks where it was.
+  var held = {};
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (event.source !== window.parent || event.origin !== location.origin || !data || data.type !== "studio:review:pin" || !held[data.id]) return;
+    var hold = held[data.id];
+    if (data.state === "show") {
+      if (hold.pin) hold.pin.remove();
+      hold.pin = makePin(typeof data.name === "string" ? data.name : null, hold.at);
+    } else if (data.state === "saving") {
+      if (hold.pin) hold.pin.saving(true);
+    } else if (data.state === "saved") {
+      if (hold.pin) hold.pin.saving(false);
+      delete held[data.id];
+    } else if (data.state === "remove") {
+      if (hold.pin) hold.pin.remove();
+      delete held[data.id];
+    }
+  });
 
   // --- Which setup of the prototype this is: the controls' parameters, as the studio writes them. ---
   var controlParams = fetch("/p/" + slug + "/" + version + "/studio.json")
@@ -58,16 +81,6 @@
   }
 
   // --- Who is commenting. The studio's own choice is the default; this page keeps its own so it never disturbs it. ---
-  function people() {
-    try {
-      var stored = JSON.parse(localStorage.getItem("studio.people") || "null");
-      if (Array.isArray(stored)) {
-        var names = stored.map(function (p) { return p && p.name; }).filter(Boolean);
-        if (names.length) return names;
-      }
-    } catch { /* blocked or malformed: the seeded names */ }
-    return ["Luke", "Victor"];
-  }
   function savedName() {
     try {
       var own = localStorage.getItem(NAME_KEY);
@@ -105,7 +118,7 @@
   var host = document.createElement("div");
   host.setAttribute("data-studio-review", "");
   host.style.cssText =
-    "all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;" +
+    "all:initial;position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none;" +
     "font:15px/1.4 -apple-system,BlinkMacSystemFont,'SF Pro Text',system-ui,sans-serif;color:#121211;";
   var shadow = host.attachShadow({ mode: "open" });
   var css =
@@ -138,8 +151,15 @@
     ".who{font-size:13px;color:#6e6c67;margin-top:10px}" +
     ".who button{height:auto;border:0;padding:0;background:none;color:#121211;text-decoration:underline;font-size:13px;font-weight:400}" +
     ".error{color:#ff3b30;font-size:14px;margin:8px 0 0}" +
-    ".toast{position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);background:#121211;color:#fff;border-radius:999px;padding:8px 16px;font-size:14px;white-space:nowrap;pointer-events:none;animation:drop .3s cubic-bezier(.16,1,.3,1)}" +
-    "@keyframes drop{from{opacity:0;transform:translate(-50%,-8px)}}" +
+    ".found{display:flex;flex-direction:column;margin-top:8px}" +
+    ".person{display:flex;align-items:center;gap:10px;height:48px;border:0;border-radius:10px;background:none;text-align:left;padding:0 8px}" +
+    ".person:active{background:rgba(0,0,0,.06)}" +
+    ".ph{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:50%;overflow:hidden;background:#e3dfd7}" +
+    ".ph img{width:100%;height:100%;object-fit:cover}" +
+    ".ph.face img{width:74%;height:74%;object-fit:contain}" +
+    ".intro{text-align:center}" +
+    ".intro svg{display:block;width:72px;height:72px;margin:8px auto 16px}" +
+    ".intro h2{font-size:22px;letter-spacing:-.3px}" +
     "@media (prefers-color-scheme:dark){.sheet,textarea,input,button{background:#1b1b19;color:#faf9f7;border-color:#3a3937}.pin{background:#1b1b19}.ring{border-color:#faf9f7;background:rgba(250,249,247,.1)}button.primary{background:#faf9f7;color:#121211;border-color:#faf9f7}textarea:focus,input:focus{border-color:#faf9f7}.who button{color:#faf9f7}}" +
     "@media (prefers-reduced-motion:reduce){*{animation-duration:1ms!important}}" +
     "";
@@ -167,14 +187,6 @@
     var field = t && t.closest ? t.closest("input,textarea,[contenteditable]") : null;
     if (!field) event.preventDefault();
   }, true);
-
-  function toast(text) {
-    var el = document.createElement("div");
-    el.className = "toast";
-    el.textContent = text;
-    shadow.appendChild(el);
-    setTimeout(function () { el.remove(); }, 2400);
-  }
 
   // --- The long press. ---
   var press = null;
@@ -210,7 +222,7 @@
         var swallow = function (e) { e.preventDefault(); e.stopPropagation(); };
         document.addEventListener("click", swallow, true);
         setTimeout(function () { document.removeEventListener("click", swallow, true); }, 600);
-        compose(x, y);
+        options(x, y);
       }, HOLD_MS),
     };
   }, true);
@@ -256,6 +268,25 @@
     };
   }
 
+  // A hand with a finger out: pressing.
+  var FINGER_ICON = "<path d='M22 14a8 8 0 0 1-8 8'/><path d='M18 11v-1a2 2 0 0 0-2-2a2 2 0 0 0-2 2'/><path d='M14 10V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1'/><path d='M10 9.5V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v10'/><path d='M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15'/>";
+
+  // What a hold does. Framed by a shared or review page it is told to that page, which offers Comment or Controls and draws the box; on its
+  // own there is nothing around this page to do that, so it is only the comment.
+  function options(x, y) {
+    if (window.parent === window) return compose(x, y);
+    var id = Math.random().toString(36).slice(2);
+    held[id] = { at: { x: x + window.scrollX, y: y + window.scrollY } };
+    var anchor = place.anchorAt(document, x, y, studioOwns(null));
+    controlParams.then(function (names) {
+      window.parent.postMessage({
+        type: "studio:review:hold", id: id, x: x, y: y,
+        anchor: Object.assign({}, anchor, { state: place.stateOf(location, studioOwns(names)) }),
+        variant: setupOf(names),
+      }, location.origin);
+    });
+  }
+
   // `again` brings back a comment that didn't save: where it was, and what was written.
   function compose(x, y, again) {
     composing = true;
@@ -293,28 +324,52 @@
     }
     scrim.addEventListener("click", cancel);
 
+    // Who is commenting, found by searching: a share link is for people the studio knows from Slack, so there is no list of names to
+    // read down, only a search for yourself. A guest can still go on without one.
     function askWho() {
-      var field = el("input", { placeholder: "Someone else", autocomplete: "off", "aria-label": "Your name" });
-      var chips = el("div", { className: "chips" }, people().concat([""]).map(function (person) {
-        return el("button", {
-          type: "button",
-          text: person || "Guest",
-          onclick: function () { choose(person); },
-        });
-      }));
-      var go = el("button", {
-        type: "button",
-        className: "primary",
-        text: "Continue",
-        onclick: function () { if (field.value.trim()) choose(field.value.trim()); },
+      var field = el("input", { type: "search", placeholder: "Search for your name", autocomplete: "off", "aria-label": "Search for your name" });
+      var results = el("div", { className: "found" });
+      var timer = 0;
+      var latest = 0;
+      function photo(person) {
+        var face = person.image ? null : faceOf(person.name);
+        var node = el("span", { className: "ph" + (face ? " face" : "") });
+        if (person.image) node.appendChild(el("img", { src: person.image, alt: "", draggable: false }));
+        else if (face) {
+          node.style.background = COLORS[face.color];
+          node.appendChild(el("img", { src: "/avatars/" + (face.avatar + 1) + ".png", alt: "", draggable: false }));
+        }
+        return node;
+      }
+      field.addEventListener("input", function () {
+        clearTimeout(timer);
+        var typed = field.value.trim();
+        if (typed.length < 2) {
+          latest += 1;
+          results.replaceChildren();
+          return;
+        }
+        timer = setTimeout(function () {
+          var mine = ++latest;
+          fetch("/api/review/people?" + new URLSearchParams({ slug: slug, version: version, token: token, q: typed }))
+            .then(function (response) { return response.ok ? response.json() : { people: [] }; })
+            .then(function (body) {
+              if (mine !== latest) return;
+              results.replaceChildren.apply(results, (body.people || []).map(function (person) {
+                return el("button", { type: "button", className: "person", onclick: function () { choose(person.name); } }, [photo(person), document.createTextNode(person.name)]);
+              }));
+            })
+            .catch(function () { /* nothing found is shown as nothing */ });
+        }, 200);
       });
       sheet.replaceChildren(
         el("h2", { text: "Who is commenting?" }),
-        el("p", { text: "Asked once, so your comments carry your name." }),
-        chips,
         field,
-        el("div", { className: "row" }, [go])
+        results,
+        el("p", { className: "who" }, [el("button", { type: "button", text: "Comment as a guest", onclick: function () { choose(""); } })])
       );
+      field.focus();
+      fit();
     }
 
     function choose(person) {
@@ -377,6 +432,7 @@
 
     if (name === null) askWho();
     else write();
+    fit();
 
     // iOS only raises the keyboard for a focus that comes from a touch, and the hold that opened this is a timer. The finger
     // lifting is a touch, so the field is focused again then.
@@ -389,11 +445,28 @@
     });
   }
 
-  // Nothing says a long press does anything, so it says so once.
+  // Nothing says a long press does anything, so a sheet says so once, and is let go of with Done. Framed by a shared or review page, that
+  // page shows it (this page is as tall as the prototype, so a sheet here would sit at the bottom of all of it).
+  function intro() {
+    composing = true;
+    var done = el("button", { type: "button", className: "primary", text: "Done", onclick: function () {
+      layer.replaceChildren();
+      composing = false;
+    } });
+    var mark = document.createElement("div");
+    mark.innerHTML = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>" + FINGER_ICON + "</svg>";
+    var sheet = el("div", { className: "sheet intro", role: "dialog", "aria-modal": "true", "aria-label": "How to comment" }, [
+      mark,
+      el("h2", { text: "Press and hold anywhere" }),
+      el("p", { text: "to leave a comment" }),
+      el("div", { className: "row" }, [done]),
+    ]);
+    layer.append(el("div", { className: "scrim" }), sheet);
+  }
   try {
-    if (!localStorage.getItem("studio.review.hinted")) {
-      localStorage.setItem("studio.review.hinted", "1");
-      setTimeout(function () { toast("Press and hold to leave a comment"); }, 800);
+    if (window.parent === window && !localStorage.getItem("studio.review.intro")) {
+      localStorage.setItem("studio.review.intro", "1");
+      setTimeout(intro, 800);
     }
   } catch { /* no hint without storage */ }
 })();

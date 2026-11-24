@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Comment } from "@/lib/comments";
-import { dueLabel, reviewsFileSchema, variantSchema, VERDICTS, type Review } from "@/lib/reviews";
+import { dueLabel, reviewsFileSchema, variantSchema, type Review } from "@/lib/reviews";
 import { z } from "zod";
 
 import { isStoreConfigured, readStoreFileShared, updateStoreFile } from "./store";
@@ -125,23 +125,21 @@ export async function openReview(input: { slug: string; id: string; name: string
   await tellOnSlack(after.by, `*${mine(after, input.name).name}* opened your review of *${prototype?.name ?? input.slug}* ${after.version}.${linkLine(`/prototypes/${input.slug}/reviews`, "See the reviews")}`);
 }
 
-/** A reviewer sends their review: an overall answer and a verdict. Theirs once sent. */
-export async function finishReview(input: { slug: string; id: string; name: string; response: string; verdict: string }) {
+/** A reviewer sends their review: done, with an overall response if they want to say one. Theirs once sent. */
+export async function finishReview(input: { slug: string; id: string; name: string; response: string }) {
   const response = input.response.trim();
-  if (!response) throw new Error("Write your overall response first.");
-  if (input.verdict !== "approved" && input.verdict !== "changes") throw new Error("Choose Approved or Changes needed.");
-  const verdict = input.verdict;
   const at = new Date().toISOString();
 
   const { after } = await changeReviewer(input.slug, input.id, input.name, (one) => {
     if (one.doneAt) throw new Error("You've already sent this review.");
-    return { ...one, openedAt: one.openedAt ?? at, doneAt: at, verdict, response };
+    return { ...one, openedAt: one.openedAt ?? at, doneAt: at, response: response || undefined };
   });
+
   const prototype = await getPrototype(input.slug);
   const done = after.reviewers.filter((one) => one.doneAt).length;
   await tellOnSlack(
     after.by,
-    `*${mine(after, input.name).name}* finished their review of *${prototype?.name ?? input.slug}* ${after.version}: *${VERDICTS[verdict]}* (${done} of ${after.reviewers.length} in).\n>${response.replace(/\n/g, "\n>")}${linkLine(`/prototypes/${input.slug}/reviews`, "See the reviews")}`,
+    `*${mine(after, input.name).name}* finished their review of *${prototype?.name ?? input.slug}* ${after.version} (${done} of ${after.reviewers.length} in).${response ? `\n>${response.replace(/\n/g, "\n>")}` : ""}${linkLine(`/prototypes/${input.slug}/reviews`, "See the reviews")}`,
   );
 }
 
@@ -177,9 +175,9 @@ export async function openReviewAs(slug: string, id: string, key: string) {
   await openReview({ slug, id, name });
 }
 
-export async function finishReviewAs(slug: string, id: string, key: string, response: string, verdict: string) {
+export async function finishReviewAs(slug: string, id: string, key: string, response: string) {
   const { name } = await reviewerFor(slug, id, key);
-  await finishReview({ slug, id, name, response, verdict });
+  await finishReview({ slug, id, name, response });
 }
 
 /**
