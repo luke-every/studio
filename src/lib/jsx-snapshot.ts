@@ -29,6 +29,8 @@ const RENAMED: Record<string, string> = {
   value: "defaultValue",
   checked: "defaultChecked",
 };
+/** Attributes React types as a number: a string is a type error in the file the snapshot becomes (`tabIndex="-1"`), so they are written as one (`tabIndex={-1}`). */
+const NUMERIC = new Set(["tabIndex", "colSpan", "rowSpan", "maxLength", "minLength", "cols", "rows", "span", "size", "start", "low", "high", "optimum"]);
 /** The most elements a snapshot holds: a page's whole body would not be a useful thing to copy out. */
 const MOST = 1500;
 /** The invisible mark the page puts on each line of its copy (see `edit-dom.ts`): not part of the words. */
@@ -62,6 +64,7 @@ function attributesOf(element: Element, svg: boolean) {
     if ((lower === "value" || lower === "checked") && !["input", "textarea", "select", "option"].includes(element.localName)) continue;
     const key = RENAMED[lower] ?? (lower.startsWith("aria-") || lower.startsWith("data-") ? lower : svg ? camel(name) : lower);
     if (BOOLEAN.has(lower) && (attribute.value === "" || attribute.value === lower)) out.push(RENAMED[lower] ?? key);
+    else if (NUMERIC.has(key) && /^-?\d+(\.\d+)?$/.test(attribute.value.trim())) out.push(`${key}={${Number(attribute.value)}}`);
     else out.push(`${key}=${quoted(attribute.value.replace(MARK, ""))}`);
   }
   const style = styleOf(element);

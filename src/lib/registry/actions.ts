@@ -18,6 +18,8 @@ import * as handoff from "./handoff";
 import * as changeSet from "./change-set";
 import * as liveEdits from "./live-edits";
 import * as push from "./push";
+import * as reviews from "./reviews";
+import * as slack from "./slack";
 import * as registry from "./write";
 import { IMAGE_MAX_BYTES } from "@/lib/image";
 import { userMessage } from "./errors";
@@ -387,6 +389,44 @@ export async function listActivity() {
 /** Sends this device a test notification, so a refusal can be seen. */
 export async function testPush(endpoint: string) {
   return attempt(() => push.sendTest(endpoint), []);
+}
+
+/** Whether Slack is connected, the names of everyone who can be told on it, and the caller's own member id. */
+export async function slackState(name: string) {
+  return attempt(async () => {
+    const people = await slack.slackPeople();
+    return { connected: slack.slackConnected(), people: Object.values(people).map((person) => person.name), mine: people[name.trim().toLowerCase()]?.id ?? "" };
+  }, []);
+}
+
+/** Saves which Slack member a person is; empty takes it away. */
+export async function saveSlackId(name: string, id: string) {
+  return attempt(() => slack.setSlackId(name, id), []);
+}
+
+/** Sends a person a test message on Slack, so a refusal can be seen. */
+export async function testSlack(name: string) {
+  return attempt(() => slack.sendSlackTest(name), []);
+}
+
+/** A prototype's review requests, newest first. */
+export async function listReviews(slug: string) {
+  return attempt(() => reviews.readReviews(slug), []);
+}
+
+/** Asks people to review a version. Saved first; Slack tells them after. */
+export async function requestReview(input: Parameters<typeof reviews.requestReview>[0]) {
+  return attempt(() => reviews.requestReview(input), []);
+}
+
+/** A reviewer opened their review. */
+export async function openReview(input: Parameters<typeof reviews.openReview>[0]) {
+  return attempt(() => reviews.openReview(input), []);
+}
+
+/** A reviewer sent their review. */
+export async function finishReview(input: Parameters<typeof reviews.finishReview>[0]) {
+  return attempt(() => reviews.finishReview(input), []);
 }
 
 /** Design QA, on this machine only (see `design-qa.ts`). */

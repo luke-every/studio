@@ -76,6 +76,16 @@ export type ControlValues = Record<string, string>;
 export const multiValue = (control: Extract<Control, { type: "multi" }>, chosen: string[]) =>
   control.options.filter((option) => chosen.includes(option.value)).map((option) => option.value).join(",");
 
+/** What was chosen, without what the controls no longer offer: a control that is gone, or a choice whose option is. While they are not known, all of it. */
+export function keepValid(controls: Controls | null, values: ControlValues): ControlValues {
+  if (!controls) return values;
+  const byId = new Map(controls.controls.map((control) => [control.id, control]));
+  return Object.fromEntries(Object.entries(values).filter(([id, value]) => {
+    const control = byId.get(id);
+    return !!control && (control.type !== "choice" || control.options.some((option) => option.value === value));
+  }));
+}
+
 const defaultOf = (control: Control) =>
   control.type === "toggle" ? (control.default ? "on" : "off") : control.type === "multi" ? multiValue(control, control.default) : String(control.default);
 

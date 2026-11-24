@@ -2,19 +2,21 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo, useSyncExternalStore } from "react";
 
-import { ArrowIcon, CodeIcon, ComponentIcon, EllipseIcon, PolygonIcon, StarIcon, FrameIcon, LineIcon, RectangleIcon, ImageIcon, IsolateIcon, PlayIcon, PointerIcon, StopIcon, TextIcon } from "@/components/shell/nav-icons";
+import { ArrowIcon, ChevronDownIcon, CodeIcon, ComponentIcon, EllipseIcon, PolygonIcon, StarIcon, FrameIcon, LineIcon, RectangleIcon, ImageIcon, IsolateIcon, PlayIcon, PointerIcon, StopIcon, TextIcon } from "@/components/shell/nav-icons";
 import { CanvasCamera, zoomAbout } from "@/lib/canvas-camera";
 import { dataUrlOf, encodeImage } from "@/lib/image";
 import { detectLayout, flow as flowLayout, paddingOf, type Layout } from "@/lib/canvas-layout";
 import { copiedFill } from "@/lib/canvas-clipboard";
 import { fillsOf, readCanvas, STICKY_COLORS, writeCanvas, type CanvasFrame, type CanvasShape, type FillLayer, type Offsets, type Piece } from "@/lib/canvas-saved";
 import { COMPONENT_DRAG_TYPE } from "./components-panel";
-import { COPIES_OFFERED, donate, useCopiesChoice, useScreenCopy } from "@/lib/screen-copies";
+import { donate, useCopiesChoice, useScreenCopy } from "@/lib/screen-copies";
 import { ScreenCopy } from "./screen-copy";
 import type { Mark } from "@/lib/handoff";
 import type { SourceEl } from "@/lib/handoff-clip";
 import { targetOf, type Selection } from "@/lib/handoff-selection";
 import { controlOn, IconButton } from "@/components/ui/button";
+import { ControlsPanel } from "@/components/prototype/controls-panel";
+import { MotionPopover } from "@/components/motion";
 import type { Spot } from "@/lib/anchor";
 import { setupOf, type Anchor } from "@/lib/comments";
 import { copyKey, fitView, followShift, layoutFlow, screenOfCopy, spreadCopies, withParams, type Flow, type FlowScreen } from "@/lib/flow";
@@ -23,7 +25,7 @@ import { barsOf, DEVICES, type Device, type InApp } from "@/lib/phone";
 import { watchScrolled } from "./frame-page";
 import { InAppChrome } from "./in-app-chrome";
 import { applyEmbed } from "@/lib/embed";
-import { embedded, PREVIEW_QUERY } from "@/lib/controls";
+import { controlParams, embedded, PREVIEW_QUERY, variantControl, type ControlValues, type Controls } from "@/lib/controls";
 
 import { ComponentsFrame } from "./components-frame";
 import { Card, CommentCard, Composer, DraftPin, NOTE_GAP, NOTE_WIDTH, NoteMark, noteHeight, noteScale, Pin, PinTarget, type CommentsUi } from "./comment-parts";
@@ -248,6 +250,7 @@ export function FlowCanvas({
   comments,
   setups,
   controls,
+  prototypeControls,
   zoom = 1,
   fit = false,
   inApp,
@@ -340,6 +343,8 @@ export function FlowCanvas({
   comments?: CommentsUi;
   /** When the screens are variants of the prototype rather than steps of a flow: the setup (see `Comment`) each one shows. A comment shows only on the screen of its setup, and is left on it. */
   setups?: Record<string, string>;
+  /** What the prototype itself offers to adjust (its `studio.json`), as the choices made now and how to change one: shown beside Stop while a screen is being used, apart from the control the screens are variants of. */
+  prototypeControls?: { controls: Controls; values: ControlValues; onChange: (id: string, value: string) => void } | null;
   /** How the prototype is looked at (the phone it is shown on), offered above a screen opened to be used. */
   controls?: (info: { scale: number | null; device?: Device }) => React.ReactNode;
   /** The size a screen opened to be used is drawn at, as in the prototype's own view; `fit` scales it to the room instead. */
@@ -1659,8 +1664,17 @@ export function FlowCanvas({
     const piece = pieceByKey(id);
     const stage = (copyPages.current.get(id)?.scope?.querySelector("[data-stage]") ?? frames.current.get(id)?.contentDocument?.querySelector("[data-stage]")) as HTMLElement | null | undefined;
     const root = stage?.firstElementChild as HTMLElement | null | undefined;
+    const [w, h] = [width ?? piece?.fixedWidth, height ?? piece?.fixedHeight];
+    if (piece && (!stage || !root)) {
+      // A copy drawn from its project's own dev server is on another address, which can't be reached into: the page is told the size (`studio:stage-fit`) and the layer is that size here.
+      const across = frames.current.get(id);
+      if (across?.contentWindow) {
+        across.contentWindow.postMessage({ type: "studio:stage-fit", width: w ?? 0, height: h ?? 0 }, "*");
+        if (w || h) setPieces((all) => all.map((one) => (copyKey("stage", one.id) === id && ((w && one.width !== w) || (h && one.height !== h)) ? { ...one, ...(w ? { width: w } : {}), ...(h ? { height: h } : {}) } : one)));
+      }
+      return;
+    }
     if (!stage || !root || !piece) return;
-    const [w, h] = [width ?? piece.fixedWidth, height ?? piece.fixedHeight];
     root.style.width = w ? `${w}px` : "";
     root.style.height = h ? `${h}px` : "";
     root.style.maxWidth = w ? "none" : "";
@@ -2541,7 +2555,13 @@ export function FlowCanvas({
     const heard = (event: MessageEvent) => {
       const data = event.data as { type?: string; width?: unknown; height?: unknown } | null;
       if (data?.type !== "studio:stage-size" || typeof data.width !== "number" || typeof data.height !== "number" || !(data.width > 0) || !(data.height > 0)) return;
-      for (const [id, frame] of frames.current) if (isPiece(id) && frame.contentWindow === event.source) return void settleNow.current(id, Math.min(Math.ceil(data.width), 4000), Math.min(Math.ceil(data.height), 4000));
+      for (const [id, frame] of frames.current) {
+        if (!isPiece(id) || frame.contentWindow !== event.source) continue;
+        // A page that has loaded again has lost the size it was given: it says its size as it comes up, and is given it back (it takes the same size twice as once).
+        const given = pieceByKey(id);
+        if (given && !given.kind && (given.fixedWidth || given.fixedHeight)) frame.contentWindow?.postMessage({ type: "studio:stage-fit", width: given.fixedWidth ?? 0, height: given.fixedHeight ?? 0 }, "*");
+        return void settleNow.current(id, Math.min(Math.ceil(data.width), 4000), Math.min(Math.ceil(data.height), 4000));
+      }
     };
     window.addEventListener("message", heard);
     return () => window.removeEventListener("message", heard);
@@ -3266,6 +3286,50 @@ export function FlowCanvas({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  // The prototype's own controls, apart from the one its screens are variants of, for the screen being used. They are told to the live page as the studio does for the
+  // prototype's frame (`studio:controls`), once it says it is there and at every change; what it is sent is all of them at once, with that screen's own variant, since the
+  // page puts back what it is not told.
+  const usingScreen = usingId && !isPiece(usingId) ? copyOf.get(usingId)?.screen : undefined;
+  const variantId = setups ? variantControl(prototypeControls?.controls ?? null)?.id : undefined;
+  const adjustable = usingScreen && prototypeControls ? { ...prototypeControls.controls, controls: prototypeControls.controls.controls.filter((control) => control.id !== variantId) } : null;
+  const adjustableOn = !!adjustable?.controls.length;
+  const toldParams = (() => {
+    if (!adjustable || !prototypeControls) return null;
+    const params = controlParams(prototypeControls.controls, prototypeControls.values);
+    const own = variantControl(prototypeControls.controls);
+    if (variantId && own) delete params[own.param ?? own.id];
+    return JSON.stringify({ ...params, ...usingScreen?.params });
+  })();
+  const pageIs = useRef<{ window: Window; origin: string } | null>(null);
+  const latestParams = useRef<string | null>(null);
+  useEffect(() => {
+    pageIs.current = null;
+    const frame = usingId ? frames.current.get(usingId) : undefined;
+    if (!frame || toldParams === null) return undefined;
+    // A page that is already there said it was long ago: it is told at once (a page still loading misses this, and is told when it says it is there). "*": the page may be
+    // on a dev server of its own, and what is sent is only the values of its controls.
+    if (frame.contentWindow) {
+      pageIs.current = { window: frame.contentWindow, origin: "*" };
+      frame.contentWindow.postMessage({ type: "studio:controls", params: JSON.parse(toldParams) }, "*");
+    }
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type !== "studio:ready" || !frame.contentWindow || event.source !== frame.contentWindow) return;
+      pageIs.current = { window: frame.contentWindow, origin: event.origin };
+      if (latestParams.current) pageIs.current.window.postMessage({ type: "studio:controls", params: JSON.parse(latestParams.current) }, event.origin);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usingId, toldParams === null]);
+  useEffect(() => {
+    const changed = latestParams.current !== toldParams;
+    latestParams.current = toldParams;
+    if (changed && toldParams !== null) pageIs.current?.window.postMessage({ type: "studio:controls", params: JSON.parse(toldParams) }, pageIs.current.origin);
+  }, [toldParams]);
+  // Open for the screen being used, so it is shut for the next one.
+  const [optionsFor, setOptionsFor] = useState<string | null>(null);
+  const optionsOpen = !!usingId && optionsFor === usingId;
+  const setOptionsOpen = (on: boolean | ((was: boolean) => boolean)) => setOptionsFor((on instanceof Function ? on(optionsOpen) : on) ? usingId : null);
   const recorded = useRef<Step[]>([]);
   const [recordedCount, setRecordedCount] = useState(0);
   // Each screen used starts a record of its own.
@@ -4337,8 +4401,6 @@ export function FlowCanvas({
                   // The layers panel reads these pages, so it is told when one comes or goes.
                   requestAnimationFrame(() => setPagesSeen((n) => n + 1));
                 }}
-                // The labels saying how a screen is drawn are for developing: copies are the default now, and nobody else is told.
-                chosen={COPIES_OFFERED && !viewOnly && copiesChosen}
                 known={pageHeights[id] !== undefined}
                 onReady={() => {
                   setReadyIds((now) => (now.has(id) ? now : new Set(now).add(id)));
@@ -5426,7 +5488,34 @@ export function FlowCanvas({
             );
           })}
         </div>
-        <div role="toolbar" aria-label="Canvas tools" className="pointer-events-auto flex items-center gap-1 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating">
+        {usingId ? (
+          <div role="toolbar" aria-label="Interacting" className="pointer-events-auto flex items-center gap-1 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating">
+            <IconButton tooltipSide="above" label="Stop interacting (⌘I)" variant="ghost" className="gap-1.5 px-3" onClick={() => setUsing(null)}>
+              <StopIcon className="size-[1.125rem]" />
+              <span>Stop</span>
+            </IconButton>
+            {adjustableOn && adjustable && prototypeControls ? (
+              <MotionPopover
+                open={optionsOpen}
+                onClose={() => setOptionsOpen(false)}
+                above
+                align="end"
+                className="w-72"
+                trigger={
+                  <IconButton label="Options" tooltip={false} variant="ghost" className="gap-1.5 px-3" aria-haspopup="menu" aria-expanded={optionsOpen} onClick={() => setOptionsOpen((on) => !on)}>
+                    <span>Options</span>
+                    <ChevronDownIcon className="size-3.5 rotate-180 text-foreground-subtle" />
+                  </IconButton>
+                }
+              >
+                <div className="max-h-[60dvh] overflow-y-auto p-3">
+                  <ControlsPanel controls={adjustable} values={prototypeControls.values} onChange={prototypeControls.onChange} />
+                </div>
+              </MotionPopover>
+            ) : null}
+          </div>
+        ) : null}
+        <div role="toolbar" aria-label="Canvas tools" inert={!!usingId} style={usingId ? { display: "none" } : undefined} className="pointer-events-auto flex items-center gap-1 rounded-[var(--r-tile)] border border-border bg-surface-elevated p-1 shadow-floating">
           <IconButton
             tooltipSide="above"
             label="Move (V)"
@@ -5563,7 +5652,7 @@ export function FlowCanvas({
  * What a screen is drawn with: the page running in a frame, or (when copies are on and the page can be read) a static
  * copy of it. While a copy is being read the screen is a placeholder, and a page that can't be read stays live.
  */
-function ScreenSurface({ asCopies, live, interactive, onLeave, chosen, known, registerCopy, components, ...frame }: { /** Names to take as components in this screen's copy (a component put on the canvas). */ components?: string[]; asCopies: boolean; live: boolean; interactive: boolean; onLeave: () => void; chosen: boolean; known: boolean; registerCopy: (page: FramePage | null) => void } & Omit<React.ComponentProps<typeof ScreenFrame>, "interactive" | "onLeave" | "donate">) {
+function ScreenSurface({ asCopies, live, interactive, onLeave, known, registerCopy, components, ...frame }: { /** Names to take as components in this screen's copy (a component put on the canvas). */ components?: string[]; asCopies: boolean; live: boolean; interactive: boolean; onLeave: () => void; known: boolean; registerCopy: (page: FramePage | null) => void } & Omit<React.ComponentProps<typeof ScreenFrame>, "interactive" | "onLeave" | "donate">) {
   // The selected screen is the one being worked on, so it is the page itself.
   const wantsCopy = asCopies && !live;
   const copy = useScreenCopy(frame.src, frame.device.width, wantsCopy);
@@ -5572,27 +5661,10 @@ function ScreenSurface({ asCopies, live, interactive, onLeave, chosen, known, re
   const names = components?.join("\u0000");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const offer = useCallback((element: HTMLIFrameElement) => donate(src, device.width, element, components), [src, device.width, names]);
-  // While copies are being tried out, each screen says what it is, and why when it is live.
-  const badge = (text: string, title?: string) =>
-    chosen ? (
-      <span title={title} className="pointer-events-auto absolute left-2 top-2 z-[var(--z-raised)] rounded-[var(--r-full)] bg-surface px-2 py-0.5 text-xs text-foreground-muted shadow-[var(--elev-overlay)]">
-        {text}
-      </span>
-    ) : null;
   if (wantsCopy && copy?.state === "ready" && copy.snapshot) {
-    return (
-      <>
-        <ScreenCopy snapshot={copy.snapshot} device={device} pageHeight={frame.pageHeight} scale={SCREEN_SCALE} known={known} onReady={frame.onReady} onMeasured={frame.onMeasured} register={registerCopy} />
-        {badge("copy")}
-      </>
-    );
+    return <ScreenCopy snapshot={copy.snapshot} device={device} pageHeight={frame.pageHeight} scale={SCREEN_SCALE} known={known} onReady={frame.onReady} onMeasured={frame.onMeasured} register={registerCopy} />;
   }
-  return (
-    <>
-      <ScreenFrame {...frame} interactive={interactive} onLeave={onLeave} donate={wantsCopy && copy?.state !== "unavailable" ? offer : undefined} />
-      {badge(!asCopies ? "live: a tool or comments need it" : live ? "live: selected" : copy?.state === "unavailable" ? "live: can't read this page" : "reading…", copy?.error)}
-    </>
-  );
+  return <ScreenFrame {...frame} interactive={interactive} onLeave={onLeave} donate={wantsCopy && copy?.state !== "unavailable" ? offer : undefined} />;
 }
 
 function ScreenFrame({

@@ -7,17 +7,17 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ModalStep, MotionStepModal, StatusStep, playFromBadge } from "@/components/motion";
 import { FlowIcon, LargePhoneIcon } from "@/components/shell/nav-icons";
 import { Button } from "@/components/ui/button";
+import { ChoiceCards } from "@/components/ui/choice-cards";
 import { fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
+import { linkProblem } from "@/lib/links";
 import { openTerminalOnArrival, TERMINAL_HOST, type Starts } from "@/lib/terminal";
 
 /** What the helper goes through, in order. The last is this page: it opens the new prototype once the helper is done. */
-const STEPS = ["Updating conventions", "Copying the template", "Installing", "Starting the preview", "Opening"];
+const STEPS = ["Getting started", "Setting up your prototype", "Getting everything ready", "Almost there", "Opening"];
 
-/** If the wave never reports in (no WebGL, a failed picture), the new prototype opens after this anyway. */
-const WAVE_GIVE_UP_MS = 6000;
-/** How long the green tick is left on its own once the wave has passed, before the new prototype opens. */
-const TICK_HOLD_MS = 600;
+/** The wave takes about 4.2s end to end, most of it a fading tail: the new prototype opens this long after it leaves, ahead of the tail. */
+const WAVE_OPEN_MS = 3200;
 
 /**
  * Starts a project or a prototype in ~/Claude/prototypes. Step 0 asks which. A project is a name and a team and is made at
@@ -37,6 +37,9 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
   const [template, setTemplate] = useState(starts.default);
   const [name, setName] = useState("");
   const [team, setTeam] = useState(teams.some((item) => item.slug === onTeam) ? (onTeam ?? "") : (teams[0]?.slug ?? ""));
+  // A Notion page with the brief: the agent reads it on its first run.
+  const [notion, setNotion] = useState("");
+  const [notionProblem, setNotionProblem] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -64,13 +67,13 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
   useEffect(() => {
     if (!done) return;
     playFromBadge(wave.current);
-    window.setTimeout(() => leave(done), WAVE_GIVE_UP_MS);
+    window.setTimeout(() => leave(done), WAVE_OPEN_MS);
   }, [done]);
 
   // Settles only with a problem: on success the wave plays and the page is replaced.
   const create = (chosen: string) =>
     new Promise<string>((resolve) => {
-      const socket = new WebSocket(`ws://${TERMINAL_HOST}/new?${new URLSearchParams({ name: name.trim(), template: chosen, team, ...(project ? { kind: "project" } : {}) })}`);
+      const socket = new WebSocket(`ws://${TERMINAL_HOST}/new?${new URLSearchParams({ name: name.trim(), template: chosen, team, ...(project ? { kind: "project" } : notion.trim() ? { notion: notion.trim() } : {}) })}`);
       let settled = false;
       const fail = (reason: string) => {
         settled = true;
@@ -111,6 +114,9 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (busy || !name.trim()) return;
+    const wrong = project ? null : linkProblem("notion", notion);
+    setNotionProblem(wrong);
+    if (wrong) return;
     setBusy(true);
     setProblem(null);
     setProgress("");
@@ -121,27 +127,12 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
 
   const kinds = (
     <ModalStep title="What are you making?" footer={<Button onClick={onClose}>Cancel</Button>}>
-      <div className="grid grid-cols-2 gap-3">
-        {[
-          { label: "Project", about: "A canvas to explore on", icon: <FlowIcon className="size-6" />, project: true },
-          { label: "Prototype", about: "Start from a template", icon: <LargePhoneIcon className="size-6" />, project: false },
-        ].map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            onClick={() => kind(item.project)}
-            className={`flex flex-col items-center gap-3 rounded-[var(--r-md)] border px-3 py-6 text-center transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] hover:bg-[var(--control-hover)] focus-visible:border-border-strong focus-visible:outline-none ${
-              item.project === project ? "border-border-strong" : "border-border"
-            }`}
-          >
-            {item.icon}
-            <span className="flex flex-col gap-0.5">
-              <span className="text-base">{item.label}</span>
-              <span className="text-sm text-foreground-muted">{item.about}</span>
-            </span>
-          </button>
-        ))}
-      </div>
+      <ChoiceCards
+        options={[
+          { label: "Project", about: "A canvas to explore on", icon: <FlowIcon className="size-6" />, chosen: project, onClick: () => kind(true) },
+          { label: "Prototype", about: "Start from a template", icon: <LargePhoneIcon className="size-6" />, chosen: !project, onClick: () => kind(false) },
+        ]}
+      />
     </ModalStep>
   );
 
@@ -169,7 +160,7 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
     <ModalStep
       title={project ? "Name your project" : "Name your prototype"}
       subtitle={project ? undefined : template}
-      problem={project ? problem : null}
+      problem={project ? problem : notionProblem}
       onSubmit={submit}
       footer={
         <>
@@ -196,6 +187,13 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
             ))}
           </select>
         </label>
+
+        {project ? null : (
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            Notion brief <span className="font-normal text-foreground-muted">Optional</span>
+            <input type="url" inputMode="url" value={notion} onChange={(event) => setNotion(event.target.value)} placeholder="Notion page address" className={`${fieldClass} font-normal`} />
+          </label>
+        )}
       </div>
     </ModalStep>
   );
@@ -212,7 +210,7 @@ export function NewPrototypeDialog({ starts, onClose }: { starts: Starts; onClos
   );
 
   return (
-    <MotionStepModal open onClose={onClose} label="New" step={step} tallSteps={[1]} waveRef={wave} onWaveFinish={() => done && window.setTimeout(() => leave(done), TICK_HOLD_MS)}>
+    <MotionStepModal open onClose={onClose} label="New" step={step} tallSteps={[1]} formSteps={project ? [] : [2]} waveRef={wave} onWaveFinish={() => done && leave(done)}>
       {[kinds, first, second, third]}
     </MotionStepModal>
   );

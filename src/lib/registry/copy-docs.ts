@@ -1,10 +1,10 @@
 import "server-only";
 
 import { spawn } from "node:child_process";
-import { constants } from "node:fs";
+import { constants, readFileSync, statSync } from "node:fs";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve, sep } from "node:path";
 
 import {
   cellText,
@@ -222,6 +222,42 @@ function everyTool(binary: string, cwd: string) {
 type Service = "notion" | "claude";
 
 /**
+ * What each tool answered, from one line of a run's stream, put into `into`. An answer too big for Claude Code to hand over whole (about 50 KB: a long doc)
+ * comes as a note naming a file, which is read from there, only from Claude Code's own folder; it is the answer as a list of pieces of text.
+ */
+function takeResults(line: string, into: string[]) {
+  let event: { type?: string; message?: { content?: { type?: string; content?: string | { text?: string }[] }[] } };
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return;
+  }
+  if (event.type !== "user") return;
+  for (const part of event.message?.content ?? []) {
+    if (part.type !== "tool_result") continue;
+    let text = typeof part.content === "string" ? part.content : (part.content ?? []).map((piece) => piece.text ?? "").join("");
+    const named = /<persisted-output>[\s\S]*?saved to:\s*(\S+)/.exec(text)?.[1];
+    if (named) {
+      const file = resolve(named);
+      try {
+        if (file.startsWith(join(homedir(), ".claude") + sep) && statSync(file).size < 30_000_000) {
+          const whole = readFileSync(file, "utf8");
+          try {
+            const pieces = JSON.parse(whole) as { text?: string }[];
+            text = Array.isArray(pieces) ? pieces.map((piece) => piece.text ?? "").join("") : whole;
+          } catch {
+            text = whole;
+          }
+        }
+      } catch {
+        // Not there: the note is what there is, and no table comes of it.
+      }
+    }
+    into.push(text);
+  }
+}
+
+/**
  * Runs Claude Code in the prototype's folder for one job at one service, and gives what it ended with. Notion is connected on its own. Claude Docs
  * is a connector of the account, which a run can only have along with the rest, so there every other tool is taken out of its context.
  */
@@ -275,21 +311,27 @@ async function run(
       { cwd, stdio: ["pipe", "pipe", "ignore"], env: capture ? { ...cleanEnv(), MAX_MCP_OUTPUT_TOKENS: "200000" } : cleanEnv() },
     );
     let out = "";
-    child.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()));
+    // Read as it comes: a result too big to come back whole is left in a file that is gone when the run ends, so it is read from there at once.
+    let pending = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+      if (!capture) return;
+      pending += chunk.toString();
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) takeResults(line, capture);
+    });
     child.on("error", () =>
       resolve({ ok: false, text: "Claude Code couldn't be started." }),
     );
     child.on("close", () => {
       if (capture) {
+        takeResults(pending, capture);
         let ended: { result?: string; is_error?: boolean } | null = null;
         for (const line of out.split("\n")) {
           try {
-            const event = JSON.parse(line) as { type?: string; message?: { content?: { type?: string; content?: string | { text?: string }[] }[] }; result?: string; is_error?: boolean };
-            if (event.type === "user") {
-              for (const part of event.message?.content ?? []) {
-                if (part.type === "tool_result") capture.push(typeof part.content === "string" ? part.content : (part.content ?? []).map((piece) => piece.text ?? "").join(""));
-              }
-            } else if (event.type === "result") ended = event;
+            const event = JSON.parse(line) as { type?: string; result?: string; is_error?: boolean };
+            if (event.type === "result") ended = event;
           } catch {
             // Not a line of the stream.
           }

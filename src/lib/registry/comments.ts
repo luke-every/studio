@@ -7,6 +7,7 @@ import { readStudioFile, updateStudioFile, workingCopiesOn, WORKING_VERSION } fr
 import { isStoreConfigured, readStoreFileShared, updateStoreFile } from "./store";
 import { VERSION_PATTERN, versionSegment } from "./version";
 import { announceComment, announceLike } from "./push";
+import { reviewFor } from "./reviews";
 import { named } from "./write";
 
 /**
@@ -93,6 +94,8 @@ type CommentInput = {
   by?: string;
   /** The commenter's chosen face, for the notification only; it is not kept. */
   avatar?: number;
+  /** The review request the commenter was in when they left it; kept only if it is theirs and for this version (see `reviewFor`). */
+  review?: string;
 };
 
 /** Saves a comment. */
@@ -101,6 +104,7 @@ async function post(input: CommentInput) {
   if (!text) throw new Error("Write something first.");
   const id = crypto.randomUUID();
   const at = new Date().toISOString();
+  const review = input.parentId ? undefined : await reviewFor({ slug: input.slug, version: input.version, by: named(input.by).name, review: input.review });
 
   const comment = await update(input.slug, input.version, (comments) => {
     const parent = input.parentId ? comments.find((item) => item.id === input.parentId) : undefined;
@@ -121,6 +125,7 @@ async function post(input: CommentInput) {
       device: parent ? parent.device : input.device,
       parentId: parent?.id,
       note: input.note || undefined,
+      review,
     };
     return {
       comments: [...comments, comment],

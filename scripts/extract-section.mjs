@@ -378,7 +378,7 @@ function ownProps({ element, uses, owners }) {
 export function snapshotSection({ dir, loc, name, markup, records = {}, commits = {} }) {
   const found = /^(.+):(\d+):(\d+)$/.exec(loc ?? "");
   const place = found ? `${found[1]}:${found[2]}` : null;
-  const label = pascal(name ?? "") || (found ? `${pascal(basename(found[1]).replace(/\.tsx?$/, ""))}Snapshot` : "Snapshot");
+  const label = pascal(name ?? "") || (found ? pascal(basename(found[1]).replace(/\.tsx?$/, "")) : "Section");
   const folder = freshFolder(dir, records, label);
   const fn = folder.replace(/-(\d+)$/, "$1");
   const target = join(dir, "src", "components", "forks", folder);
@@ -400,8 +400,12 @@ export function snapshotSection({ dir, loc, name, markup, records = {}, commits 
 }
 
 export function extractSection({ dir, loc, name, commits = {}, records = {}, followed = false, top = null, owners = [] }) {
-  // The element is the top of a component: the component is taken, with what it has now.
-  if (top?.name && !followed) {
+  // The element is the top of a component: the component is taken, with what it has now. Not a component that was given children and is written somewhere
+  // else than the element is (a provider or layout around the page, which only has the element somewhere inside what it was given): that is a wrapper, and what
+  // is wanted is the element itself.
+  const written = /^(.+):\d+:\d+$/.exec(loc ?? "")?.[1];
+  const wraps = top?.props && typeof top.props === "object" && top.props.children !== undefined && written && componentIndex(dir).get(top.name)?.file !== resolve(dir, written);
+  if (top?.name && !followed && !wraps) {
     const whole = forkWhole({ dir, top, commits, records });
     if (whole) return whole;
   }

@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { MotionModal } from "@/components/motion";
+import { ModalStep, MotionModal, MotionStepModal } from "@/components/motion";
 import {
   CloseIcon,
   DocumentIcon,
   ImportIcon,
 } from "@/components/shell/nav-icons";
 import { Button, IconButton } from "@/components/ui/button";
+import { ChoiceCards } from "@/components/ui/choice-cards";
 import { fieldClass } from "@/components/ui/dialog-form";
 import {
   parseCopyPaste,
@@ -209,8 +210,30 @@ export function CopyImportDialog({
     );
   };
 
+  // Which way in: a short dialog of its own, as when a prototype or a project is made, which hands over to the place to work once one is chosen.
+  const choosing = phase === "choose" || phase === "pulling";
   return createPortal(
-    <MotionModal open onClose={onClose} label="Update copy" fill className="sm:!h-[60vh] sm:!max-w-[60vw]">
+    <>
+    <MotionStepModal open={choosing} onClose={onClose} label="Update copy" step={0} successor>
+      {[
+        <ModalStep key="choose" title="Update copy" problem={problem} footer={<Button onClick={onClose}>Cancel</Button>}>
+          <ChoiceCards
+            options={[
+              { label: "Paste copy", about: "From the doc's table", icon: <ImportIcon className="size-6" />, disabled: phase === "pulling", onClick: () => setPhase("paste") },
+              {
+                label: phase === "pulling" ? "Reading the doc…" : "Pull from the doc",
+                about: "Read it from Claude",
+                icon: <DocumentIcon className="size-6" />,
+                disabled: !canPull || phase === "pulling",
+                title: canPull ? undefined : "There is no Claude doc to pull from.",
+                onClick: () => void pull(),
+              },
+            ]}
+          />
+        </ModalStep>,
+      ]}
+    </MotionStepModal>
+    <MotionModal open={!choosing} onClose={onClose} label="Update copy" fill continuing className="sm:!h-[60vh] sm:!max-w-[60vw]">
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-divider px-4 py-3">
           <h2 className="text-md font-medium tracking-[var(--tracking-tight)]">
@@ -225,37 +248,6 @@ export function CopyImportDialog({
             <CloseIcon />
           </IconButton>
         </div>
-
-        {phase === "choose" || phase === "pulling" ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-2 p-4">
-            <button
-              type="button"
-              disabled={!canPull || phase === "pulling"}
-              title={
-                canPull ? undefined : "There is no Claude doc to pull from."
-              }
-              onClick={() => void pull()}
-              className={`flex items-center gap-3 rounded-[var(--r-control)] border border-border px-4 py-3 text-left text-nav text-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] enabled:hover:bg-surface-hover disabled:opacity-50 ${phase === "pulling" ? "pulse-soft" : ""}`}
-            >
-              <DocumentIcon />
-              {phase === "pulling" ? "Reading the doc…" : "Pull from the doc"}
-            </button>
-            <button
-              type="button"
-              disabled={phase === "pulling"}
-              onClick={() => setPhase("paste")}
-              className="flex items-center gap-3 rounded-[var(--r-control)] border border-border px-4 py-3 text-left text-nav text-foreground transition-colors duration-[var(--dur-fast)] ease-[var(--curve-standard)] enabled:hover:bg-surface-hover disabled:opacity-50"
-            >
-              <ImportIcon />
-              Paste copy
-            </button>
-            {problem ? (
-              <p role="alert" className="text-sm text-destructive">
-                {problem}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
 
         {phase === "paste" ? (
           <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
@@ -375,7 +367,8 @@ export function CopyImportDialog({
           </div>
         ) : null}
       </div>
-    </MotionModal>,
+    </MotionModal>
+    </>,
     document.body,
   );
 }

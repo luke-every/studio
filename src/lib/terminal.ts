@@ -38,6 +38,9 @@ export function useStarts() {
   return starts;
 }
 
+/** The prototypes whose Claude is running, as far as this page knows: opening the panel for one attaches to it and doesn't ask to start it. Told by the helper (a reload forgets this). */
+export const begun = new Set<string>();
+
 const ARRIVE = "terminal:open-on-arrival";
 /** `slug`'s page opens with its terminal already open (a new prototype's own page). Remembered across the page load that gets there. */
 export function openTerminalOnArrival(slug: string) {
@@ -58,7 +61,11 @@ export function useTerminal(slug: string | null) {
     if (!slug || !["localhost", "127.0.0.1"].includes(location.hostname)) return undefined;
     let live = true;
     fetch(`http://${TERMINAL_HOST}/?slug=${slug}`)
-      .then((response) => live && setProbe({ slug, status: response.ok ? "ready" : "missing" }))
+      .then((response) => {
+        // 200 and not 204: a session is already running there.
+        if (response.status === 200) begun.add(slug);
+        if (live) setProbe({ slug, status: response.ok ? "ready" : "missing" });
+      })
       .catch(() => live && setProbe({ slug, status: "down" }));
     return () => {
       live = false;

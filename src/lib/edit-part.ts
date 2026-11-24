@@ -223,7 +223,8 @@ export function captureOf(element: Element): Capture {
     if (typeof fiber.type === "string" || !fiber.type) continue;
     const name = nameOfType(fiber.type);
     const host = name && /^[A-Z]/.test(name) ? hostOf(fiber) : null;
-    if (name && host && chain.has(host)) {
+    // A component that draws more than this element (a provider around the whole page, say) is not what this element is the top of.
+    if (name && host && chain.has(host) && !drawsMoreThan(fiber, host)) {
       const loc = fiber.memoizedProps?.["data-studio-loc"];
       top = { name, props: plainOf(fiber.memoizedProps), ...(typeof loc === "string" ? { usedAt: loc } : {}) };
     }
@@ -239,6 +240,19 @@ export function captureOf(element: Element): Capture {
 const nameOf = (fiber: Fiber) => {
   const type = fiber.type as { displayName?: string; name?: string; render?: { name?: string }; type?: { name?: string } } | string | undefined;
   return type && typeof type !== "string" ? type.displayName || type.name || type.render?.name || type.type?.name || "" : "";
+};
+/** Whether the component draws an element besides `host` (its own host elements, found down through what it renders). */
+const drawsMoreThan = (fiber: Fiber, host: Element): boolean => {
+  const walk = (from: Fiber | null | undefined): boolean => {
+    for (let at = from; at; at = at.sibling) {
+      const node = at.stateNode as Element | null | undefined;
+      if (typeof at.type === "string" && node?.nodeType === 1) {
+        if (node !== host) return true;
+      } else if (walk(at.child)) return true;
+    }
+    return false;
+  };
+  return walk(fiber.child);
 };
 const hostOf = (fiber: Fiber | null | undefined): Element | null => {
   for (let at = fiber?.child; at; at = at.sibling) {

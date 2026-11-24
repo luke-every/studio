@@ -1,6 +1,8 @@
 import "server-only";
 
 import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 
 import { revalidatePath } from "next/cache";
 
@@ -551,6 +553,36 @@ export async function updatePrototype(input: {
     await updateStudioFile(input.slug, "archived.json", () => ({ content: JSON.stringify({ archived }) }));
     revalidatePath("/", "layout");
     return;
+  }
+  // The Notion brief is also kept in the prototype's folder here (`notion` in `.studio/new.json`), which is where the agent's terminal reads it from, and is all there is
+  // of it for a prototype that was never pushed. A different page makes the summary written from the old one wrong, so it goes.
+  if (input.notionUrl !== undefined && workingCopiesOn()) {
+    const folder = (() => {
+      try {
+        return workingFolder(input.slug);
+      } catch {
+        return null;
+      }
+    })();
+    if (folder && existsSync(folder)) {
+      const link = input.notionUrl.trim() ? cleanLink("notion", input.notionUrl) : "";
+      let before = "";
+      await updateStudioFile(input.slug, "new.json", (text) => {
+        let note: Record<string, unknown> = {};
+        try {
+          note = JSON.parse(text ?? "{}") as Record<string, unknown>;
+        } catch {}
+        before = typeof note.notion === "string" ? note.notion : "";
+        if (link) note.notion = link;
+        else delete note.notion;
+        return { content: JSON.stringify(note, null, 2) };
+      });
+      if (before !== link) await rm(join(folder, ".studio", "summary.md"), { force: true });
+      if (!(await load()).prototypes.some((item) => item.slug === input.slug)) {
+        revalidatePath("/", "layout");
+        return;
+      }
+    }
   }
   return mutate((document) => {
     const prototype = document.prototypes.find((item) => item.slug === input.slug);

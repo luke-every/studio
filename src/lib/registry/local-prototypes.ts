@@ -223,7 +223,7 @@ export function workingFolder(slug: string) {
  * The folder starts with a dot, so /push leaves it out of what it uploads, and the starter's .gitignore leaves it out
  * of the prototype's own repository. `handoff.json` is its handoff (see `handoff.ts`).
  */
-export type StudioFile = "comments.json" | "claude.json" | "handoff.json" | "canvas.json" | "copy-docs.json" | "new.json" | "archived.json";
+export type StudioFile = "comments.json" | "claude.json" | "handoff.json" | "canvas.json" | "copy-docs.json" | "new.json" | "archived.json" | "summary.md";
 export const studioPath = (slug: string, name: string) => join(workingFolder(slug), ".studio", name);
 
 export const readStudioFile = (slug: string, name: StudioFile) => readFile(studioPath(slug, name), "utf8").catch(() => null);

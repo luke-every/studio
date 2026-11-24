@@ -69,6 +69,9 @@ const track = <T,>(save: Promise<T>) => {
   return save.finally(() => void inflight--);
 };
 
+/** The review request this page is for, if any (its address is /r/<prototype>/<request>): comments left here are offered to it (the server keeps the tag only if it fits). */
+const reviewOpened = () => /^\/r\/[^/]+\/([^/]+)/.exec(window.location.pathname)?.[1];
+
 const POLL_MS = 20_000;
 /** While Claude is at work on a thread (a live version), so its answer shows soon after it is written. */
 const WORKING_POLL_MS = 3_000;
@@ -182,7 +185,7 @@ export function useComments(slug: string | undefined, version: string | undefine
       return { key, list: [...list, pending] };
     });
     setWorking(pendingId, true);
-    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: kept, device, note, by, avatar }) : addComment({ ...target, text, anchor, variant: kept, device, note, by, avatar })).finally(() => setWorking(pendingId, false));
+    const result = await track(sharedAs ? addSharedComment(sharedAs.token, { text, anchor, variant: kept, device, note, by, avatar, review: reviewOpened() }) : addComment({ ...target, text, anchor, variant: kept, device, note, by, avatar, review: reviewOpened() })).finally(() => setWorking(pendingId, false));
     if (!result.ok) {
       setLoaded((now) => (now && now.key === key ? { key, list: now.list.filter((item) => item.id !== pendingId) } : now));
       setError(result.error);

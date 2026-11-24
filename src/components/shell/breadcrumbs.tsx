@@ -15,7 +15,7 @@ import { ChevronDownIcon } from "./nav-icons";
 export function Breadcrumbs() {
   const pathname = usePathname();
   const { teams, projects, prototypes } = useStudio();
-  const [section, slug, , projectSlug] = pathname.split("/").filter(Boolean);
+  const [section, slug, page, projectSlug] = pathname.split("/").filter(Boolean);
 
   const trail: { label: string; href?: string }[] = [];
   const team = (teamSlug: string) => {
@@ -35,7 +35,8 @@ export function Breadcrumbs() {
   } else if (section === "prototypes" && slug) {
     const prototype = prototypes.find((candidate) => candidate.slug === slug);
     if (prototype) {
-      trail.push({ label: prototype.name });
+      trail.push({ label: prototype.name, href: `/prototypes/${prototype.slug}` });
+      if (page === "reviews") trail.push({ label: "Reviews" });
     }
   }
   if (!trail.length) return null;

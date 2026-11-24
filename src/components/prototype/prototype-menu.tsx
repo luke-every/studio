@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { MotionPopover } from "@/components/motion";
-import { ArchiveIcon, CheckIcon, EllipsisIcon, GithubIcon, PencilIcon, SendIcon, ShuffleIcon, SlidersIcon, TrashIcon, UndoIcon } from "@/components/shell/nav-icons";
+import { ArchiveIcon, CheckIcon, EllipsisIcon, GithubIcon, PencilIcon, ReviewIcon, SendIcon, ShuffleIcon, SlidersIcon, TrashIcon, UndoIcon } from "@/components/shell/nav-icons";
 import { IconButton } from "@/components/ui/button";
 import { DialogForm, fieldClass } from "@/components/ui/dialog-form";
 import { useStudio } from "@/lib/data/studio-store";
@@ -108,6 +109,10 @@ export function PrototypeMenu({ prototype, version, githubUrl, onEdit }: { proto
                 <ShuffleIcon />
                 Remix
               </button>
+              <Link role="menuitem" href={`/prototypes/${prototype.slug}/reviews`} onClick={() => setOpen(false)} className={`${item} text-foreground`}>
+                <ReviewIcon />
+                Reviews
+              </Link>
               <div role="separator" className="my-1 h-px bg-border" />
               <button type="button" role="menuitem" onClick={() => choose("rename")} className={`${item} text-foreground`}>
                 <PencilIcon />

@@ -3,6 +3,7 @@ import "server-only";
 import { isStoreConfigured, readRegistryDocument, type RegistryDocument } from "./store";
 import { contentRepoUrl, isContentRepoConfigured } from "./github";
 import { versionSegment } from "./version";
+import { linkProblem } from "@/lib/links";
 import { readStudioFile, WORKING_VERSION, workingCopies } from "./local-prototypes";
 import { aliased } from "./people";
 import { prototypeSchema, teamsFileSchema, versionSchema } from "./schema";
@@ -89,13 +90,15 @@ export async function loadRegistry(): Promise<RegistryDocument> {
 async function madeHere(slug: string) {
   const read = async (name: "new.json" | "archived.json") => {
     try {
-      return JSON.parse((await readStudioFile(slug, name)) ?? "") as { name?: unknown; team?: unknown; archived?: unknown };
+      return JSON.parse((await readStudioFile(slug, name)) ?? "") as { name?: unknown; team?: unknown; archived?: unknown; notion?: unknown };
     } catch {
       return {};
     }
   };
-  const [made, kept] = await Promise.all([read("new.json"), read("archived.json")]);
-  return { name: typeof made.name === "string" ? made.name : undefined, team: typeof made.team === "string" ? made.team : undefined, archived: kept.archived === true };
+  const [made, kept, summary] = await Promise.all([read("new.json"), read("archived.json"), readStudioFile(slug, "summary.md")]);
+  // The Notion brief given for it, and what its agent wrote from the page (the description, until it is pushed with one).
+  const notion = typeof made.notion === "string" && !linkProblem("notion", made.notion) ? made.notion : undefined;
+  return { name: typeof made.name === "string" ? made.name : undefined, team: typeof made.team === "string" ? made.team : undefined, archived: kept.archived === true, notion, summary: summary?.trim() || undefined };
 }
 
 /** On this machine, the built folders in ~/Claude/prototypes, as prototypes of their own (see `local-prototypes.ts`). A prototype the registry already has gets the working copy as one more version, `v0.0`, which opens by default while its dev server is running. */
@@ -122,13 +125,14 @@ async function addWorkingCopies(document: RegistryDocument) {
         name: qa ?? made.name ?? slug.replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase()),
         // A branch being checked is kept out of the feed and the teams, like an archived prototype, and opened from Design QA.
         archived: qa !== undefined || made.archived,
-        description: qa
+        description: made.summary ?? (qa
           ? `A design QA of ${qa}.`
           : blank
           ? "A canvas, with no prototype in it yet."
           : live
           ? `Running from ~/Claude/prototypes/${slug}, so a change shows as soon as you save it.`
-          : `Served from ~/Claude/prototypes/${slug}/out, so a rebuild is all it takes to see a change.`,
+          : `Served from ~/Claude/prototypes/${slug}/out, so a rebuild is all it takes to see a change.`),
+        ...(made.notion ? { notionUrl: made.notion } : {}),
         owner: home.lead,
         preview: { tint: ["#e8e6e1", "#8b8880"], caption: slug },
         currentVersion: id,

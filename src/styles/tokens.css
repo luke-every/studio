@@ -179,6 +179,7 @@
   --modal-fill-width: 90rem;
   /* A dialog with steps has one height, and a step that holds more asks for the taller one; the dialog changes height between them. What a step holds beyond its height scrolls. */
   --modal-steps-height: 18.75rem;
+  --modal-steps-height-form: 27rem;
   --modal-steps-height-tall: 32rem;
   /* A handoff's list of findings, beside the one open. */
   --handoff-queue-width: 16rem;

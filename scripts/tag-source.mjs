@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,4 +42,27 @@ export function ensureTagging(dir) {
   const rule = ["turbopack: {", comment, rules].join("\n");
   writeFileSync(config, text.replace("turbopack: {", rule));
   return "added";
+}
+
+/** A page in the studio's frame does not zoom the browser window when it is pinched (Safari sends a pinch as gestures, which can be taken without touching scrolling). */
+const HOLD_MARK = "no browser zoom";
+const HOLD = `
+// Written by the studio: no browser zoom. A pinch over the page does not zoom the browser window while it is in the studio's frame. Scrolling is not touched.
+if (typeof window !== "undefined" && window.parent !== window) {
+  for (const name of ["gesturestart", "gesturechange", "gestureend"]) window.addEventListener(name, (event) => event.preventDefault());
+}
+`;
+/** What the studio wrote here before: it passed a pinch and ⌘-scroll up to zoom the canvas, whose wheel listener made scrolling in the page stutter. It is taken out. */
+const OLD_ZOOM = "\n// Written by the studio: a pinch or ⌘/ctrl-scroll over the page zooms the studio's canvas";
+
+/** Has a project's `src/lib/studio-measure.ts` (the studio's helper, in every prototype) hold back the browser's zoom. Added once, to whatever version of the file is there (the studio's earlier zoom code, written after the rest, is replaced); nothing when it has none. Returns whether it was written. */
+export function ensureNoBrowserZoom(dir) {
+  const file = join(dir, "src", "lib", "studio-measure.ts");
+  if (!existsSync(file)) return false;
+  let text = readFileSync(file, "utf8");
+  const old = text.indexOf(OLD_ZOOM);
+  if (old === -1 && text.includes(HOLD_MARK)) return false;
+  if (old !== -1) text = text.slice(0, old);
+  writeFileSync(file, text.replace(/\s*$/, "\n") + HOLD);
+  return true;
 }

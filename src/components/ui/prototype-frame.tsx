@@ -37,8 +37,9 @@ import { copyDocument } from "@/components/prototype/copy-page";
 import { NotesPanel } from "@/components/prototype/notes-panel";
 import { SelectLayer, type Selected } from "@/components/prototype/select-layer";
 import { sendSelection, useTerminal } from "@/lib/terminal";
+import type { ControlValues, Controls } from "@/lib/controls";
 import { CanvasViewMenu } from "@/components/prototype/canvas-view-menu";
-import { CanvasPlayButton, CanvasZoomMenu } from "@/components/prototype/canvas-zoom-menu";
+import { CanvasPlayButton } from "@/components/prototype/canvas-play-button";
 import { ALWAYS_ON_SHARE_LINKS, CanvasIntro } from "@/components/prototype/canvas-intro";
 import { EditLayer } from "@/components/prototype/edit-layer";
 import type { SourceEl } from "@/lib/handoff-clip";
@@ -98,10 +99,12 @@ const sizingClass = (sizing: Sizing) => (sizing === "fill" ? FILLING : sizing ? 
  */
 export function PrototypeFrame({
   url: addressed,
+  reload = 0,
   openUrl,
   title,
   leading,
   share,
+  review,
   corner,
   bottom,
   side,
@@ -116,6 +119,7 @@ export function PrototypeFrame({
   comments: givenComments,
   flow,
   variants,
+  canvasControls,
   readyForDev,
   handoffInspect,
   handoffSheet,
@@ -147,6 +151,8 @@ export function PrototypeFrame({
   onPlace,
 }: {
   url?: string;
+  /** Counts the times the frame is to load again at the same address (what the page offers changed under it). */
+  reload?: number;
   /** The address to open the prototype at on its own (new tab, QR), when the frame's own differs: it carries the studio's flag and, with live controls, stops changing. */
   openUrl?: string;
   title: string;
@@ -156,6 +162,8 @@ export function PrototypeFrame({
   corner?: ReactNode;
   /** Which version the Share menu in the corner links to. */
   share?: { slug: string };
+  /** Asking somebody to review it: the control that sits beside Share, in the detail bar and the canvas's. */
+  review?: ReactNode;
   /** On a phone only: a control in the middle of the first row of the bar. */
   bottom?: ReactNode;
   /** Down the tile's left edge on a wide screen: what belongs to the prototype but not to its frame (a handoff, its variants). */
@@ -197,6 +205,8 @@ export function PrototypeFrame({
   flow: Flow | null;
   /** The prototype's variants as a canvas of their own, with the setup each one shows. It shares the flow's place: looked at instead of the prototype. */
   variants?: { flow: Flow; setups: Record<string, string> } | null;
+  /** What the prototype offers to adjust, as chosen now and how to change one: the canvas shows it beside Stop while a screen is being used. */
+  canvasControls?: { controls: Controls; values: ControlValues; onChange: (id: string, value: string) => void } | null;
   /** The handoff has been signed off for these designs (a design is a variant's id): the canvas marks their screens Ready for dev. Null when it hasn't. */
   readyForDev?: boolean;
   /** Engineers looking at a handed-off version: a tap on a canvas screen selects the part of the handoff under it; `inspectPanel` says what it is. */
@@ -931,7 +941,7 @@ export function PrototypeFrame({
         </IconButton>
       </span>
     ) : null;
-  // Saving the folder as a new version (`PushDialog`): the first row of the canvas's Share menu, where the helper can reach the folder.
+  // Saving the folder as a new version (`PushDialog`): the first row of the Share menu (the canvas's and the detail bar's), where the helper can reach the folder.
   const [pushOpen, setPushOpen] = useState(false);
   // A design QA is never shared: its place in the bar is a way to open it in a browser tab at once.
   const shareControl = share ? (
@@ -945,7 +955,7 @@ export function PrototypeFrame({
   ) : null;
   // The detail bar's own: Share is what that surface is for, so it is the one labelled, solid button.
   const shareBar =
-    share && !(share.slug.startsWith("qa-") && newTab) ? <ShareMenu {...share} prominent newTab={newTab} onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined} /> : shareControl;
+    share && !(share.slug.startsWith("qa-") && newTab) ? <ShareMenu {...share} prominent newTab={newTab} onOpenNew={touch && newTab ? () => openWithComments(newTab) : undefined} onPush={terminal.ready && !minimal ? () => setPushOpen(true) : undefined} /> : shareControl;
 
   /** What the side panel holds: what an engineer picked, the edit panel, the comments, or dev mode's. On the canvas it is in the card with the zoom and share. */
   const panelBody = (
@@ -1138,11 +1148,6 @@ export function PrototypeFrame({
                 ) : null}
                 {showingFlow ? (
                   <span className="max-sm:hidden">
-                    <CanvasZoomMenu />
-                  </span>
-                ) : null}
-                {showingFlow ? (
-                  <span className="max-sm:hidden">
                     <CanvasPlayButton />
                   </span>
                 ) : null}
@@ -1158,7 +1163,12 @@ export function PrototypeFrame({
                     <ExpandIcon />
                   </IconButton>
                 </span>
-                {shareBar ? <div className="max-sm:justify-self-end max-sm:[grid-area:1/3]">{shareBar}</div> : null}
+                {shareBar ? (
+                  <div className="flex items-center gap-2 max-sm:justify-self-end max-sm:[grid-area:1/3]">
+                    {review}
+                    {shareBar}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </>
@@ -1188,7 +1198,7 @@ export function PrototypeFrame({
           {url ? (
             <FrameBody
               // Keyed by path, not query: a changed setup reloads the frame in place under the picture already there, rather than starting over at the skeleton.
-              key={`${url.split("?")[0]}#${restarts}`}
+              key={`${url.split("?")[0]}#${restarts}.${reload}`}
               url={url}
               title={title}
               poster={screen || bars ? undefined : poster}
@@ -1329,12 +1339,9 @@ export function PrototypeFrame({
                   fold={fold}
                   onFold={() => setFold((now) => !now)}
                 />
-                {/* Not while the card holds properties: its width is the properties', and the zoom is in the bar at the foot too. */}
-                <span className="flex in-data-[properties]:hidden">
-                  <CanvasZoomMenu ghost />
-                </span>
                 <CanvasPlayButton />
                 {terminalToggle("ghost")}
+                {review}
                 {shareControl}
               </>
             }
@@ -1381,6 +1388,7 @@ export function PrototypeFrame({
             device={device}
             devices={canvasDevices}
             controls={center}
+            prototypeControls={canvasControls}
             zoom={zoom}
             fit={fit}
             inApp={inApp}

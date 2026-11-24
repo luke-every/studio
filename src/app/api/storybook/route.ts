@@ -1,15 +1,9 @@
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { homedir } from "node:os";
-import { join } from "node:path";
-
 import { NextResponse, type NextRequest } from "next/server";
 
 import { workingCopiesOn } from "@/lib/registry/local-prototypes";
+import { startStorybook } from "@/lib/services";
 
 const PORT = 6006;
-const PROJECT = join(homedir(), "Claude", "every-website-main");
-/** The stories and Storybook's settings live with the team's conventions, not in the website's repo: sync.mjs copies the stories and their settings (as .storybook-studio) into PROJECT while it runs. */
-const STORYBOOK = join(homedir(), "Claude", "team-conventions", "storybook");
 
 async function running() {
   try {
@@ -32,38 +26,9 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ running: await running() });
 }
 
-/** Stops Storybook with the studio: it runs in its own process group, so the whole tree goes. */
-function stopWithStudio(child: ChildProcess) {
-  const stop = () => {
-    try {
-      if (child.pid) process.kill(-child.pid);
-    } catch {}
-  };
-  process.once("exit", stop);
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () => {
-      stop();
-      process.kill(process.pid, signal);
-    });
-  }
-}
-
 /** Starts Storybook for the website. It lives as long as the studio does. */
 export async function POST(request: NextRequest) {
   if (!allowed(request)) return new NextResponse("Not found.", { status: 404 });
-  if (!(await running())) {
-    try {
-      execFileSync("node", [join(STORYBOOK, "sync.mjs"), "--add"], { stdio: "ignore" });
-    } catch {
-      // Without the stories Storybook still starts, with the website's own.
-    }
-    const child = spawn(join(PROJECT, "node_modules", ".bin", "storybook"), ["dev", "-c", ".storybook-studio", "-p", String(PORT), "--no-open"], {
-      cwd: PROJECT,
-      detached: true,
-      stdio: "ignore",
-    });
-    child.on("error", () => {});
-    stopWithStudio(child);
-  }
+  await startStorybook();
   return NextResponse.json({ starting: true });
 }

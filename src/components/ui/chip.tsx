@@ -31,10 +31,10 @@ export function Dot({ tone, hollow, className }: { tone: Tone; hollow?: boolean;
   return <span aria-hidden className={`size-2 shrink-0 rounded-[var(--r-full)] ${hollow ? "border border-border-strong" : DOT[tone]} ${className ?? ""}`} />;
 }
 
-export function Chip({ tone, children, hollow }: { tone: Tone; children: ReactNode; hollow?: boolean }) {
+export function Chip({ tone, children, hollow, icon }: { tone: Tone; children: ReactNode; hollow?: boolean; /** Drawn in place of the dot, in the tone's colour. */ icon?: ReactNode }) {
   return (
     <span className={`inline-flex h-5 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[var(--r-full)] px-2 text-xs font-medium ${hollow ? "border border-border text-foreground-muted" : CHIP[tone]}`}>
-      <Dot tone={tone} hollow={hollow} className="!size-1.5" />
+      {icon ?? <Dot tone={tone} hollow={hollow} className="!size-1.5" />}
       {children}
     </span>
   );

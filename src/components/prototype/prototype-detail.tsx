@@ -18,7 +18,7 @@ import { VersionMenu } from "@/components/prototype/version-menu";
 import { hintFullscreen } from "@/lib/fullscreen-hint";
 import { PrototypeFrame } from "@/components/ui/prototype-frame";
 import { useLiveControls } from "@/components/prototype/use-live-controls";
-import { applyControls, controlParams, controlsInWords, defaultValues, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
+import { applyControls, controlParams, controlsInWords, defaultValues, keepValid, splitQuery, variantControl, type ControlValues } from "@/lib/controls";
 import { withParams, type Flow } from "@/lib/flow";
 import { VARIANT_PARAM } from "@/lib/edits";
 import { useStudio } from "@/lib/data/studio-store";
@@ -31,6 +31,7 @@ import type { Selection } from "@/lib/handoff-selection";
 import { markHandoffComponent, reviewToken, unmarkHandoffComponent } from "@/lib/registry/actions";
 import { useUser } from "@/lib/use-user";
 import type { Prototype, PrototypeVersion } from "@/lib/registry/types";
+import { ReviewMenu } from "./review-menu";
 
 // The review and what it draws its previews with are only loaded once it is opened.
 const EMPTY_FLOW: Flow = { screens: [], edges: [] };
@@ -89,12 +90,15 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
 
   // What the prototype offers to adjust, if anything. The choices belong to
   // the version on screen, so switching version starts again from defaults.
-  const offered = usePrototypeControls(selected.url);
+  // When what it offers changes under it (its agent added, changed or deleted a variant), the frame is loaded again: what the page held of the old list (its own copy of
+  // studio.json, and the listener that answers the studio) is not trusted to follow, and a page that broke on a variant that is gone has nothing to recover with.
+  const [reload, setReload] = useState(0);
+  const offered = usePrototypeControls(selected.url, selected.live ? { slug: prototype.slug } : undefined, () => setReload((count) => count + 1));
   // Editing and dev mode take the page over: the side column steps aside for a panel next to the canvas.
   const [mode, setMode] = useState<"view" | "dev" | "edit" | "comment">("view");
   const [listing, setListing] = useState(false);
   const [picked, setPicked] = useState<{ id: string; values: ControlValues }>({ id: "", values: {} });
-  const mine = picked.id === selected.id ? picked.values : {};
+  const mine = keepValid(offered, picked.id === selected.id ? picked.values : {});
   const values = { ...defaultValues(offered), ...mine };
   // Variants made in the studio for this version, and the one being shown: the choice, else the address bar's, else none.
   const variants = useVersionVariants(selected.url);
@@ -201,7 +205,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
   }, [flowOpen]);
   const showingFlow = flowOpen && !!address;
   // What the iframe is given: the address with `studio=1`, held still once the prototype can take control changes as messages.
-  const live = useLiveControls(address, `${selected.url}|${variant ?? ""}`, { ...controlParams(offered, values), ...extra }, showingFlow);
+  const live = useLiveControls(address, `${selected.url}|${variant ?? ""}|${reload}`, { ...controlParams(offered, values), ...extra }, showingFlow);
   const frameUrl = live.src;
   // Commenting with the list (the comment button, or C) brings the list over the prototype, so the controls step aside.
   const side = (mode === "view" || (mode === "comment" && !listing)) && !showingFlow;
@@ -306,6 +310,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           // The version list is the first thing on the bar, then the canvas and the docs.
           leading={versionMenu}
           url={frameUrl}
+          reload={reload}
           openUrl={address}
           docs={!prototype.slug.startsWith("qa-") ? <CopyDocsMenu slug={prototype.slug} name={prototype.name} figmaUrl={prototype.figmaUrl} githubUrl={githubUrl} notionUrl={prototype.notionUrl} /> : undefined}
           // The same menu, its links and its documents, in the canvas bar.
@@ -333,6 +338,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           onPlace={followPlace}
           flow={flow}
           variants={variantsCanvas}
+          canvasControls={offered ? { controls: offered, values, onChange: (id, value) => setPicked({ id: selected.id, values: { ...mine, [id]: value } }) } : null}
           readyForDev={!!selected.readyForDev}
           handoffInspect={handoffData ? { elements: handoffData.elements, onSelect: setPickedSection, selection: pickedSection } : undefined}
           handoffSheet={handoffData?.marks.length ? { marks: handoffData.marks } : undefined}
@@ -389,6 +395,7 @@ export function PrototypeDetail({ prototype }: { prototype: Prototype }) {
           }}
           title={`${prototype.name} ${selected.version}`}
           share={{ slug: prototype.slug }}
+          review={!prototype.slug.startsWith("qa-") ? <ReviewMenu prototype={prototype} version={selected.live ? "" : selected.version} /> : undefined}
           side={
             side && !focus && options ? <div className="flex flex-col gap-6 rounded-[var(--r-control)] border border-border p-4">{options}</div> : undefined
           }

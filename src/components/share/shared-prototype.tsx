@@ -19,6 +19,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { useUser } from "@/lib/use-user";
 
 import { ShareQr } from "./share-qr";
+import { ReviewPanel } from "./review-panel";
 import { SharedDocsMenu, type DocLinks } from "./shared-docs-menu";
 
 import { MotionProvider, useOverlayBehaviour } from "@/lib/motion";
@@ -35,6 +36,7 @@ import { applyControls, controlParams, defaultValues, splitQuery, variantControl
 import { VARIANT_PARAM } from "@/lib/edits";
 import { withParams, type Flow } from "@/lib/flow";
 import type { Person } from "@/lib/registry/types";
+import type { ReviewRequest } from "@/lib/reviews";
 import { useMediaQuery } from "@/lib/use-media-query";
 
 /**
@@ -71,6 +73,7 @@ function Shared({
   docs,
   token,
   dev = false,
+  request,
 }: {
   name: string;
   description: string;
@@ -88,22 +91,35 @@ function Shared({
   docs: DocLinks;
   /** A dev link: its canvas opens in Dev, with the Design/Dev toggle. */
   dev?: boolean;
+  /** Opened for a review request: the side column is the review (what was asked, the variations to look at, sending it) and the rest of the page's extras are left out. */
+  request?: ReviewRequest;
 }) {
   const offered = usePrototypeControls(version.url);
   const variants = useVersionVariants(version.url);
   const [picked, setPicked] = useState<ControlValues>({});
-  const [chosen, setChosen] = useState<string | null>(null);
+  // A review opens on the first variation it asked about: its studio variant, and anything else its setup says, as the prototype's own place.
+  const firstAsked = new URLSearchParams(request?.variants?.[0]?.setup ?? "");
+  const [chosen, setChosen] = useState<string | null>(() => firstAsked.get(VARIANT_PARAM));
   const values = { ...defaultValues(offered), ...picked };
   const variant = variants.find((item) => item.id === chosen)?.id ?? null;
   // Where the prototype has put itself in its own address beyond its controls (see the studio's prototype page).
-  const [extra, setExtra] = useState<Record<string, string>>({});
+  const [extra, setExtra] = useState<Record<string, string>>(() => Object.fromEntries([...firstAsked].filter(([key]) => key !== VARIANT_PARAM)));
+  // A review's chips take the prototype to a setup: the baseline is none of it.
+  const showSetup = (setup: string) => {
+    const rest = Object.fromEntries(new URLSearchParams(setup));
+    setChosen(rest[VARIANT_PARAM] ?? null);
+    delete rest[VARIANT_PARAM];
+    setPicked({});
+    setExtra(rest);
+  };
   const withVariant = (url: string) => (variant ? withParams(url, { [VARIANT_PARAM]: variant }) : url);
   const controlled = withParams(applyControls(version.url, offered, values), extra);
   const chosenAddress = withVariant(controlled);
   const address = `${chosenAddress}${chosenAddress.includes("?") ? "&" : "?"}review=${encodeURIComponent(review)}`;
 
   // A handed-off version: its screens are marked Ready for dev on the canvas, and a tap on a part says what it is.
-  const handoff = useSharedHandoff(slug, version.url.split("/").pop() ?? "", token);
+  const handoffAll = useSharedHandoff(slug, version.url.split("/").pop() ?? "", token);
+  const handoff = request ? null : handoffAll;
   const [section, setSection] = useState<Selection | null>(null);
 
   const phone = useMediaQuery("(max-width: 639px)");
@@ -142,7 +158,7 @@ function Shared({
     return { flow: { screens, edges: [] } satisfies Flow, setups };
   })();
   const wide = useMediaQuery("(min-width: 64rem)");
-  const [about, setAbout] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [corner, chooseCorner] = useAboutCorner();
 
   // Comments are the studio's own; nothing else of its toolbar comes with them.
@@ -171,7 +187,7 @@ function Shared({
     setMode(next);
   };
 
-  const info = (
+  const about = (
     <>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2.5">
@@ -200,15 +216,21 @@ function Shared({
     </>
   );
 
+  const info = request ? (
+    <ReviewPanel slug={slug} title={name} versionLabel={version.label} request={request} current={chosenAddress.split("?")[1] ?? ""} onSetup={showSetup} />
+  ) : (
+    about
+  );
+
   // On a phone the prototype is the page: its own screen, not a picture of one inside a page.
   if (phone) {
     return (
       <>
         <GrowingFrame src={frameUrl ?? address} title={`${name} ${version.label}`} />
-        <IconButton onClick={() => setAbout(true)} className={`fixed z-[var(--z-raised)] shadow-floating ${corner.side === "left" ? "left-3" : "right-3"} ${corner.edge === "bottom" ? "bottom-[max(0.75rem,env(safe-area-inset-bottom))]" : "top-[max(0.75rem,env(safe-area-inset-top))]"}`}>
-          About
+        <IconButton onClick={() => setAboutOpen(true)} className={`fixed z-[var(--z-raised)] shadow-floating ${corner.side === "left" ? "left-3" : "right-3"} ${corner.edge === "bottom" ? "bottom-[max(0.75rem,env(safe-area-inset-bottom))]" : "top-[max(0.75rem,env(safe-area-inset-top))]"}`}>
+          {request ? "Review" : "About"}
         </IconButton>
-        <AboutSheet open={about} onClose={() => setAbout(false)} label={`About ${name}`}>
+        <AboutSheet open={aboutOpen} onClose={() => setAboutOpen(false)} label={`${request ? "Review of" : "About"} ${name}`}>
           <div className="flex flex-col gap-6">
             {info}
             <p className="text-ui text-foreground-subtle">Press and hold anywhere on the prototype to leave a comment.</p>
@@ -243,8 +265,8 @@ function Shared({
 
   return (
     <div className={`flex w-full flex-col gap-6 overflow-x-clip py-4 sm:px-8 ${full || flowOpen ? "max-lg:!p-0" : ""} lg:h-dvh lg:flex-row lg:gap-4 lg:transition-[padding] lg:duration-[var(--dur-standard)] lg:ease-[var(--curve-standard)] ${full || flowOpen ? "lg:p-0" : "lg:p-4"}`}>
-      {columnOpen && !full ? <ColumnHandle offset={drag} onDrag={setDrag} onHide={() => setHidden(true)} edge="1rem" vertical="inset-y-4" /> : null}
-      {hidden && !full && wide ? <RevealTab onShow={() => setHidden(false)} /> : null}
+      {!request && columnOpen && !full ? <ColumnHandle offset={drag} onDrag={setDrag} onHide={() => setHidden(true)} edge="1rem" vertical="inset-y-4" /> : null}
+      {!request && hidden && !full && wide ? <RevealTab onShow={() => setHidden(false)} /> : null}
       <aside
         inert={!columnOpen}
         style={drag ? { width: `max(0px, calc(var(--detail-side-width) + ${drag}px))`, transition: "none" } : undefined}
@@ -281,8 +303,8 @@ function Shared({
           inApp={inApp}
           comments={full ? undefined : { slug, version: versionKey, variant: chosenAddress.split("?")[1] || undefined }}
           onPlace={followPlace}
-          flow={flow}
-          variants={variantsCanvas}
+          flow={request ? null : flow}
+          variants={request ? null : variantsCanvas}
           readyForDev={version.readyForDev}
           handoffInspect={handoff ? { elements: handoff.elements, onSelect: setSection, selection: section } : undefined}
           handoffSheet={handoff?.marks.length ? { marks: handoff.marks } : undefined}
@@ -318,14 +340,14 @@ function Shared({
               setListing(false);
             }
           }}
-          onOpenPrototype={() => window.location.assign(address)}
-          docs={<SharedDocsMenu links={docs} />}
+          onOpenPrototype={request ? undefined : () => window.location.assign(address)}
+          docs={request ? undefined : <SharedDocsMenu links={docs} />}
           minimal
           devLink={dev}
           shareToken={dev ? token : undefined}
           // The engineer's door gives the same link for an element as the studio does: the share link's own token is what opens it, as it opens the handoff.
           agentLink={dev ? async (loc, notes) => `${window.location.origin}/api/handoff/element?${new URLSearchParams({ slug, version: version.url.split("/").pop() ?? "", token, loc, ...(notes?.length ? { notes: notes.join(",") } : {}), ...(docs.github ? { github: docs.github.replace(/\/p\/.*$/, "") } : {}) })}` : undefined}
-          corner={full || dev ? undefined : <ShareQr />}
+          corner={full || dev || request ? undefined : <ShareQr />}
         />
       </div>
 

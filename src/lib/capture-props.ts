@@ -12,6 +12,7 @@
 export type Plain = null | boolean | number | string | Plain[] | { [key: string]: Plain };
 
 const ELEMENTS = [Symbol.for("react.element"), Symbol.for("react.transitional.element")];
+const LAZY = Symbol.for("react.lazy");
 const FRAGMENT = Symbol.for("react.fragment");
 const DEPTH = 10;
 /** About as much as is worth sending: past it, what remains is left out. */
@@ -69,6 +70,17 @@ export function plainOf(value: unknown, state = { size: 0 }, depth = 0, seen = n
       state.size += name.length + 16;
       return { $el: name, props, ...(inside === undefined ? {} : { children: inside }) };
     }
+    // Markup that a server component made reaches the page as a lazy element. Once it has arrived, what it holds is read; one still on its way is left out.
+    if (object.$$typeof === LAZY) {
+      try {
+        const init = object._init as ((payload: unknown) => unknown) | undefined;
+        return init ? plainOf(init(object._payload), state, depth + 1, seen) : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    // Any other React object (a memo, a context, a portal) is not data either.
+    if (typeof object.$$typeof === "symbol") return undefined;
     if (Array.isArray(object)) {
       const list: Plain[] = [];
       for (const item of object) {

@@ -30,6 +30,8 @@ export function MotionStepModal({
   label,
   step,
   tallSteps = [],
+  formSteps = [],
+  successor,
   waveRef,
   onWaveFinish,
   children,
@@ -40,13 +42,17 @@ export function MotionStepModal({
   step: number;
   /** The steps that need the taller dialog. */
   tallSteps?: number[];
+  /** Steps that hold a form of a few fields: between the one height and the taller one. */
+  formSteps?: number[];
+  /** Handing over to another modal as this closes: the backdrop stays for it (see `MotionModal`). */
+  successor?: boolean;
   waveRef?: Ref<DistortionWaveHandle>;
   onWaveFinish?: () => void;
   children: ReactNode[];
 }) {
   const steps = <MotionSteps step={step}>{children}</MotionSteps>;
   return (
-    <MotionModal open={open} onClose={onClose} label={label} className={`${tallSteps.includes(step) ? "h-[var(--modal-steps-height-tall)]" : "h-[var(--modal-steps-height)]"} transition-[height] duration-[var(--dur-standard)] ease-[var(--curve-standard)] !overflow-hidden !rounded-[var(--r-modal-steps)] ${waveRef ? "!p-0" : ""}`}>
+    <MotionModal open={open} onClose={onClose} label={label} successor={successor} className={`${tallSteps.includes(step) ? "h-[var(--modal-steps-height-tall)]" : formSteps.includes(step) ? "h-[var(--modal-steps-height-form)]" : "h-[var(--modal-steps-height)]"} transition-[height] duration-[var(--dur-standard)] ease-[var(--curve-standard)] !overflow-hidden !rounded-[var(--r-modal-steps)] ${waveRef ? "!p-0" : ""}`}>
       {waveRef ? (
         <DistortionWave ref={waveRef} type="center" capture={captureWithBorders} onFinish={onWaveFinish} className="h-full rounded-[var(--r-modal-steps)] p-6">
           {steps}

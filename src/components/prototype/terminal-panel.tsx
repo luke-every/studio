@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { CloseIcon, TerminalIcon } from "@/components/shell/nav-icons";
 
 import { Button } from "@/components/ui/button";
-import { TERMINAL_HOST } from "@/lib/terminal";
+import { begun, TERMINAL_HOST } from "@/lib/terminal";
 
 /** What a token holds on the page right now, so the terminal is painted from the token layer. */
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -16,9 +16,6 @@ const token = (name: string) => getComputedStyle(document.documentElement).getPr
 const MIN_WIDTH = 160;
 
 type State = "starting" | "running" | "closed";
-
-/** The prototypes whose Claude has been started from this page: opening the panel again doesn't ask again. */
-const begun = new Set<string>();
 
 /**
  * Claude Code in the prototype's own folder. The shell lives in the terminal server (`scripts/terminal-server.mjs`), one

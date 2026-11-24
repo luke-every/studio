@@ -841,6 +841,35 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * tick — a choice made. The tick inside its circle is drawn as the choice is
+ * chosen, and only then: it plays from an element mounted by the choosing, so
+ * a choice that is merely there shows its tick at once. Reduced motion shows
+ * the tick without the drawing.
+ * ------------------------------------------------------------------------- */
+:root {
+  --tick-duration: var(--dur-standard);
+}
+
+@utility tick-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: tick-draw var(--tick-duration) var(--curve-entrance) var(--dur-instant) backwards;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes tick-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * like — a heart pressed. The heart springs back in, a disc blooms where it
  * was and hollows into a ring, and pairs of dots burst off it. It plays once
  * per press, from elements that are mounted by the press; a liked comment

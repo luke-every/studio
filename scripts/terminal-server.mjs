@@ -23,7 +23,7 @@ import { WebSocketServer } from "ws";
 
 import { extractSection, snapshotSection } from "./extract-section.mjs";
 import { forkNested } from "./fork-nested.mjs";
-import { ensureTagging } from "./tag-source.mjs";
+import { ensureTagging, ensureNoBrowserZoom } from "./tag-source.mjs";
 
 const PORT = Number(process.env.TERMINAL_PORT ?? 4748);
 const STUDIO_PORT = Number(process.env.STUDIO_PORT ?? 4747);
@@ -91,6 +91,27 @@ function working(session, on) {
 
 const folderOf = (slug) => (slug.startsWith(QA_PREFIX) ? join(QA_ROOT, slug.slice(QA_PREFIX.length)) : join(ROOT, slug));
 
+/**
+ * What a session is told about the prototype's Notion brief (`notion` in `.studio/new.json`, or the one linked from the docs menu): with no summary yet, to read the
+ * whole page and write the summary; with one, the summary only, and the page only when asked. Null when no page is linked.
+ */
+function briefFor(slug) {
+  const folder = folderOf(slug);
+  let link = "";
+  try {
+    link = String(JSON.parse(readFileSync(join(folder, ".studio", "new.json"), "utf8")).notion ?? "");
+  } catch {}
+  if (!notionAddress(link)) return null;
+  let summary = "";
+  try {
+    summary = readFileSync(join(folder, ".studio", "summary.md"), "utf8").trim();
+  } catch {}
+  if (summary) {
+    return `This prototype's brief is in Notion (${link}). What is known of it, as written from it on the first run:\n\n${summary.slice(0, 4000)}\n\nWork from this. Read the Notion page again only if the user asks you to check the brief; then rewrite .studio/summary.md from it.`;
+  }
+  return `This prototype's brief is in Notion: ${link}. Before anything else, read all of it with the Notion tools, so you know the project without being told. Then write a summary of it, two to four sentences on what is being made and for whom, to .studio/summary.md (plain text, no heading). It is also the prototype's description, shown to people it is shared with, so write it for them. Don't ask what the project is.`;
+}
+
 function sessionFor(slug, cols, rows) {
   const live = sessions.get(slug);
   if (live) return live;
@@ -103,7 +124,7 @@ function sessionFor(slug, cols, rows) {
     cwd: folderOf(slug),
     env: { ...env, TERM: "xterm-256color", COLORTERM: "truecolor", STUDIO_SLUG: slug, STUDIO_HOOK_TOKEN: HOOK_TOKEN, STUDIO_HELPER: `127.0.0.1:${PORT}`, STUDIO_SETTINGS: SETTINGS },
   });
-  const session = { pty, tail: "", sockets: new Set(), selection: null, delivered: false, working: false, quiet: undefined, idle: undefined };
+  const session = { pty, tail: "", sockets: new Set(), selection: null, delivered: false, briefed: false, working: false, quiet: undefined, idle: undefined };
   pty.onData((data) => {
     session.tail = (session.tail + data).slice(-KEEP);
     for (const socket of session.sockets) socket.send(data);
@@ -174,7 +195,20 @@ function checkNew(params) {
   }
   if (!name || name.length > 80 || /[\u0000-\u001f]/.test(name) || !base || base.startsWith(QA_PREFIX)) return null;
   if ((!project && !templates().templates.some((item) => item.name === template)) || (team && !SLUG.test(team))) return null;
-  return { name, template, team, base, project };
+  // The page with the brief, if one was given: a Notion address, checked here again whatever the browser said.
+  const notion = (params.get("notion") ?? "").trim();
+  if (notion && (project || !notionAddress(notion))) return null;
+  return { name, template, team, base, project, notion };
+}
+
+/** Whether this is an https address on one of Notion's own hosts. */
+function notionAddress(text) {
+  try {
+    const url = new URL(text);
+    return url.protocol === "https:" && ["notion.so", "notion.site", "notion.com"].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+  } catch {
+    return false;
+  }
 }
 
 // The script wants the licensed fonts in the starter. If this machine's copy has lost some, take them from a prototype that has them.
@@ -199,7 +233,22 @@ function restoreFonts() {
  * what is on disk, not guessed) and, at the end, the folder's name. The studio's name and team for it are kept in
  * `.studio/new.json`. Closing the dialog doesn't stop it: the prototype just turns up.
  */
-async function createPrototype(ws, { name, template, team, base, project, existing }) {
+/** Stops what is listening on the port its dev log names and starts the project's server again, detached, on the same log. */
+function restartDevServer(dir, log) {
+  const port = /http:\/\/localhost:(\d+)/.exec(existsSync(log) ? readFileSync(log, "utf8") : "")?.[1];
+  if (port) {
+    try {
+      for (const pid of execFileSync("lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }).split("\n").filter(Boolean)) process.kill(Number(pid));
+    } catch {}
+  }
+  run(process.env.SHELL || "/bin/zsh", ["-ilc", `cd "$TARGET" && if command -v pnpm >/dev/null 2>&1; then exec pnpm dev; else exec npx -y pnpm@10.33.2 dev; fi >"$LOG" 2>&1 </dev/null`], {
+    env: { ...env, TARGET: dir, LOG: log },
+    detached: true,
+    stdio: "ignore",
+  }).unref();
+}
+
+async function createPrototype(ws, { name, template, team, base, project, existing, notion }) {
   const say = (message) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
   };
@@ -242,11 +291,11 @@ async function createPrototype(ws, { name, template, team, base, project, existi
   const tell = (next) => {
     if (next !== step) say({ step: (step = next) });
   };
-  tell("Updating conventions");
+  tell("Getting started");
   const watch = setInterval(() => {
-    if (existsSync(log)) tell("Starting the preview");
-    else if (existsSync(join(dir, "package.json"))) tell("Installing");
-    else if (existsSync(dir)) tell("Copying the template");
+    if (existsSync(log)) tell("Almost there");
+    else if (existsSync(join(dir, "package.json"))) tell("Getting everything ready");
+    else if (existsSync(dir)) tell("Setting up your prototype");
   }, 400);
 
   child.on("close", (code) => {
@@ -265,10 +314,16 @@ async function createPrototype(ws, { name, template, team, base, project, existi
         : (found("ERROR:") ?? "The setup stopped before it finished.");
       return say({ error: reason });
     }
+    // The scaffold has already started the project's server, and a server reads its config once: tag the project now and, if that changed it, restart the server,
+    // so the canvas never has to ask for it by hand.
+    try {
+      if (existsSync(join(dir, "next.config.ts")) && ensureTagging(dir) !== "present") restartDevServer(dir, log);
+      ensureNoBrowserZoom(dir);
+    } catch {}
     try {
       mkdirSync(join(dir, ".studio"), { recursive: true });
       // It is a prototype now: no longer only a canvas.
-      writeFileSync(join(dir, ".studio", "new.json"), JSON.stringify({ name, team: team || undefined }, null, 2));
+      writeFileSync(join(dir, ".studio", "new.json"), JSON.stringify({ name, team: team || undefined, notion: notion || undefined }, null, 2));
     } catch {}
     say({ done: { slug } });
   });
@@ -306,6 +361,8 @@ function revive(value: unknown): unknown {
   if (value && typeof value === "object") {
     const object = value as Record<string, unknown>;
     if (object.$fn === true) return () => {};
+    // What a server component's markup left behind in an older capture (a lazy element's _init and _store): it is not markup, so it draws nothing.
+    if ("_init" in object && "_store" in object) return null;
     if (typeof object.$date === "string") return new Date(object.$date);
     if (typeof object.$el === "string") {
       const named = object.$el;
@@ -359,12 +416,32 @@ function useReportSize(box: React.RefObject<HTMLDivElement | null>) {
       last = "";
       report();
     };
+    // A size given to the copy from the canvas (its width or height in the properties): put on the copy's own outermost element. The same size twice is one.
+    let given = "";
+    const fit = (event: MessageEvent) => {
+      const data = event.data as { type?: string; width?: unknown; height?: unknown } | null;
+      if (data?.type !== "studio:stage-fit") return;
+      const wide = Number(data.width) > 0 ? Math.min(Number(data.width), 4000) : 0;
+      const tall = Number(data.height) > 0 ? Math.min(Number(data.height), 4000) : 0;
+      if (given === wide + "x" + tall) return;
+      given = wide + "x" + tall;
+      const root = node.firstElementChild as HTMLElement | null;
+      if (!root) return;
+      root.style.width = wide ? wide + "px" : "";
+      root.style.height = tall ? tall + "px" : "";
+      root.style.maxWidth = wide ? "none" : "";
+      root.style.boxSizing = wide || tall ? "border-box" : "";
+      last = "";
+      report();
+    };
     report();
     window.addEventListener("message", ask);
+    window.addEventListener("message", fit);
     const watch = new ResizeObserver(report);
     watch.observe(node);
     return () => {
       window.removeEventListener("message", ask);
+      window.removeEventListener("message", fit);
       watch.disconnect();
     };
   }, [box]);
@@ -417,6 +494,12 @@ export default function Page() {
   );
 }
 `;
+
+/** Brings a project's stage page (written by the studio, for copies drawn alone) up to this one when it is older: a copy is then given the size set for it from the canvas. */
+function refreshStage(dir) {
+  const file = join(dir, "src", "app", "studio-stage", "page.tsx");
+  if (existsSync(file) && readFileSync(file, "utf8") !== STAGE_PAGE) writeFileSync(file, STAGE_PAGE);
+}
 
 /** The registry and the preview a project draws its copies by, written from `.studio/forks.json`'s records. */
 function writeRegistry(dir, records) {
@@ -642,7 +725,7 @@ function pushPrototype(ws, slug) {
     tell(existsSync(join(folder, "package.json")) && !existsSync(join(folder, "index.html")) ? "Preparing" : "Uploading");
     child.stdout.on("data", (chunk) => {
       output += chunk;
-      if (/Installing dependencies/.test(String(chunk))) tell("Installing");
+      if (/Installing dependencies/.test(String(chunk))) tell("Getting everything ready");
       else if (/Checking the code/.test(String(chunk))) tell("Checking");
       else if (/Building for/.test(String(chunk))) tell("Building");
     });
@@ -706,10 +789,21 @@ const server = createServer((request, response) => {
         session.delivered = true;
         said = `The user's current selection in the prototype preview (what "this" and "these" refer to): ${session.selection}`;
       }
+      // The brief, once for each session: the whole page on the first run (and the summary written from it), the summary alone after that.
+      if (!session.briefed) {
+        session.briefed = true;
+        const brief = briefFor(slug);
+        if (brief) said = said ? `${said}\n\n${brief}` : brief;
+      }
     } else if (session && url.pathname === "/hook/stop") {
       working(session, false);
     }
     response.writeHead(200, { "Content-Type": "text/plain" }).end(said);
+    return;
+  }
+  // A GET to /sessions is the studio's Services list asking which prototypes have a Claude running.
+  if (ours && request.method === "GET" && url.pathname === "/sessions") {
+    response.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": origin }).end(JSON.stringify([...sessions.keys()]));
     return;
   }
   // A POST to /end stops a prototype's session: the panel's Stop button, and deleting the prototype.
@@ -719,7 +813,8 @@ const server = createServer((request, response) => {
     return;
   }
   const ok = ours && SLUG.test(slug) && existsSync(folderOf(slug));
-  response.writeHead(ok ? 204 : 404, ok ? { "Access-Control-Allow-Origin": origin } : {}).end();
+  // 200 where a session is running (a page that was reloaded picks it up again), 204 where the folder is there and none is.
+  response.writeHead(ok ? (sessions.has(slug) ? 200 : 204) : 404, ok ? { "Access-Control-Allow-Origin": origin } : {}).end();
 });
 const wss = new WebSocketServer({ noServer: true });
 
@@ -736,6 +831,9 @@ server.on("upgrade", (request, socket, head) => {
       let tagged = "skipped";
       try {
         if (existsSync(join(dir, "next.config.ts"))) tagged = ensureTagging(dir);
+        // Opening a project's canvas also has its page hold back the browser's zoom (a file save, which its server takes up by itself).
+        ensureNoBrowserZoom(dir);
+        refreshStage(dir);
       } catch {
         tagged = "skipped";
       }

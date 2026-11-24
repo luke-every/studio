@@ -155,6 +155,14 @@ export function ChevronDownIcon(props: IconProps) {
   );
 }
 
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <path d="m6 4 4 4-4 4" />
+    </Frame>
+  );
+}
+
 export function ExternalIcon(props: IconProps) {
   return (
     <Frame {...props}>
@@ -788,6 +796,30 @@ export function StarIcon(props: IconProps) {
   return (
     <Frame {...props}>
       <path d="M8 2l1.8 4 4.2.4-3.2 2.9 1 4.2L8 11.3 4.2 13.5l1-4.2L2 6.4 6.2 6z" />
+    </Frame>
+  );
+}
+
+/** Asking somebody to look at a prototype: a phone with an eye in front of it. The phone is cut away under the eye so no line runs through it. */
+export function ReviewIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <mask id="review-icon-cut">
+        <rect width="16" height="16" fill="#fff" stroke="none" />
+        <path d="M5.5 10.5S7.25 7 10.5 7s5 3.5 5 3.5-1.75 3.5-5 3.5-5-3.5-5-3.5Z" fill="#000" stroke="none" />
+      </mask>
+      <rect x="2.5" y="1.5" width="7.5" height="13" rx="1.75" mask="url(#review-icon-cut)" />
+      <path d="M6.5 10.5S8 8 10.5 8s4 2.5 4 2.5-1.5 2.5-4 2.5-4-2.5-4-2.5Z" />
+      <circle cx="10.5" cy="10.5" r="1.25" />
+    </Frame>
+  );
+}
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <Frame {...props}>
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M8 4.75V8l2 1.25" />
     </Frame>
   );
 }

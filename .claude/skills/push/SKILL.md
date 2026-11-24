@@ -21,7 +21,7 @@ What someone reads in six weeks to understand why the prototype looks the way it
 
 - `title`: a short headline for this version, a handful of words. "Tighter results layout", not "Update".
 - `changes`: what is new or different, in two or three sentences or a few short lines, and where it isn't obvious what it was trying to fix.
-- `description`: only for a new prototype, or when its purpose has shifted. One sentence on what the thing is.
+- `description`: only for a new prototype, or when its purpose has shifted. One sentence on what the thing is. If `.studio/summary.md` is in the folder (written from the prototype's Notion brief), use its text as it is for a new prototype and write no other.
 
 Write from what actually happened in this session. Don't invent a rationale you weren't given, don't pad ("First pass at the results screen" is complete), and never write "various improvements".
 

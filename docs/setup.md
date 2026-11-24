@@ -31,7 +31,11 @@ here.
    - `STUDIO_CONTENT_REPO` — `<owner>/<repo>`, e.g.
      `luke-every/prototype-studio-content`.
    - `STUDIO_CONTENT_BRANCH` — optional, defaults to `main`.
-5. Redeploy so all of it takes effect.
+5. Optional, for Slack messages: create a Slack app in your workspace, give it
+   the `chat:write` bot scope, install it, and add `SLACK_BOT_TOKEN` (the bot
+   token, starting `xoxb-`). Without it nothing is sent to Slack and nothing
+   else changes. Each person then adds their own member ID in Settings.
+6. Redeploy so all of it takes effect.
 
 `/api/health` (with the studio password) reports whether each is working —
 `contentRepo` for GitHub.
